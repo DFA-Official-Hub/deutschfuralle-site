@@ -36,9 +36,12 @@ footer{background:var(--navy);color:#d7dbe8;padding:40px 24px;text-align:center}
 @media(max-width:900px){.menu-toggle{display:block}nav{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;box-shadow:0 8px 16px rgba(0,0,0,.1)}
 nav.open{display:block}nav ul{flex-direction:column;align-items:stretch;padding:10px 20px}.sub{display:block;position:static;box-shadow:none;padding-left:14px}
 .hero .in{grid-template-columns:1fr;padding:50px 20px 30px}.hero .art{order:2}.bar .btn.cta{display:none}}
-.products{padding-top:0}.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;max-width:820px;margin:0 auto}
+.products{padding-top:0}.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;max-width:1200px;margin:0 auto}
 .card.featured{background:var(--mint);border:2px solid var(--green)}.card .tag{align-self:flex-start}.card.featured .tag{background:#fff}
 .card h3 .ico{width:22px;height:22px;vertical-align:-4px;margin-right:8px;color:var(--green-d)}.products .card h3{margin-top:10px}
 
 /* footer: find us */
 footer{text-align:left;padding:48px 24px 28px}footer .fwrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:32px}footer h3{color:#fff;font-size:1.05rem;margin-bottom:10px}footer ul{list-style:none;margin:0 0 12px;padding:0}footer li{margin:5px 0}footer a{text-decoration:none}footer a:hover{text-decoration:underline}.fbrand{color:#fff;font-weight:700;font-size:1.1rem;margin-top:0}.fsub{color:#fff;font-weight:600;margin:10px 0 4px;font-size:.92rem}.fsoc{max-width:1200px;margin:28px auto 0;padding-top:22px;border-top:1px solid rgba(255,255,255,.15);text-align:center}.ficons{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}.ficons a{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center}.ficons a:hover{background:var(--green)}.ficons svg{width:20px;height:20px;fill:#fff}.fcopy{text-align:center;margin:22px 0 0;font-size:.88rem}@media(max-width:900px){footer .fwrap{grid-template-columns:1fr;gap:18px}}
+
+/* kids books */
+.lead{max-width:820px;margin:0 auto 14px;text-align:center}.books{margin-top:30px}.card.book{padding:0;overflow:hidden}.card.book img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover}.card.book .tag{margin:16px 20px 0}.card.book h3{margin:10px 20px 4px}.card.book p{margin:0 20px 16px}.book-links{display:flex;gap:10px;margin:auto 20px 20px}.book-links .btn{flex:1;text-align:center;padding:10px 12px}
