@@ -45,3 +45,7 @@ footer{text-align:left;padding:48px 24px 28px}footer .fwrap{max-width:1200px;mar
 
 /* kids books */
 .lead{max-width:820px;margin:0 auto 14px;text-align:center}.books{margin-top:30px}.card.book{padding:0;overflow:hidden}.card.book img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover}.card.book .tag{margin:16px 20px 0}.card.book h3{margin:10px 20px 4px}.card.book p{margin:0 20px 16px}.book-links{display:flex;gap:10px;margin:auto 20px 20px}.book-links .btn{flex:1;text-align:center;padding:10px 12px}
+/* books */
+.book-nav{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;padding:18px 24px;background:#fff;border-bottom:1px solid #e6efe5;position:sticky;top:0;z-index:5}.book-nav a{text-decoration:none;font-weight:600;padding:6px 16px;border-radius:20px;background:var(--mint);color:var(--green-d)}.book-nav a:hover{background:var(--green);color:#fff}.book-nav.small{position:static;border:0;padding:6px 0 0;background:none}
+#kids,#middle,#adults,#more,.sub-h{scroll-margin-top:90px}h2 .tag{vertical-align:middle;margin-left:8px}.sub-h{margin:40px 0 0;font-size:1.4rem;border-left:4px solid var(--green);padding-left:12px}.sub-h+.lead{text-align:left;margin:8px 0 0;max-width:none}section.alt{background:#f7fbf6;border-radius:12px}
+.card.soon{border:2px dashed #bfe3bb;background:#fbfefb}.card.soon .tag{background:#fff3d6;color:#8a5a00}.book-links.stack{flex-wrap:wrap}.book-links.stack .btn{flex:1 1 45%}
