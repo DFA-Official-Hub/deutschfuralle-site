@@ -1,4 +1,4 @@
-(()=>{const h=document.querySelector('header.site');const on=()=>h.classList.toggle('shrink',scrollY>40);addEventListener('scroll',on,{passive:true});on();
+(()=>{const h=document.querySelector('header.site');let hq=0;const on=()=>{hq=0;h.classList.toggle('shrink',scrollY>40)};addEventListener('scroll',()=>{if(!hq)hq=requestAnimationFrame(on)},{passive:true});on();
 const t=document.querySelector('.menu-toggle'),n=document.getElementById('nav');t.addEventListener('click',()=>{const o=n.classList.toggle('open');t.setAttribute('aria-expanded',o)});
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in-view');io.unobserve(e.target)}}),{threshold:.12,rootMargin:'0px 0px -40px 0px'});
 document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
@@ -12,11 +12,16 @@ const go=k=>{i=k>max()?0:k<0?max():k;const gap=parseFloat(getComputedStyle(tr).g
 const build=()=>{dots.innerHTML='';for(let j=0;j<=max();j++){const b=document.createElement('button');b.setAttribute('aria-label','Slide '+(j+1));b.onclick=()=>{go(j);rs()};dots.appendChild(b)}go(Math.min(i,max()))};
 sec.querySelector('.prev').onclick=()=>{go(i-1);rs()};sec.querySelector('.next').onclick=()=>{go(i+1);rs()};
 let tm;const rs=()=>{clearInterval(tm);tm=setInterval(()=>go(i+1),3800)};sec.addEventListener('mouseenter',()=>clearInterval(tm));sec.addEventListener('mouseleave',rs);
-addEventListener('resize',build);build();rs()});})();
+addEventListener('resize',build);build();rs();new IntersectionObserver(([e])=>e.isIntersecting?rs():clearInterval(tm)).observe(sec)});})();
 
 (()=>{const d=document,b=d.body;
 /* back to top */
-const tt=d.querySelector('.totop');addEventListener('scroll',()=>{tt.classList.toggle('show',scrollY>700);b.classList.toggle('scrolled',scrollY>500)},{passive:true});
+const tt=d.querySelector('.totop');let sq=0;const so=()=>{sq=0;tt.classList.toggle('show',scrollY>700);b.classList.toggle('scrolled',scrollY>500)};addEventListener('scroll',()=>{if(!sq)sq=requestAnimationFrame(so)},{passive:true});
+/* hide floating buttons while the footer is visible */
+const ft=d.querySelector('footer.site');if(ft)new IntersectionObserver(([e])=>b.classList.toggle('foot-in',e.isIntersecting)).observe(ft);
+/* pause infinite CSS animations when offscreen */
+const ao=new IntersectionObserver(es=>es.forEach(e=>e.target.classList.toggle('anim-off',!e.isIntersecting)));
+d.querySelectorAll('.hero,.marquee,.page-head,section').forEach(el=>ao.observe(el));
 tt.addEventListener('click',()=>{scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});d.querySelector('.brand').focus({preventScroll:true})});
 /* keyboard dropdowns: Esc closes, aria-expanded mirrors state */
 d.querySelectorAll('.has-sub').forEach(li=>{const a=li.querySelector(':scope>a');a.setAttribute('aria-haspopup','true');a.setAttribute('aria-expanded','false');

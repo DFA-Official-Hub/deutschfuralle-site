@@ -229,3 +229,15 @@ section.alt{background:#eef4ef;border-radius:22px;margin-top:72px!important;padd
 .page-head>.hglow{position:absolute;max-width:none;margin:-260px 0 0 -260px}.page-head.glowing .hglow{opacity:1}
 .price{white-space:nowrap}
 .card .btn+p{margin-top:16px}
+/* perf: hero intro runs in CSS so the LCP text paints without waiting for JS (same motion as .reveal) */
+.hero .reveal{transition:none;animation:rvin .7s cubic-bezier(.2,.8,.2,1) var(--d,0ms) both}
+@keyframes rvin{from{opacity:.01;transform:translateY(16px)}to{opacity:1;transform:none}}
+/* perf: pause looping animations while offscreen */
+.anim-off,.anim-off *{animation-play-state:paused!important}
+/* floating buttons step aside while the footer is on screen, so they never cover footer links/icons */
+.wa-float{transition:transform .25s,opacity .3s,visibility .3s}
+.foot-in .wa-float,.foot-in .totop{opacity:0!important;visibility:hidden!important;transform:translateY(16px) scale(.9)!important;pointer-events:none}
+.ficons{flex-wrap:wrap;max-width:100%}
+
+/* store buttons: wrap to a new row instead of breaking a label over two lines */
+.book-links.stack .btn{flex:1 1 auto;white-space:nowrap;justify-content:center}
