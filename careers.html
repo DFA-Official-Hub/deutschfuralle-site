@@ -28,7 +28,8 @@
 <form action="https://formsubmit.co/contact.deutschfuralle@gmail.com" method="POST" enctype="multipart/form-data">
 <input type="hidden" name="_subject" value="Job Application (DFA website)">
 <input type="hidden" name="_template" value="table">
-<input type="hidden" name="_next" value="https://www.deutschfuralle.com/careers.html#thanks">
+<input type="hidden" name="_autoresponse" value="Thank you for reaching out to Deutsch Für Alle! We have received your message and our team will get back to you within 2 working days. Whether it is a question, feedback, a complaint or a job application, it is now with us and someone will personally look into it. Viele Grüße, Team Deutsch Für Alle">
+<input type="hidden" name="_next" value="https://www.deutschfuralle.com/careers.html?sent=1#thanks">
 <input type="text" name="_honey" style="display:none" tabindex="-1" autocomplete="off">
 <div><label for="an">Full name</label><input id="an" name="name" required></div>
 <div><label for="ae">Email</label><input id="ae" name="email" type="email" required></div>
@@ -37,8 +38,9 @@
 <div><label for="acv">CV (PDF or Word)</label><input id="acv" name="attachment" type="file" accept=".pdf,.doc,.docx"></div>
 <div class="row"><button class="btn" type="submit">Send application</button><a class="btn outline" href="mailto:contact.deutschfuralle@gmail.com?subject=Job%20Application">Email us</a></div>
 </form>
-<p id="thanks">Thank you! Once your application is sent, we will be in touch by email.</p>
+<p id="thanks" hidden>Thank you! Once your application is sent, we will be in touch by email.</p>
 </section>
+<script>if(new URLSearchParams(location.search).get("sent")==="1")document.getElementById("thanks").hidden=false;</script>
 </main>
 <footer id="find-us"><div class="fwrap">
 <div class="fcol fabout"><p class="fbrand">Deutsch Für Alle (DFA)</p><p>Live online German classes on Zoom, from A1 to exam preparation.</p><p><a href="https://wa.me/923182166443">Chat on WhatsApp</a><br><a href="mailto:contact.deutschfuralle@gmail.com">contact.deutschfuralle@gmail.com</a></p></div>
