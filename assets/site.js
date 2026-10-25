@@ -48,3 +48,6 @@ addEventListener('scroll',kick,{passive:true});
 d.addEventListener('pointerdown',()=>ring.classList.add('down'));d.addEventListener('pointerup',()=>ring.classList.remove('down'));
 d.documentElement.addEventListener('mouseleave',()=>{b.classList.remove('cur-on');hero.classList.remove('glowing')});
 })();
+(()=>{const d=document.getElementById('lb');if(!d||!d.showModal)return;const im=d.querySelector('img');
+document.querySelectorAll('a[data-lb]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();im.src=a.href;im.alt=a.querySelector('img').alt;d.showModal()}));
+d.addEventListener('click',e=>{if(e.target!==im){d.close();im.removeAttribute('src')}});})();

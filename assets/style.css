@@ -241,3 +241,25 @@ section.alt{background:#eef4ef;border-radius:22px;margin-top:72px!important;padd
 
 /* store buttons: wrap to a new row instead of breaking a label over two lines */
 .book-links.stack .btn{flex:1 1 auto;white-space:nowrap;justify-content:center}
+
+/* Reviews & Results */
+main .rv-strip,.card ul.rv-strip{list-style:none;margin:0 0 22px;padding:0;display:flex;flex-wrap:wrap;gap:12px}
+.rv-strip li{background:var(--dk);color:#d3e3d9;border-radius:14px;padding:12px 18px;display:flex;flex-direction:column;min-width:120px}
+.rv-strip b{font-family:Archivo;font-size:1.6rem;color:#fff;line-height:1.1}
+.rv-strip span{font-size:.9rem}
+.rv-certs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:18px}
+.rv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-top:18px;align-items:start}
+.rv-cert,.rv-shot{margin:0;background:#fff;border:1px solid #dfe7e1;border-radius:14px;overflow:hidden}
+.rv-cert a,.rv-shot a{display:block;cursor:zoom-in}
+.rv-cert img,.rv-shot img{display:block;width:100%;height:auto}
+.rv-cert figcaption,.rv-shot figcaption{padding:10px 14px 14px;font-size:.92rem;line-height:1.45;color:#2a3a30}
+.rv-cert figcaption span{display:block;color:#1d6f2b;font-weight:600}
+.rv-shot .tag{margin-left:4px;font-size:.72rem;padding:2px 8px}
+.rv-q{margin:0}.rv-q p{margin:0 0 14px;font-size:1rem;line-height:1.55}
+.rv-more{margin-top:22px}
+.lb{border:0;padding:0;background:transparent;max-width:96vw;max-height:94vh}
+.lb::backdrop{background:rgba(5,20,12,.88)}
+.lb img{display:block;max-width:96vw;max-height:94vh;width:auto;height:auto;border-radius:8px}
+.lb-x{position:fixed;top:12px;right:16px;width:44px;height:44px;border-radius:50%;border:0;background:#fff;color:#0b2a1a;font-size:28px;line-height:1;cursor:pointer}
+.concept-b .rv-home{max-width:var(--w);margin:0 auto;padding:96px 24px 0}
+.rv-quotes{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
