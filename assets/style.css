@@ -268,3 +268,10 @@ main .rv-strip,.card ul.rv-strip{list-style:none;margin:0 0 22px;padding:0;displ
 .inner .free-offer>.btn{align-self:flex-start;padding-left:28px;padding-right:28px}
 @media(max-width:560px){.inner .free-offer>.btn{align-self:stretch}}
 @media(max-width:560px){.book-nav.small{flex-wrap:wrap;overflow:visible}}
+
+/* book cards link to detail pages */
+.card-title{color:inherit;text-decoration:none}.card-title:hover{text-decoration:underline;text-underline-offset:3px}
+.card-img{display:block}
+.card-more{display:inline-block;margin:-4px 0 14px;align-self:flex-start;font-weight:600;font-size:.92rem;color:#1d6f2b;text-decoration:none}.card-more:hover{text-decoration:underline}
+.card.featured .card-more{color:#fff}
+.card.book .card-more{margin:-6px 22px 16px}

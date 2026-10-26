@@ -8,8 +8,8 @@ def mini(s):
 css=mini(open('assets/fonts.css').read()+open('assets/style.css').read())
 open('assets/style.min.css','w').write(css+'\n')
 FONTS=['archivo-var-latin.woff2','inter-var-latin.woff2','montserrat-800-brand.woff2']
-for f in glob.glob('*.html'):
-    base='/assets/' if f=='404.html' else 'assets/'
+for f in glob.glob('*.html')+glob.glob('books/*.html'):
+    base='/assets/' if f=='404.html' else ('../assets/' if f.startswith('books/') else 'assets/')
     pre=''.join(f'<link rel="preload" href="{base}fonts/{x}" as="font" type="font/woff2" crossorigin>' for x in FONTS)
     block=f'<!--css-->{pre}<style>{css.replace("url(fonts/","url("+base+"fonts/")}</style><!--/css-->'
     h=open(f).read()
