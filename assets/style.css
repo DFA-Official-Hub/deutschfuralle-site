@@ -357,3 +357,5 @@ table.adm{width:100%;border-collapse:collapse;font-size:.9rem}.adm th,.adm td{te
 @media(max-width:400px){.bar .acct{padding:7px 10px}.bar .acct span{font-size:.8rem}}
 .ex-opts label{flex-direction:row!important;font-weight:500}.ex-opts input[type=radio]{width:18px!important;height:18px;min-height:0;padding:0;margin:0;flex:0 0 auto;box-shadow:none}
 .rv-starpick input[type=radio]{width:1px!important;height:1px!important;padding:0!important}
+
+.vf-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:12px 0}.vf-dl dt{font-weight:600;color:#4a5a50}.vf-dl dd{margin:0}
