@@ -1,0 +1,49 @@
+(function(){
+var sb=DFA.sb,E=DFA.esc,F=DFA.FEATURES,app=document.getElementById('acct-app');
+var qs=new URLSearchParams(location.search),next=qs.get('next');
+var safeNext=next&&/^\/[A-Za-z0-9_\-\/.#?=&%]*$/.test(next)&&!next.startsWith('//')?next:null;
+var COUNTRIES=['Pakistan','India','Bangladesh','Germany','Austria','Switzerland','United Kingdom','United States','Canada','United Arab Emirates','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain','Turkey','Egypt','Nigeria','Kenya','Nepal','Sri Lanka','Afghanistan','Iran','Malaysia','Indonesia','Philippines','Australia','Other'];
+var copts='<option value="">Choose your country</option>'+COUNTRIES.map(function(c){return '<option>'+c+'</option>'}).join('');
+function msg(t,ok){var m=app.querySelector('.ac-msg');if(m){m.textContent=t;m.className='ac-msg'+(ok?' ok':' err')}}
+function busy(b,on){if(b){b.disabled=on;b.dataset.t=b.dataset.t||b.textContent;b.textContent=on?'Please wait…':b.dataset.t}}
+var social=(F.google?'<button class="btn outline ac-full" type="button" data-google>Continue with Google</button>':'')+(F.phone?'<button class="btn outline ac-full" type="button" data-phone>Log in with a mobile code (SMS)</button>':'')+((F.google||F.phone)?'<p class="ac-or">or use your email</p>':'');
+function tabs(on){return '<div class="ac-tabs" role="tablist"><button type="button" role="tab" aria-selected="'+(on==='login')+'" data-go="login">Log in</button><button type="button" role="tab" aria-selected="'+(on==='signup')+'" data-go="signup">Create account</button></div>'}
+var V={
+login:function(){return tabs('login')+'<h2>Welcome back</h2><p class="ac-lead">Log in to rate our books and manage your account.</p>'+social+
+ '<form data-f="login"><label>Email<input type="email" name="email" autocomplete="email" required></label><label>Password<input type="password" name="pw" autocomplete="current-password" required></label>'+
+ '<label class="ac-check"><input type="checkbox" name="rem"'+(DFA.remember()?' checked':'')+'> Keep me logged in</label><button class="btn ac-full">Log in</button></form><p class="ac-msg" role="status"></p><p class="ac-links"><button type="button" class="ac-link" data-go="forgot">Forgot your password?</button></p>'},
+signup:function(){return tabs('signup')+'<h2>Create your account</h2><p class="ac-lead">Free, and it only takes a minute. We will email you a link to confirm your address.</p>'+social+
+ '<form data-f="signup"><label>Username<input name="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.\\-]{3,30}" autocomplete="username" title="3 to 30 letters, numbers, dots, dashes or underscores"><small>Shown next to your reviews.</small></label><label>Full name<input name="full_name" required maxlength="100" autocomplete="name"></label>'+
+ '<label>Country<select name="country" required>'+copts+'</select></label><label>Email<input type="email" name="email" autocomplete="email" required></label><label>Password<input type="password" name="pw" minlength="8" autocomplete="new-password" required><small>At least 8 characters.</small></label>'+
+ '<label class="ac-check"><input type="checkbox" name="rem"'+(DFA.remember()?' checked':'')+'> Keep me logged in</label><button class="btn ac-full">Create account</button><p class="ac-fine">By signing up you agree to our <a href="privacy.html">Privacy Policy</a>.</p></form><p class="ac-msg" role="status"></p>'},
+forgot:function(){return '<h2>Reset your password</h2><p class="ac-lead">Enter the email you signed up with and we will send you a reset link.</p><form data-f="forgot"><label>Email<input type="email" name="email" autocomplete="email" required></label><button class="btn ac-full">Send reset link</button></form><p class="ac-msg" role="status"></p><p class="ac-links"><button type="button" class="ac-link" data-go="login">Back to log in</button></p>'},
+reset:function(){return '<h2>Choose a new password</h2><form data-f="reset"><label>New password<input type="password" name="pw" minlength="8" autocomplete="new-password" required></label><button class="btn ac-full">Save new password</button></form><p class="ac-msg" role="status"></p>'},
+profile:function(p){return '<h2>Hello, '+E(p.full_name||p.username||'there')+'</h2><p class="ac-lead">Signed in as <b>'+E(p.email)+'</b>'+(p.role==='admin'?' · admin':'')+'</p>'+
+ '<form data-f="profile"><label>Username<input name="username" value="'+E(p.username)+'" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.\\-]{3,30}"></label><label>Full name<input name="full_name" value="'+E(p.full_name)+'" maxlength="100"></label>'+
+ '<label>Country<select name="country">'+copts.replace('<option>'+E(p.country)+'</option>','<option selected>'+E(p.country)+'</option>')+'</select></label><label>Phone (optional)<input type="tel" name="phone" value="'+E(p.phone)+'" maxlength="30" autocomplete="tel"><small>Only visible to you and our team.</small></label><button class="btn ac-full">Save changes</button></form><p class="ac-msg" role="status"></p>'+
+ '<div class="ac-row"><button type="button" class="btn outline" data-go="reset">Change password</button><button type="button" class="btn outline" data-out>Log out</button></div>'+(safeNext?'<p class="ac-links"><a href="'+E(safeNext)+'">Go back to where you were →</a></p>':'')}};
+async function show(v){var p=null;if(v==='profile'){p=await DFA.profile();if(!p)return show('login')}
+ app.innerHTML=V[v](p);app.dataset.view=v;
+ app.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){show(b.dataset.go)}});
+ var o=app.querySelector('[data-out]');if(o)o.onclick=async function(){await sb.auth.signOut();show('login')};
+ var g=app.querySelector('[data-google]');if(g)g.onclick=function(){sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:DFA.SITE+'/account.html'}})};
+ var ph=app.querySelector('[data-phone]');if(ph)ph.onclick=async function(){var n=prompt('Your mobile number with country code, e.g. +92…');if(!n)return;var r=await sb.auth.signInWithOtp({phone:n});if(r.error)return msg(r.error.message);var c=prompt('Enter the 6-digit code we sent you');if(!c)return;var v2=await sb.auth.verifyOtp({phone:n,token:c,type:'sms'});if(v2.error)return msg(v2.error.message);done()};
+ var f=app.querySelector('form');if(f)f.onsubmit=function(e){e.preventDefault();H[f.dataset.f](f)}}
+function done(){if(safeNext)location.href=safeNext;else show('profile')}
+var H={
+login:async function(f){var b=f.querySelector('button');DFA.setRemember(f.rem.checked);busy(b,true);var r=await sb.auth.signInWithPassword({email:f.email.value.trim(),password:f.pw.value});busy(b,false);
+ if(r.error)return msg(/confirm/i.test(r.error.message)?'Please confirm your email first. Check your inbox (and spam folder) for our link.':r.error.message==='Invalid login credentials'?'That email and password do not match. Please try again.':r.error.message);done()},
+signup:async function(f){var b=f.querySelector('button');DFA.setRemember(f.rem.checked);busy(b,true);
+ var r=await sb.auth.signUp({email:f.email.value.trim(),password:f.pw.value,options:{emailRedirectTo:DFA.SITE+'/account.html',data:{username:f.username.value.trim(),full_name:f.full_name.value.trim(),country:f.country.value}}});busy(b,false);
+ if(r.error)return msg(r.error.message);if(r.data.session)return done();
+ app.innerHTML='<h2>Check your inbox</h2><p class="ac-lead">We sent a confirmation link to <b>'+E(f.email.value)+'</b>. Click it to finish creating your account. If it is not there in a few minutes, look in your spam folder.</p><button class="btn outline" type="button" data-go="login">Back to log in</button>';app.querySelector('[data-go]').onclick=function(){show('login')}},
+forgot:async function(f){var b=f.querySelector('button');busy(b,true);var r=await sb.auth.resetPasswordForEmail(f.email.value.trim(),{redirectTo:DFA.SITE+'/account.html?mode=reset'});busy(b,false);
+ if(r.error)return msg(r.error.message);msg('If that email has an account, a reset link is on its way.',true)},
+reset:async function(f){var b=f.querySelector('button');busy(b,true);var r=await sb.auth.updateUser({password:f.pw.value});busy(b,false);if(r.error)return msg(r.error.message);await show('profile');msg('Your password has been changed.',true)},
+profile:async function(f){var b=f.querySelector('button');busy(b,true);var s=(await sb.auth.getSession()).data.session;
+ var r=await sb.from('profiles').update({username:f.username.value.trim(),full_name:f.full_name.value.trim()||null,country:f.country.value||null,phone:f.phone.value.trim()||null}).eq('id',s.user.id);busy(b,false);
+ if(r.error)return msg(/duplicate|unique/i.test(r.error.message)?'That username is taken. Please pick another.':r.error.message);msg('Saved.',true)}};
+var recovering=qs.get('mode')==='reset';
+sb.auth.onAuthStateChange(function(ev){if(ev==='PASSWORD_RECOVERY'){recovering=true;show('reset')}});
+sb.auth.getSession().then(function(r){if(recovering&&r.data.session)show('reset');else show(r.data.session?'profile':(qs.get('mode')==='signup'?'signup':'login'))});
+})();

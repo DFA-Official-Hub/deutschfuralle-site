@@ -51,3 +51,5 @@ d.documentElement.addEventListener('mouseleave',()=>{b.classList.remove('cur-on'
 (()=>{const d=document.getElementById('lb');if(!d||!d.showModal)return;const im=d.querySelector('img');
 document.querySelectorAll('a[data-lb]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();im.src=a.href;im.alt=a.querySelector('img').alt;d.showModal()}));
 d.addEventListener('click',e=>{if(e.target!==im){d.close();im.removeAttribute('src')}});})();
+/* header account button label (no Supabase load needed) */
+(()=>{try{const k='sb-owmsddezprhrjiinznmq-auth-token';if(localStorage.getItem(k)||sessionStorage.getItem(k))document.querySelectorAll('a.acct span').forEach(a=>a.textContent='My account')}catch(e){}})();

@@ -1,0 +1,21 @@
+(function(){
+var sb=DFA.sb,E=DFA.esc,app=document.getElementById('portal-app');
+function d(x){return new Date(x+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}
+async function init(){var p=await DFA.profile();
+ if(!p){app.innerHTML='<div class="ac-card"><h2>Please log in</h2><p>Your student portal shows your course, access dates and online books.</p><a class="btn" href="account.html?next=%2Fportal.html">Log in</a></div>';return}
+ var r=await sb.from('enrollments').select('id,course_code,course_label,status,start_date,end_date,courses(name,duration_days)').order('created_at',{ascending:false});
+ var tdy=new Date(Date.now()+5*3600e3).toISOString().slice(0,10);var en=(r.data||[]).filter(function(x){return x.status!=='revoked'});en.forEach(function(x){if(x.status==='active'&&x.end_date<tdy)x.status='expired'});
+ var codes=en.filter(function(x){return x.status==='active'}).map(function(x){return x.course_code});
+ var books=codes.length?((await sb.from('course_books').select('course_code,book_catalog(slug,title,page_count,in_reader)').in('course_code',codes)).data||[]):[];
+ var h='<div class="pt-hello"><h2>Hello, '+E(p.full_name||p.username)+'</h2><p class="ac-lead">Signed in as '+E(p.email)+' · <a href="account.html">Account settings</a></p></div>';
+ if(!en.length)h+='<div class="ac-card"><h3>No course linked to this email yet</h3><p>If you have registered and paid, it can take a little while for us to switch on your access. Make sure you signed up with the same email you used on the registration form. Questions? <a href="mailto:contact.deutschfuralle@gmail.com">contact.deutschfuralle@gmail.com</a></p><a class="btn outline" href="courses.html">See our courses</a></div>';
+ else h+='<div class="pt-grid">'+en.map(function(x){var name=(x.courses&&x.courses.name)||x.course_label||'Your course';var bk=books.filter(function(b){return b.course_code===x.course_code&&b.book_catalog});
+  var left=x.end_date?Math.ceil((new Date(x.end_date+'T23:59:59')-new Date())/864e5):null;
+  return '<div class="ac-card pt-course"><span class="adm-st st-'+x.status+'">'+(x.status==='pending'?'Waiting for payment confirmation':x.status==='active'?'Active':'Ended')+'</span><h3>'+E(name)+'</h3>'+
+  (x.status==='active'?'<p class="pt-dates"><b>Access:</b> '+d(x.start_date)+' to '+d(x.end_date)+(left!=null&&left>=0?' <span class="adm-mut">('+left+' day'+(left===1?'':'s')+' left)</span>':'')+'</p>':x.status==='pending'?'<p>We have your registration. Your access opens as soon as we confirm your fee.</p>':'<p>Your access to this course has ended.</p>')+
+  (x.status==='active'?'<h4>Books included</h4>'+(bk.length?'<ul class="pt-books">'+bk.map(function(b){var c=b.book_catalog;return '<li><span>'+E(c.title)+'</span>'+(c.in_reader?'<a class="btn sm" href="reader.html?book='+encodeURIComponent(c.slug)+'">Read online</a>':'')+'</li>'}).join('')+'</ul>':'<p class="adm-mut">Your teacher will add the course books here.</p>'):'')+'</div>'}).join('')+'</div>';
+ var dv=await sb.from('reader_devices').select('device_id,last_seen,user_agent').order('last_seen',{ascending:false});
+ if(dv.data&&dv.data.length)h+='<div class="ac-card pt-dev"><h3>Devices using the reader</h3><p class="adm-mut">You can read on up to 2 devices. Remove one to use a new device.</p><ul>'+dv.data.map(function(v){return '<li><span>'+E((v.user_agent||'Unknown device').replace(/\(.*?\)/,'').slice(0,60))+'<br><small>Last used '+new Date(v.last_seen).toLocaleString('en-GB')+'</small></span><button type="button" class="btn outline sm" data-dev="'+E(v.device_id)+'">Remove</button></li>'}).join('')+'</ul></div>';
+ app.innerHTML=h;
+ app.querySelectorAll('[data-dev]').forEach(function(b){b.onclick=async function(){await sb.from('reader_devices').delete().eq('device_id',b.dataset.dev);init()}})}
+init();})();
