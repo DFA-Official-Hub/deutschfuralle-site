@@ -1,5 +1,5 @@
 (function(){
-var sb=DFA.sb,E=DFA.esc,app=document.getElementById('adm-app'),COURSES=[];
+var sb=DFA.sb,E=DFA.esc,app=document.getElementById('adm-app'),COURSES=[],PUB=null;
 function d(x){return x?new Date(x.length===10?x+'T00:00:00':x).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):''}
 function today(){return new Date(Date.now()+5*3600e3).toISOString().slice(0,10)}
 function table(cols,rows){return '<div class="adm-scroll"><table class="adm"><thead><tr>'+cols.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr></thead><tbody>'+rows.map(function(r){return '<tr'+(r.attr||'')+'>'+r.cells.map(function(c,i){return '<td data-l="'+cols[i]+'"'+(c.cls?' class="'+c.cls+'"':'')+'>'+(c.h!=null?c.h:E(c))+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table></div>'}
@@ -21,9 +21,9 @@ async function enr(filter){filter=filter||'pending';var B=document.getElementByI
  B.innerHTML=h;
  B.querySelector('#enf').onchange=function(){enr(this.value)};
  (async function(){var cb=B.querySelector('#cimg');var pub=null;
-  async function show(on){var r2=await sb.functions.invoke('admission',{body:{action:'cert_images',on:on}});if(r2.data)pub=r2.data.public;cb.textContent='Certificate images for students: '+(pub?'ON':'OFF (only you can preview)')}
+  async function show(on){var r2=await sb.functions.invoke('admission',{body:{action:'cert_images',on:on}});if(r2.data)PUB=pub=r2.data.public;cb.textContent='Certificate images for students: '+(pub?'ON':'OFF (only you can preview)')}
   cb.textContent='Certificate images for students: ?';cb.onclick=function(){if(pub===null)return;var on=!pub;if(!confirm(on?'Show certificate images on the verify page and student portal, and save copies to Drive?':'Hide certificate images from students again?'))return;show(on)};
-  var r3=await sb.functions.invoke('admission',{body:{action:'cert_images_status'}});pub=!!(r3.data&&r3.data.public);cb.textContent='Certificate images for students: '+(pub?'ON':'OFF (only you can preview)')})();
+  if(PUB!==null)pub=PUB;else{var r3=await sb.functions.invoke('admission',{body:{action:'cert_images_status'}});PUB=pub=!!(r3.data&&r3.data.public)}cb.textContent='Certificate images for students: '+(pub?'ON':'OFF (only you can preview)')})();
  B.querySelectorAll('[data-doc]').forEach(function(a){a.onclick=async function(ev){ev.preventDefault();var w=window.open('','_blank'),t=a.textContent;a.textContent='Opening…';var r5=await sb.functions.invoke('admission',{body:{action:'doc_file_admin',id:+a.dataset.di,kind:a.dataset.doc}});a.textContent=t;
   if(r5.data&&r5.data.url){if(w)w.location=r5.data.url;else location.href=r5.data.url}else{if(w)w.close();alert((r5.data&&r5.data.error)||'Could not open the document.')}}});
  B.querySelectorAll('[data-ci]').forEach(function(a){a.onclick=async function(ev){ev.preventDefault();var w=window.open('','_blank');a.textContent='Creating…';var r4=await sb.functions.invoke('admission',{body:{action:'cert_file_admin',id:+a.dataset.ci}});a.textContent='View image';

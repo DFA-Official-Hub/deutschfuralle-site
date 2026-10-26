@@ -34,17 +34,18 @@ d.addEventListener('keydown',e=>{const n=d.getElementById('nav'),t=d.querySelect
 const fine=matchMedia('(hover:hover) and (pointer:fine)').matches,rm=matchMedia('(prefers-reduced-motion:reduce)').matches;if(!fine)return;
 const dot=d.createElement('div'),ring=d.createElement('div');dot.className='cur-dot';ring.className='cur-ring';[dot,ring].forEach(e=>{e.setAttribute('aria-hidden','true');b.appendChild(e)});
 const hero=d.querySelector('.hero')||d.querySelector('.page-head')||d.body,hg=d.createElement('div');hg.className='hglow';hg.setAttribute('aria-hidden','true');hero.insertBefore(hg,hero.querySelector('.in'));
-let mx=-100,my=-100,rx=mx,ry=my,gx=0,gy=0,raf=0;
-const loop=()=>{rx+=(mx-rx)*.18;ry+=(my-ry)*.18;ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;
-const r=hero.getBoundingClientRect();const tx=mx-r.left,ty=my-r.top;gx+=(tx-gx)*.08;gy+=(ty-gy)*.08;hg.style.transform=`translate3d(${gx}px,${gy}px,0)`;
-raf=(Math.abs(mx-rx)+Math.abs(my-ry)+Math.abs(tx-gx)+Math.abs(ty-gy)>.3)?requestAnimationFrame(loop):0};
+let mx=-100,my=-100,rx=mx,ry=my,gx=0,gy=0,raf=0,inG=false,hr=null;
+const rect=()=>hr||(hr=hero.getBoundingClientRect());addEventListener('resize',()=>{hr=null},{passive:true});
+const loop=()=>{raf=0;rx+=(mx-rx)*.18;ry+=(my-ry)*.18;ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;let m=Math.abs(mx-rx)+Math.abs(my-ry);
+if(inG){const r=rect(),tx=mx-r.left,ty=my-r.top;gx+=(tx-gx)*.08;gy+=(ty-gy)*.08;hg.style.transform=`translate3d(${gx}px,${gy}px,0)`;m+=Math.abs(tx-gx)+Math.abs(ty-gy)}
+if(m>.3)raf=requestAnimationFrame(loop)};
 const kick=()=>{if(!raf)raf=requestAnimationFrame(loop)};
 const H='a,button,summary,[role=button],input,select,label';
 d.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;mx=e.clientX;my=e.clientY;dot.style.transform=`translate3d(${mx}px,${my}px,0)`;
 if(rm){rx=mx;ry=my;ring.style.transform=dot.style.transform}else kick();b.classList.add('cur-on');
-const t=e.target.closest?e.target:null;ring.classList.toggle('hov',!!(t&&t.closest(H)));
-const inH=t&&t.closest('.hero');hero.classList.toggle('glowing',!!inH)},{passive:true});
-addEventListener('scroll',kick,{passive:true});
+const t=e.target.closest?e.target:null;const hv=!!(t&&t.closest(H));if(hv!==ring._h){ring._h=hv;ring.classList.toggle('hov',hv)}
+const inH=!!(t&&t.closest('.hero,.page-head'));if(inH!==inG){inG=inH;hero.classList.toggle('glowing',inH)}},{passive:true});
+addEventListener('scroll',()=>{hr=null;if(inG)kick()},{passive:true});
 d.addEventListener('pointerdown',()=>ring.classList.add('down'));d.addEventListener('pointerup',()=>ring.classList.remove('down'));
 d.documentElement.addEventListener('mouseleave',()=>{b.classList.remove('cur-on');hero.classList.remove('glowing')});
 })();
