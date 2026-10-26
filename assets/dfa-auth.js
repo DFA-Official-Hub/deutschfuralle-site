@@ -14,10 +14,11 @@ function setRemember(on){try{localStorage.setItem('dfa-remember',on?'1':'0')}cat
 async function profile(){var s=(await sb.auth.getSession()).data.session;if(!s)return null;
 var r=await sb.from('profiles').select('*').eq('id',s.user.id).maybeSingle();return r.data?Object.assign({email:s.user.email},r.data):{id:s.user.id,email:s.user.email}}
 function header(sess){document.querySelectorAll('a.acct:not(.acct-adm) span').forEach(function(a){a.textContent=sess?'My account':'Log in'});adminLink(sess)}
-var roleFor=null,isAdm=false,roleP=null;async function adminLink(sess){var uid=sess&&sess.user&&sess.user.id||null;
-if(uid!==roleFor){roleFor=uid;roleP=uid?sb.from('profiles').select('role').eq('id',uid).maybeSingle().then(function(r){return !!(r.data&&r.data.role==='admin')},function(){return false}):Promise.resolve(false)}
+var roleFor=null,isAdm=false,isStu=false,roleP=null;async function adminLink(sess){var uid=sess&&sess.user&&sess.user.id||null;
+if(uid!==roleFor){roleFor=uid;roleP=uid?Promise.all([sb.from('profiles').select('role').eq('id',uid).maybeSingle(),sb.from('enrollments').select('id',{count:'exact',head:true}).neq('status','revoked')]).then(function(r){var a=!!(r[0].data&&r[0].data.role==='admin');isStu=!a&&(r[1].count||0)>0;return a},function(){isStu=false;return false}):(isStu=false,Promise.resolve(false))}
 var p=roleP;isAdm=await p;if(p!==roleP)return;
 var a=document.querySelector('a.acct:not(.acct-adm)'),x=document.getElementById('dfa-admin-link');
-if(isAdm&&a&&!x){var l=document.createElement('a');l.id='dfa-admin-link';l.className='acct acct-adm';l.href=a.getAttribute('href').replace('account.html','admin.html');l.textContent='Admin';if(/admin\.html$/.test(location.pathname))l.setAttribute('aria-current','page');a.parentNode.insertBefore(l,a)}else if(!isAdm&&x)x.remove()}
+if(isAdm&&a&&!x){var l=document.createElement('a');l.id='dfa-admin-link';l.className='acct acct-adm';l.href=a.getAttribute('href').replace('account.html','admin.html');l.textContent='Admin';if(/admin\.html$/.test(location.pathname))l.setAttribute('aria-current','page');a.parentNode.insertBefore(l,a)}else if(!isAdm&&x)x.remove();
+var y=document.getElementById('dfa-course-link');if(isStu&&a&&!y){var c=document.createElement('a');c.id='dfa-course-link';c.className='acct acct-adm';c.href=a.getAttribute('href').replace('account.html','portal.html');c.textContent='My course';if(/portal\.html$/.test(location.pathname))c.setAttribute('aria-current','page');a.parentNode.insertBefore(c,a)}else if(!isStu&&y)y.remove()}
 window.DFA={sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
 })();

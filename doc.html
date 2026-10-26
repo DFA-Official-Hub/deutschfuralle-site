@@ -3,13 +3,13 @@
 <style>body{font-family:system-ui,sans-serif;background:#06231a;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0;text-align:center}a{color:#4ade6b}</style></head>
 <body><main><p id="m">Opening document…</p></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-<script src="assets/dfa-auth.js?v=6"></script>
+<script src="assets/dfa-auth.js?v=8"></script>
 <script>
 (async function(){var m=document.getElementById('m'),q=new URLSearchParams(location.search),id=+q.get('id'),t=q.get('type');
 function fail(h){m.innerHTML=h}
 if(!id||!/^(admission|receipt|cert)$/.test(t))return fail('Invalid document link.');
-var p=await DFA.profile();if(!p)return fail('Please <a href="account.html?next='+encodeURIComponent('/doc.html'+location.search)+'">log in</a> as admin first.');
-if(p.role!=='admin')return fail('This document is for site staff only.');
-var r=await DFA.sb.functions.invoke('admission',{body:t==='cert'?{action:'cert_file_admin',id:id}:{action:'doc_file_admin',id:id,kind:t}});
-if(r.data&&r.data.url&&/^https:\/\//.test(r.data.url))location.replace(r.data.url);else fail(DFA.esc((r.data&&r.data.error)||'Could not open the document.')+' <a href="admin.html">Back to admin</a>')})();
+var p=await DFA.profile();if(!p)return fail('Please <a href="account.html?next='+encodeURIComponent('/doc.html'+location.search)+'">log in</a> first.');
+var adm=p.role==='admin';if(!adm&&t==='cert')return fail('Please open your certificate from the <a href="portal.html">student portal</a>.');
+var r=await DFA.sb.functions.invoke('admission',{body:t==='cert'?{action:'cert_file_admin',id:id}:{action:adm?'doc_file_admin':'my_doc',id:id,kind:t}});
+if(r.data&&r.data.url&&/^https:\/\//.test(r.data.url))location.replace(r.data.url);else fail(DFA.esc((r.data&&r.data.error)||'Could not open the document.')+' <a href="account.html">Back to my account</a>')})();
 </script></body></html>
