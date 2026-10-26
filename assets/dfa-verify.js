@@ -9,6 +9,7 @@ async function check(code){code=String(code||'').trim().toUpperCase();if(!code)r
   '<dt>Name</dt><dd>'+E(x.name||'–')+'</dd><dt>Course</dt><dd>'+E(x.course||'–')+'</dd>'+
   '<dt>Course dates</dt><dd>'+d(x.start_date)+' – '+d(x.end_date)+'</dd>'+
   '<dt>Certificate no.</dt><dd>'+E(x.certificate_no)+'</dd><dt>Issued</dt><dd>'+d(x.issued_at)+'</dd></dl>'+
+  (x.image&&x.image.url?'<a href="'+E(x.image.url)+'" target="_blank" rel="noopener"><img class="cert-img" src="'+E(x.image.url)+'" alt="Certificate '+E(x.certificate_no)+'"></a><p><a class="btn sm" href="'+E(x.image.download||x.image.url)+'">Download certificate</a></p>':'')+
   '<p class="adm-mut">This certificate only confirms participation in a Deutsch Für Alle course. It is not affiliated with or issued by the Goethe-Institut, ÖSD, ECL or any other exam body, and it has no connection with any embassy.</p>'}
 document.getElementById('vf-form').onsubmit=function(e){e.preventDefault();history.replaceState(null,'','?code='+encodeURIComponent(inp.value.trim().toUpperCase()));check(inp.value)};
 var q=new URLSearchParams(location.search).get('code');if(q)check(q);
