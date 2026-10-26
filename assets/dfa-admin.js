@@ -15,7 +15,7 @@ async function enr(filter){filter=filter||'pending';var B=document.getElementByI
  h+=r.data.length?table(['Student','Course','Status','Access','Actions'],r.data.map(function(x){var pend=x.status==='pending';return {attr:' data-id="'+x.id+'"',cells:[
   {h:'<b>'+E(x.full_name||'–')+'</b><br><span class="adm-mut">'+E(x.email)+'</span><br><span class="adm-mut">Registered '+d(x.created_at)+'</span>'},
   {h:pend?'<select data-c>'+copts(x.course_code)+'</select>'+(x.course_label&&!x.course_code?'<br><span class="adm-mut">Form: '+E(x.course_label)+'</span>':''):E((COURSES.find(function(c){return c.code===x.course_code})||{}).name||x.course_label||'')},
-  {h:'<span class="adm-st st-'+x.status+'">'+x.status+'</span>'+(x.welcome_sent_at?'<br><span class="adm-mut">Welcome sent</span>':'')},
+  {h:'<span class="adm-st st-'+x.status+'">'+x.status+'</span>'+(x.welcome_sent_at?'<br><span class="adm-mut">Welcome sent</span>':'')+(x.receipt_url&&/^https:\/\//.test(x.receipt_url)?'<br><a href="'+E(x.receipt_url)+'" target="_blank" rel="noopener">View receipt</a>':(pend?'<br><span class="adm-mut">No receipt uploaded</span>':''))},
   {h:pend?'<label class="adm-mut">Start <input type="date" data-s value="'+today()+'"></label>':(x.start_date?d(x.start_date)+' → '+d(x.end_date):'')},
   {cls:'adm-a',h:pend?'<button type="button" class="btn sm" data-a="pay">Payment received</button><button type="button" class="btn outline sm danger" data-a="rev">Remove</button>':x.status==='active'?'<button type="button" class="btn outline sm danger" data-a="rev">Revoke</button>':''}]}})):'<p>Nothing here.</p>';
  B.innerHTML=h;
