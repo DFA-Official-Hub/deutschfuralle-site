@@ -36,13 +36,13 @@ const dot=d.createElement('div'),ring=d.createElement('div');dot.className='cur-
 const hero=d.querySelector('.hero')||d.querySelector('.page-head')||d.body,hg=d.createElement('div');hg.className='hglow';hg.setAttribute('aria-hidden','true');hero.insertBefore(hg,hero.querySelector('.in'));
 let mx=-100,my=-100,rx=mx,ry=my,gx=0,gy=0,raf=0,inG=false,hr=null;
 const rect=()=>hr||(hr=hero.getBoundingClientRect());addEventListener('resize',()=>{hr=null},{passive:true});
-const loop=()=>{raf=0;rx+=(mx-rx)*.18;ry+=(my-ry)*.18;ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;let m=Math.abs(mx-rx)+Math.abs(my-ry);
+const loop=()=>{raf=0;rx+=(mx-rx)*.18;ry+=(my-ry)*.18;ring.style.translate=`${rx}px ${ry}px`;let m=Math.abs(mx-rx)+Math.abs(my-ry);
 if(inG){const r=rect(),tx=mx-r.left,ty=my-r.top;gx+=(tx-gx)*.08;gy+=(ty-gy)*.08;hg.style.transform=`translate3d(${gx}px,${gy}px,0)`;m+=Math.abs(tx-gx)+Math.abs(ty-gy)}
 if(m>.3)raf=requestAnimationFrame(loop)};
 const kick=()=>{if(!raf)raf=requestAnimationFrame(loop)};
 const H='a,button,summary,[role=button],input,select,label';
 d.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;mx=e.clientX;my=e.clientY;dot.style.transform=`translate3d(${mx}px,${my}px,0)`;
-if(rm){rx=mx;ry=my;ring.style.transform=dot.style.transform}else kick();b.classList.add('cur-on');
+if(rm){rx=mx;ry=my;ring.style.translate=`${mx}px ${my}px`}else kick();b.classList.add('cur-on');
 const t=e.target.closest?e.target:null;const hv=!!(t&&t.closest(H));if(hv!==ring._h){ring._h=hv;ring.classList.toggle('hov',hv)}
 const inH=!!(t&&t.closest('.hero,.page-head'));if(inH!==inG){inG=inH;hero.classList.toggle('glowing',inH)}},{passive:true});
 addEventListener('scroll',()=>{hr=null;if(inG)kick()},{passive:true});
