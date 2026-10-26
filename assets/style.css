@@ -375,3 +375,15 @@ table.adm{width:100%;border-collapse:collapse;font-size:.9rem}.adm th,.adm td{te
 .ac-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .ac-admin-grid .btn{text-align:center;justify-content:center}
 .acct-adm{margin-left:auto}.acct-adm+.acct{margin-left:6px}
+
+/* admin student cards */
+.adm-cards{display:grid;gap:16px;margin-top:16px}
+.adm-card{background:#fff;border:1px solid #d9e4dc;border-radius:16px;padding:18px 20px;box-shadow:0 2px 10px rgba(6,35,26,.05)}
+.adm-dl{margin:0;display:grid;gap:10px}
+.adm-r{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:baseline}
+.adm-r dt{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#5b6b62}
+.adm-r dd{margin:0;min-width:0}
+.adm-blk{display:block}.adm-nw{white-space:nowrap}
+.adm-acts{display:flex;flex-wrap:wrap;gap:8px}.adm-acts .btn.sm{margin:0}
+.adm-card select[data-c]{max-width:100%}
+@media(max-width:640px){.adm-r{grid-template-columns:1fr;gap:2px}.adm-card{padding:14px}.adm-acts .btn{flex:1 1 auto;justify-content:center}.adm-nw{white-space:normal}}
