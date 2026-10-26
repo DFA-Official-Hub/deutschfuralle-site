@@ -263,3 +263,8 @@ main .rv-strip,.card ul.rv-strip{list-style:none;margin:0 0 22px;padding:0;displ
 .lb-x{position:fixed;top:12px;right:16px;width:44px;height:44px;border-radius:50%;border:0;background:#fff;color:#0b2a1a;font-size:28px;line-height:1;cursor:pointer}
 .concept-b .rv-home{max-width:var(--w);margin:0 auto;padding:96px 24px 0}
 .rv-quotes{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+/* free kids mini books offer (books.html#kids) */
+.free-offer{margin-top:28px}.free-offer p{max-width:720px}
+.inner .free-offer>.btn{align-self:flex-start;padding-left:28px;padding-right:28px}
+@media(max-width:560px){.inner .free-offer>.btn{align-self:stretch}}
+@media(max-width:560px){.book-nav.small{flex-wrap:wrap;overflow:visible}}
