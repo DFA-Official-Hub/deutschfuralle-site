@@ -361,3 +361,17 @@ table.adm{width:100%;border-collapse:collapse;font-size:.9rem}.adm th,.adm td{te
 .vf-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:12px 0}.vf-dl dt{font-weight:600;color:#4a5a50}.vf-dl dd{margin:0}
 
 .cert-img{display:block;width:100%;max-width:760px;height:auto;margin:14px 0 10px;border:1px solid #dfe7e1;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.08)}.pt-cert-item{margin:0 0 18px}.pt-cert-item .btn{margin:0 8px 8px 0}
+
+/* admin status cell + pills */
+.adm-stc{min-width:220px}
+.adm-meta{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:2px;font-size:.82rem;color:#5b6b62}
+.adm-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.adm-pill{display:inline-flex;align-items:center;padding:5px 12px;border:1.5px solid var(--g);border-radius:999px;color:var(--g);font-size:.78rem;font-weight:600;line-height:1.2;text-decoration:none;white-space:nowrap;transition:background .2s,color .2s}
+.adm-pill:hover,.adm-pill:focus-visible{background:var(--g);color:#fff}
+@media(max-width:640px){.adm-links{flex-direction:column;align-items:stretch}.adm-pill{justify-content:center}}
+/* admin shortcuts on account page */
+.ac-admin{border:1.5px solid rgba(35,134,51,.35);background:#f2fbf1;border-radius:16px;padding:18px;margin:0 0 24px}
+.ac-admin h3{margin:0 0 12px;font-size:1.05rem}
+.ac-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ac-admin-grid .btn{text-align:center;justify-content:center}
+.acct-adm{margin-left:auto}.acct-adm+.acct{margin-left:6px}

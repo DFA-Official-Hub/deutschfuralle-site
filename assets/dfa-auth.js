@@ -13,7 +13,11 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 function setRemember(on){try{localStorage.setItem('dfa-remember',on?'1':'0')}catch(e){}}
 async function profile(){var s=(await sb.auth.getSession()).data.session;if(!s)return null;
 var r=await sb.from('profiles').select('*').eq('id',s.user.id).maybeSingle();return r.data?Object.assign({email:s.user.email},r.data):{id:s.user.id,email:s.user.email}}
-function header(sess){document.querySelectorAll('a.acct span').forEach(function(a){a.textContent=sess?'My account':'Log in'})}
+function header(sess){document.querySelectorAll('a.acct span').forEach(function(a){a.textContent=sess?'My account':'Log in'});adminLink(sess)}
+var roleFor=null,isAdm=false;async function adminLink(sess){var uid=sess&&sess.user&&sess.user.id;
+if(uid&&roleFor!==uid){roleFor=uid;var r=await sb.from('profiles').select('role').eq('id',uid).maybeSingle();isAdm=!!(r.data&&r.data.role==='admin')}if(!uid)isAdm=false;
+document.querySelectorAll('a.acct').forEach(function(a){var x=a.previousElementSibling,has=x&&x.classList.contains('acct-adm');
+if(isAdm&&!has){var l=document.createElement('a');l.className='acct acct-adm';l.href=a.getAttribute('href').replace('account.html','admin.html');l.textContent='Admin';if(/admin\.html$/.test(location.pathname))l.setAttribute('aria-current','page');a.parentNode.insertBefore(l,a)}else if(!isAdm&&has)x.remove()})}
 sb.auth.onAuthStateChange(function(_e,s){header(s)});
 window.DFA={sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
 })();
