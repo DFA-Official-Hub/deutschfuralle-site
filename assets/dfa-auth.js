@@ -2,7 +2,7 @@
 (function(){
 var URL='https://owmsddezprhrjiinznmq.supabase.co',KEY='sb_publishable_INSc9yCl-RpPJ4vIkRxDDQ_7woGXiRj';
 /* Login options that need setup by the site owner. Flip to true once configured in Supabase. */
-var FEATURES={google:false,phone:false,
+var FEATURES={google:false,
  /* Cloudflare Turnstile bot check: paste the SITE KEY here once Turnstile is set up in Cloudflare AND enabled in Supabase (Auth > Bot and Abuse Protection). */
  turnstile:''};
 /* "Keep me logged in": localStorage when ticked, sessionStorage (ends with the browser) when not. */
