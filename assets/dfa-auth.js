@@ -28,7 +28,7 @@ async function invoke(name,body){var r=await sb.functions.invoke(name,{body:body
  if(st===401){var rf=await sb.auth.refreshSession();if(!rf.error&&rf.data&&rf.data.session){r=await sb.functions.invoke(name,{body:body});if(!r.error)return r}
   else{await sb.auth.signOut({scope:'local'});return {data:{error:'Your login has expired. Please log in again.',relogin:true},error:r.error}}}
  var j=await readErr(r);return {data:(j&&j.error)?j:{error:st===546?'The server took too long (status 546). Please try again.':st?'Server error (status '+st+'). Please try again.':'Could not reach the server. Please check your connection and try again.'},error:r.error}}
-function certPill(no,c,cls){if(c&&c.image&&c.image.url)return '<a class="'+cls+'" target="_blank" rel="noopener" href="doc.html?type=cert&no='+encodeURIComponent(no)+'">Certificate '+esc(no)+'</a>';
+function certPill(no,c,cls){var h='doc.html?type=cert&no='+encodeURIComponent(no);if(c&&c.image&&c.image.url)return '<a class="'+cls+'" target="_blank" rel="noopener" href="'+h+'">Certificate '+esc(no)+'</a><a class="'+cls+'" href="'+h+'&dl=1&fmt=pdf">⬇ Download certificate (PDF)</a><a class="'+cls+'" href="'+h+'&dl=1">⬇ PNG</a>';
  return '<span class="'+cls+' is-off" aria-disabled="true" title="Your certificate will be available here once it is released.">Certificate '+esc(no)+' · coming soon</span><span class="adm-mut cert-note">Your certificate will be available here once it is released.</span>'}
 window.DFA={certPill:certPill,invoke:invoke,sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
 })();
