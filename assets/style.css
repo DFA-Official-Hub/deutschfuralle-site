@@ -433,3 +433,12 @@ tr[hidden],.adm-card[hidden]{display:none}
 .sec-tile{display:flex;flex-direction:column;gap:2px;padding:12px}.sec-tile b{font-size:1.5rem}.sec-tile.warn b{color:#b42318}
 tr.sec-bad td{background:#fff6f5}
 @media (max-width:560px){.sec-row{flex-direction:column;align-items:flex-start}}
+/* switch: robust against form label/input styles (account card, admin) */
+label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-items:flex-start;gap:12px;position:relative;margin:0;cursor:pointer;font-weight:600}
+.sec-c label.adm-sw{align-items:center}
+.adm-sw>input,.ac-card .adm-sw>input{position:absolute;opacity:0;width:1px!important;height:1px!important;min-height:0;padding:0!important;margin:0;border:0;left:0;top:0;pointer-events:none}
+.adm-sw .adm-sw-ui{display:inline-block;box-sizing:border-box;width:46px;min-width:46px;height:26px;flex:0 0 46px;border-radius:999px;background:#c9d6cd;border:1px solid #b5c4ba;position:relative;transition:background .2s,border-color .2s}
+.adm-sw .adm-sw-ui::after{top:2px;left:2px}
+.adm-sw input:checked+.adm-sw-ui{background:var(--g);border-color:var(--g)}
+.adm-sw-t{font-size:.9rem;color:#5d6b63;min-width:24px}.adm-sw-t::before{content:"Off"}
+.adm-sw input:checked~.adm-sw-t{color:#1d6f2b}.adm-sw input:checked~.adm-sw-t::before{content:"On"}
