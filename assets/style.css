@@ -442,3 +442,11 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 .adm-sw input:checked+.adm-sw-ui{background:var(--g);border-color:var(--g)}
 .adm-sw-t{font-size:.9rem;color:#5d6b63;min-width:24px}.adm-sw-t::before{content:"Off"}
 .adm-sw input:checked~.adm-sw-t{color:#1d6f2b}.adm-sw input:checked~.adm-sw-t::before{content:"On"}
+/* document buttons: short label + small number, never overflow */
+.doc-btn{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;white-space:normal!important;text-align:center;line-height:1.2;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.doc-btn .db-t{font-weight:700}
+.doc-btn .db-s{font-size:.72rem;font-weight:500;opacity:.75;letter-spacing:.01em}
+.ac-course .ac-admin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ac-course .ac-admin-grid>.btn{min-width:0;white-space:normal;text-align:center}
+.ac-admin-grid .cert-note,.cert-note{grid-column:1/-1;flex-basis:100%;width:100%;margin:2px 0 0}
+@media (max-width:560px){.ac-course .ac-admin-grid{grid-template-columns:1fr}}

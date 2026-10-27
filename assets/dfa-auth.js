@@ -30,11 +30,12 @@ async function invoke(name,body){if(name!=='security'){var gs=(await sb.auth.get
  if(st===401){var rf=await sb.auth.refreshSession();if(!rf.error&&rf.data&&rf.data.session){r=await sb.functions.invoke(name,{body:body});if(!r.error)return r}
   else{await sb.auth.signOut({scope:'local'});return {data:{error:'Your login has expired. Please log in again.',relogin:true},error:r.error}}}
  var j=await readErr(r);return {data:(j&&j.error)?j:{error:st===546?'The server took too long (status 546). Please try again.':st?'Server error (status '+st+'). Please try again.':'Could not reach the server. Please check your connection and try again.'},error:r.error}}
-function certPill(no,c,cls){var h='doc.html?type=cert&no='+encodeURIComponent(no);if(c&&c.image&&c.image.url)return '<a class="'+cls+'" target="_blank" rel="noopener" href="'+h+'">Certificate '+esc(no)+'</a>';
- return '<span class="'+cls+' is-off" aria-disabled="true" title="Your certificate will be available here once it is released.">Certificate '+esc(no)+' · coming soon</span><span class="adm-mut cert-note">Your certificate will be available here once it is released.</span>'}
+function certPill(no,c,cls){var h='doc.html?type=cert&no='+encodeURIComponent(no),sub='<small class="db-s">'+esc(no)+'</small>';
+ if(c&&c.image&&c.image.url)return '<a class="'+cls+' doc-btn" target="_blank" rel="noopener" title="Certificate '+esc(no)+'" href="'+h+'"><span class="db-t">Certificate</span>'+sub+'</a>';
+ return '<span class="'+cls+' doc-btn is-off" aria-disabled="true" title="Certificate '+esc(no)+' – coming soon"><span class="db-t">Certificate · Coming soon</span>'+sub+'</span><span class="adm-mut cert-note">Your certificate will be available here once it is released.</span>'}
 function receiptPills(id,pays,cls,inv){pays=(pays||[]).slice().sort(function(a,b){return a.installment_no-b.installment_no});if(!pays.length&&inv)pays=[{invoice_no:inv,installment_no:1,installments:1}];
- return pays.map(function(p){var lb=p.installments>1||p.installment_no>1?' ('+(p.is_final&&p.installment_no>1?'Final, ':'')+p.installment_no+' of '+Math.max(p.installments,p.installment_no)+')':'',h='doc.html?id='+id+'&type=receipt&inv='+encodeURIComponent(p.invoice_no);
-  return '<a class="'+cls+'" target="_blank" rel="noopener" href="'+h+'">Receipt '+esc(p.invoice_no)+lb+'</a>'}).join('')}
+ return pays.map(function(p){var n=Math.max(p.installments||1,p.installment_no||1),multi=n>1||p.installment_no>1,lb=multi?'Receipt '+p.installment_no+' of '+n+(p.is_final&&p.installment_no>1?' (Final)':''):'Fee receipt',h='doc.html?id='+id+'&type=receipt&inv='+encodeURIComponent(p.invoice_no);
+  return '<a class="'+cls+' doc-btn" target="_blank" rel="noopener" title="Receipt '+esc(p.invoice_no)+'" href="'+h+'"><span class="db-t">'+lb+'</span><small class="db-s">'+esc(p.invoice_no)+'</small></a>'}).join('')}
 async function paysFor(ids){if(!ids.length)return {};var r=await sb.from('payments').select('enrollment_id,invoice_no,installment_no,installments,is_final,amount').in('enrollment_id',ids);var m={};(r.data||[]).forEach(function(p){(m[p.enrollment_id]=m[p.enrollment_id]||[]).push(p)});return m}
 
 /* ---------- Security: device check, email code, 2FA prompt, auto logout, password helpers ---------- */
