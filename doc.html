@@ -1,21 +1,48 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Opening document… | Deutsch Für Alle</title>
-<style>body{font-family:system-ui,sans-serif;background:#06231a;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0;text-align:center}a{color:#4ade6b}</style></head>
-<body><main><p id="m">Opening document…</p></main>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Document | Deutsch Für Alle</title>
+<link rel="icon" href="assets/favicon.png">
+<style>
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#eef3ef;color:#0d1712;display:flex;flex-direction:column}
+.bar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:#06231a;color:#fff;flex-wrap:wrap;position:sticky;top:0;z-index:2}
+.bar img{width:34px;height:34px}.ttl{flex:1 1 200px;min-width:0}.ttl b{display:block;font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ttl small{color:#a9c8b4;font-size:.8rem}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.b{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:9px 18px;font-weight:700;font-size:.9rem;text-decoration:none;border:2px solid transparent;cursor:pointer;font-family:inherit;line-height:1}
+.b.p{background:#4ade6b;color:#04170e}.b.p:hover{background:#7af08f}.b.o{background:transparent;color:#fff;border-color:rgba(255,255,255,.45)}.b.o:hover{border-color:#4ade6b}.b.s{padding:7px 12px;font-size:.8rem}
+.b[aria-busy=true]{opacity:.6;pointer-events:none}
+.vlink{color:#a9c8b4;font-size:.82rem}.vlink:hover{color:#4ade6b}
+main{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:20px}
+.frame{width:100%;max-width:980px;height:calc(100vh - 110px);border:0;border-radius:12px;background:#fff;box-shadow:0 8px 30px rgba(6,35,26,.15)}
+.img{max-width:min(100%,1100px);height:auto;border-radius:12px;box-shadow:0 8px 30px rgba(6,35,26,.15);background:#fff}
+.msg{background:#fff;border-radius:14px;padding:28px;max-width:520px;text-align:center;box-shadow:0 8px 30px rgba(6,35,26,.1);margin-top:40px}.msg a{color:#1d6f2b;font-weight:600}
+.mob{display:none;text-align:center;margin:10px 0 0;font-size:.85rem}
+@media(max-width:640px){.bar{padding:10px 12px}.acts{width:100%}.acts .b{flex:1 1 auto;justify-content:center}main{padding:10px}.frame{height:calc(100vh - 170px)}.mob{display:block}}
+</style></head>
+<body><header class="bar"><img src="assets/logo-52.webp" alt=""><div class="ttl"><b id="t">Opening document…</b><small id="st">Deutsch Für Alle</small></div><div class="acts" id="acts"></div></header>
+<main id="m"><div class="msg">Opening document…</div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-<script src="assets/dfa-auth.js?v=23"></script>
+<script src="assets/dfa-auth.js?v=24"></script>
 <script>
-(async function(){var m=document.getElementById('m'),q=new URLSearchParams(location.search),id=+q.get('id'),t=q.get('type'),dl=q.get('dl')==='1',fmt=q.get('fmt')==='pdf'?'pdf':'png';function go(d){var u=dl&&d.download?d.download:d.url;if(u&&/^https:\/\//.test(u)){if(dl){m.innerHTML='Your download should start in a moment. <a href="javascript:history.back()">Go back</a>';location.href=u}else location.replace(u)}return !!u}
-function fail(h){m.innerHTML=h}
-if((!id&&!(t==='cert'&&q.get('no')))||!/^(admission|receipt|cert)$/.test(t))return fail('Invalid document link.');
-var T=setTimeout(function(){fail('This is taking longer than usual. <a href="'+location.href.replace(/"/g,'')+'">Try again</a> or <a href="account.html">go to my account</a>.')},15000);
+(async function(){var M=document.getElementById('m'),A=document.getElementById('acts'),TT=document.getElementById('t'),ST=document.getElementById('st'),q=new URLSearchParams(location.search),id=+q.get('id'),t=q.get('type'),inv=q.get('inv'),no=q.get('no');
+async function save(u,b){var lbl=b.textContent;b.setAttribute('aria-busy','true');b.textContent='Downloading…';try{var nm=new URL(u).searchParams.get('download')||'document';var r=await fetch(u);if(!r.ok)throw 0;var bl=await r.blob(),o=URL.createObjectURL(bl),a=document.createElement('a');a.href=o;a.download=nm;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(o)},4000)}catch(e){alert('Download failed. Please try again.')}b.removeAttribute('aria-busy');b.textContent=lbl}
+function fail(h){M.innerHTML='<div class="msg">'+h+'</div>';TT.textContent='Document'}
+function back(){A.insertAdjacentHTML('beforeend','<button class="b o" type="button" id="bk">Back</button>');document.getElementById('bk').onclick=function(){if(window.opener||history.length<2){window.close();setTimeout(function(){location.href=role==='admin'?'admin.html':'portal.html'},150)}else history.back()}}
+if((!id&&!(t==='cert'&&no))||!/^(admission|receipt|cert)$/.test(t))return fail('Invalid document link.');
+var T=setTimeout(function(){fail('This is taking longer than usual. <a href="'+location.href.replace(/"/g,'')+'">Try again</a>')},20000);
 var ses=(await DFA.sb.auth.getSession()).data.session;if(!ses){clearTimeout(T);return fail('Please <a href="account.html?next='+encodeURIComponent('/doc.html'+location.search)+'">log in</a> first.')}
 var role='';try{role=localStorage.getItem('dfa-pill')||''}catch(e){}
-function call(adm){return DFA.invoke('admission',t==='cert'?{action:'cert_file_admin',id:id,fmt:fmt}:{action:adm?'doc_file_admin':'my_doc',id:id,kind:t,inv:q.get('inv')||undefined})}
-var adm=role==='admin'||(t==='cert'&&!q.get('no')),r;
-if(t==='cert'&&!adm){var no=q.get('no'),mc=await DFA.invoke('admission',{action:'my_cert_file',no:no,fmt:fmt});clearTimeout(T);if(mc.data&&mc.data.url&&go(mc.data))return;return fail('Your certificate will be available here once it is released. <a href="portal.html">Back to the portal</a>')}
-r=await call(adm);
-if(!(r.data&&r.data.url)&&t!=='cert'){var r2=await call(!adm);if(r2.data&&r2.data.url)r=r2}
+var adm=role==='admin'||(t==='cert'&&!no);
+function body(fmt,a){return t==='cert'?(a?{action:'cert_file_admin',id:id,fmt:fmt}:{action:'my_cert_file',no:no,fmt:fmt}):{action:a?'doc_file_admin':'my_doc',id:id,kind:t,inv:inv||undefined}}
+var r=await DFA.invoke('admission',body('png',adm));
+if(!(r.data&&r.data.url)&&!(t==='cert'&&no)){var r2=await DFA.invoke('admission',body('png',!adm));if(r2.data&&r2.data.url){r=r2;adm=!adm}}
 clearTimeout(T);
-if(r.data&&r.data.url&&go(r.data)){}else fail(t==='cert'&&role!=='admin'?'Please open your certificate from the <a href="portal.html">student portal</a>.':DFA.esc((r.data&&r.data.error)||'Could not open the document.')+' <a href="account.html">Back to my account</a>')})();
+if(!(r.data&&r.data.url&&/^https:\/\//.test(r.data.url))){back();return fail(DFA.esc((r.data&&r.data.error)||'Could not open the document.'))}
+var D=r.data,title=t==='cert'?'Certificate '+(D.no||no||''):t==='receipt'?'Fee receipt '+(inv||''):'Admission form';
+document.title=title+' | Deutsch Für Alle';TT.textContent=title.trim();ST.textContent=D.name?DFA.esc(D.name):'Deutsch Für Alle';
+if(t==='cert'){A.innerHTML='<button class="b p" type="button" id="dp">Download PDF</button><button class="b o s" type="button" id="dn">PNG</button>'+(D.code?'<a class="vlink" target="_blank" rel="noopener" href="verify.html?code='+encodeURIComponent(D.code)+'">Verify certificate</a>':'');
+ M.innerHTML='<img class="img" src="'+DFA.esc(D.url)+'" alt="'+DFA.esc(title)+'">';
+ document.getElementById('dp').onclick=async function(){var b=this;b.setAttribute('aria-busy','true');b.textContent='Preparing PDF…';var p=await DFA.invoke('admission',body('pdf',adm));b.removeAttribute('aria-busy');b.textContent='Download PDF';if(p.data&&p.data.download)save(p.data.download,b);else alert((p.data&&p.data.error)||'Could not prepare the PDF.')};
+ document.getElementById('dn').onclick=function(){save(D.download||D.url,this)}}
+else{A.innerHTML='<button class="b p" type="button" id="dp">Download PDF</button>';document.getElementById('dp').onclick=function(){save(D.download||D.url,this)};
+ M.innerHTML='<div style="width:100%;max-width:980px"><iframe class="frame" src="'+DFA.esc(D.url)+'" title="'+DFA.esc(title)+'"></iframe><p class="mob">PDF not showing? <a href="'+DFA.esc(D.url)+'" target="_blank" rel="noopener">Open it full screen</a></p></div>'}
+back()})();
 </script></body></html>
