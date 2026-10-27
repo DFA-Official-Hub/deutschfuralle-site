@@ -387,3 +387,6 @@ table.adm{width:100%;border-collapse:collapse;font-size:.9rem}.adm th,.adm td{te
 .adm-acts{display:flex;flex-wrap:wrap;gap:8px}.adm-acts .btn.sm{margin:0}
 .adm-card select[data-c]{max-width:100%}
 @media(max-width:640px){.adm-r{grid-template-columns:1fr;gap:2px}.adm-card{padding:14px}.adm-acts .btn{flex:1 1 auto;justify-content:center}.adm-nw{white-space:normal}}
+
+.adm-q{flex:1 1 220px;min-width:180px;padding:8px 14px;border:1.5px solid #c9d6cd;border-radius:999px;font:inherit}.adm-q:focus{outline:none;border-color:var(--g)}
+tr[hidden],.adm-card[hidden]{display:none}
