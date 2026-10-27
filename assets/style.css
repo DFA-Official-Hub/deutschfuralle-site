@@ -450,3 +450,17 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 .ac-course .ac-admin-grid>.btn{min-width:0;white-space:normal;text-align:center}
 .ac-admin-grid .cert-note,.cert-note{grid-column:1/-1;flex-basis:100%;width:100%;margin:2px 0 0}
 @media (max-width:560px){.ac-course .ac-admin-grid{grid-template-columns:1fr}}
+/* verify page */
+.vf-form{display:block;margin:0 0 18px;padding:0;border:0;background:none;box-shadow:none}
+.vf-lb{display:block;font-weight:600;margin:0 0 6px}
+.vf-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.vf-row input{flex:1 1 220px;min-width:0;height:48px;box-sizing:border-box;padding:0 14px;border:1.5px solid #c9d6cd;border-radius:12px;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1rem;letter-spacing:.08em;text-transform:uppercase;background:#fff;color:#0d1712}
+.vf-row input:focus{outline:2px solid var(--g);outline-offset:1px;border-color:var(--g)}
+.vf-row .btn{min-height:48px;margin:0;padding:0 26px;flex:0 0 auto;align-self:stretch}
+.vf-ok{text-align:center;margin:8px 0 14px}
+.vf-badge{display:inline-flex;align-items:center;gap:6px;background:#dff3df;color:#1d6f2b;font-weight:800;border-radius:999px;padding:6px 14px;font-size:.95rem}
+.vf-title{font-size:clamp(1.2rem,2.6vw,1.6rem);line-height:1.25;margin:10px auto 0;max-width:22ch;text-wrap:balance}
+.vf-dl{max-width:460px;margin:12px auto 16px;background:#f2fbf1;border:1px solid rgba(35,134,51,.25);border-radius:14px;padding:14px 18px}
+#vf-out .cert-img{display:block;margin:0 auto 10px;max-width:100%}
+#vf-out>p{text-align:center}
+@media (max-width:480px){.vf-row .btn{flex:1 1 100%}.vf-dl{grid-template-columns:1fr;gap:2px}.vf-dl dd{margin-bottom:8px}}
