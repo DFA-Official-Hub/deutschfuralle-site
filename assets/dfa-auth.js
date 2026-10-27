@@ -27,6 +27,6 @@ async function invoke(name,body){var r=await sb.functions.invoke(name,{body:body
  var st=r.error.context&&r.error.context.status;
  if(st===401){var rf=await sb.auth.refreshSession();if(!rf.error&&rf.data&&rf.data.session){r=await sb.functions.invoke(name,{body:body});if(!r.error)return r}
   else{await sb.auth.signOut({scope:'local'});return {data:{error:'Your login has expired. Please log in again.',relogin:true},error:r.error}}}
- var j=await readErr(r);return {data:j||{error:'Could not reach the server. Please try again.'},error:r.error}}
+ var j=await readErr(r);return {data:(j&&j.error)?j:{error:st===546?'The server took too long (status 546). Please try again.':st?'Server error (status '+st+'). Please try again.':'Could not reach the server. Please check your connection and try again.'},error:r.error}}
 window.DFA={invoke:invoke,sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
 })();
