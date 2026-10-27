@@ -3,13 +3,17 @@
 <style>body{font-family:system-ui,sans-serif;background:#06231a;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0;text-align:center}a{color:#4ade6b}</style></head>
 <body><main><p id="m">Opening document…</p></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-<script src="assets/dfa-auth.js?v=11"></script>
+<script src="assets/dfa-auth.js?v=12"></script>
 <script>
 (async function(){var m=document.getElementById('m'),q=new URLSearchParams(location.search),id=+q.get('id'),t=q.get('type');
 function fail(h){m.innerHTML=h}
 if(!id||!/^(admission|receipt|cert)$/.test(t))return fail('Invalid document link.');
-var p=await DFA.profile();if(!p)return fail('Please <a href="account.html?next='+encodeURIComponent('/doc.html'+location.search)+'">log in</a> first.');
-var adm=p.role==='admin';if(!adm&&t==='cert')return fail('Please open your certificate from the <a href="portal.html">student portal</a>.');
-var r=await DFA.sb.functions.invoke('admission',{body:t==='cert'?{action:'cert_file_admin',id:id}:{action:adm?'doc_file_admin':'my_doc',id:id,kind:t}});
-if(r.data&&r.data.url&&/^https:\/\//.test(r.data.url))location.replace(r.data.url);else fail(DFA.esc((r.data&&r.data.error)||'Could not open the document.')+' <a href="account.html">Back to my account</a>')})();
+var T=setTimeout(function(){fail('This is taking longer than usual. <a href="'+location.href.replace(/"/g,'')+'">Try again</a> or <a href="account.html">go to my account</a>.')},15000);
+var ses=(await DFA.sb.auth.getSession()).data.session;if(!ses){clearTimeout(T);return fail('Please <a href="account.html?next='+encodeURIComponent('/doc.html'+location.search)+'">log in</a> first.')}
+var role='';try{role=localStorage.getItem('dfa-pill')||''}catch(e){}
+function call(adm){return DFA.sb.functions.invoke('admission',{body:t==='cert'?{action:'cert_file_admin',id:id}:{action:adm?'doc_file_admin':'my_doc',id:id,kind:t}})}
+var adm=t==='cert'||role==='admin',r=await call(adm);
+if(!(r.data&&r.data.url)&&t!=='cert'){var r2=await call(!adm);if(r2.data&&r2.data.url)r=r2}
+clearTimeout(T);
+if(r.data&&r.data.url&&/^https:\/\//.test(r.data.url))location.replace(r.data.url);else fail(t==='cert'&&role!=='admin'?'Please open your certificate from the <a href="portal.html">student portal</a>.':DFA.esc((r.data&&r.data.error)||'Could not open the document.')+' <a href="account.html">Back to my account</a>')})();
 </script></body></html>
