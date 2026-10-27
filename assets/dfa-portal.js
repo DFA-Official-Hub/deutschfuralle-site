@@ -3,7 +3,7 @@ var sb=DFA.sb,E=DFA.esc,app=document.getElementById('portal-app');
 function d(x){return new Date(x+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}
 async function init(){var p=await DFA.profile();
  if(!p){app.innerHTML='<div class="ac-card"><h2>Please log in</h2><p>Your student portal shows your course, access dates and online books.</p><a class="btn" href="account.html?next=%2Fportal.html">Log in</a></div>';return}
- var qD=sb.from('reader_devices').select('device_id,last_seen,user_agent').order('last_seen',{ascending:false}),qC=sb.functions.invoke('admission',{body:{action:'my_certificates'}}).catch(function(){return {}});
+ var qD=sb.from('reader_devices').select('device_id,last_seen,user_agent').order('last_seen',{ascending:false}),qC=DFA.invoke('admission',{action:'my_certificates'}).catch(function(){return {}});
  var r=await sb.from('enrollments').select('id,course_code,course_label,status,start_date,end_date,student_id,batch_code,invoice_no,certificate_no,certificate_code,certificate_revoked_at,fee_total,amount_paid,balance_due,due_date,courses(name,duration_days)').eq('email',String(p.email||'').toLowerCase()).order('created_at',{ascending:false});
  var tdy=new Date(Date.now()+5*3600e3).toISOString().slice(0,10);var en=(r.data||[]).filter(function(x){return x.status!=='revoked'});en.forEach(function(x){if(x.status==='active'&&x.end_date<tdy)x.status='expired'});
  var codes=en.filter(function(x){return x.status==='active'}).map(function(x){return x.course_code});

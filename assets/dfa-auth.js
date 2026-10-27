@@ -21,5 +21,12 @@ var a=document.querySelector('a.acct:not(.acct-adm)'),x=document.getElementById(
 if(isAdm&&a&&!x){var l=document.createElement('a');l.id='dfa-admin-link';l.className='acct acct-adm';l.href=a.getAttribute('href').replace('account.html','admin.html');l.textContent='Admin';if(/admin\.html$/.test(location.pathname))l.setAttribute('aria-current','page');a.parentNode.insertBefore(l,a)}else if(!isAdm&&x)x.remove();
 var y=document.getElementById('dfa-course-link');if(isStu&&a&&!y){var c=document.createElement('a');c.id='dfa-course-link';c.className='acct acct-adm';c.href=a.getAttribute('href').replace('account.html','portal.html');c.textContent='My course';if(/portal\.html$/.test(location.pathname))c.setAttribute('aria-current','page');a.parentNode.insertBefore(c,a)}else if(!isStu&&y)y.remove()}
 sb.auth.onAuthStateChange(function(_e,s){setTimeout(function(){header(s)},0)});
-window.DFA={sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
+/* Edge Function call that survives a revoked/expired login: refresh once on 401, else ask to log in again. */
+async function readErr(r){try{if(r.error&&r.error.context&&r.error.context.json)return await r.error.context.clone().json()}catch(e){}return null}
+async function invoke(name,body){var r=await sb.functions.invoke(name,{body:body});if(!r.error)return r;
+ var st=r.error.context&&r.error.context.status;
+ if(st===401){var rf=await sb.auth.refreshSession();if(!rf.error&&rf.data&&rf.data.session){r=await sb.functions.invoke(name,{body:body});if(!r.error)return r}
+  else{await sb.auth.signOut({scope:'local'});return {data:{error:'Your login has expired. Please log in again.',relogin:true},error:r.error}}}
+ var j=await readErr(r);return {data:j||{error:'Could not reach the server. Please try again.'},error:r.error}}
+window.DFA={invoke:invoke,sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
 })();

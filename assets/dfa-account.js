@@ -30,7 +30,7 @@ profile:function(p){return course(p)+(p.role==='admin'?'<div class="ac-admin"><h
 async function show(v){var p=null;if(v==='profile'){p=await DFA.profile();if(!p)return show('login');p._enr=null;if(p.role!=='admin'&&p.email){var er=await sb.from('enrollments').select('*,courses(name)').eq('email',String(p.email).toLowerCase()).neq('status','revoked').order('created_at',{ascending:false});p._enr=er.data||[]}}
  app.innerHTML=V[v](p);app.dataset.view=v;
  app.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){show(b.dataset.go)}});
- var o=app.querySelector('[data-out]');if(o)o.onclick=async function(){await sb.auth.signOut();show('login')};
+ var o=app.querySelector('[data-out]');if(o)o.onclick=async function(){await sb.auth.signOut({scope:'local'});show('login')};
  var g=app.querySelector('[data-google]');if(g)g.onclick=function(){sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:DFA.SITE+'/account.html'}})};
  var ph=app.querySelector('[data-phone]');if(ph)ph.onclick=async function(){var n=prompt('Your mobile number with country code, e.g. +92…');if(!n)return;var r=await sb.auth.signInWithOtp({phone:n});if(r.error)return msg(r.error.message);var c=prompt('Enter the 6-digit code we sent you');if(!c)return;var v2=await sb.auth.verifyOtp({phone:n,token:c,type:'sms'});if(v2.error)return msg(v2.error.message);done()};
  var f=app.querySelector('form');if(f)f.onsubmit=function(e){e.preventDefault();H[f.dataset.f](f)}}
