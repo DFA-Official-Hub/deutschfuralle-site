@@ -20,7 +20,7 @@ main{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:2
 <body><header class="bar"><img src="assets/logo-52.webp" alt=""><div class="ttl"><b id="t">Opening document…</b><small id="st">Deutsch Für Alle</small></div><div class="acts" id="acts"></div></header>
 <main id="m"><div class="msg">Opening document…</div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-<script src="assets/dfa-auth.js?v=35"></script>
+<script src="assets/dfa-auth.js?v=36"></script>
 <script>
 (async function(){var M=document.getElementById('m'),A=document.getElementById('acts'),TT=document.getElementById('t'),ST=document.getElementById('st'),q=new URLSearchParams(location.search),id=+q.get('id'),t=q.get('type'),inv=q.get('inv'),no=q.get('no');
 async function save(u,b){var lbl=b.textContent;b.setAttribute('aria-busy','true');b.textContent='Downloading…';try{var nm=new URL(u).searchParams.get('download')||'document';var r=await fetch(u);if(!r.ok)throw 0;var bl=await r.blob(),o=URL.createObjectURL(bl),a=document.createElement('a');a.href=o;a.download=nm;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(o)},4000)}catch(e){alert('Download failed. Please try again.')}b.removeAttribute('aria-busy');b.textContent=lbl}

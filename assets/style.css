@@ -464,3 +464,4 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 #vf-out .cert-img{display:block;margin:0 auto 10px;max-width:100%}
 #vf-out>p{text-align:center}
 @media (max-width:480px){.vf-row .btn{flex:1 1 100%}.vf-dl{grid-template-columns:1fr;gap:2px}.vf-dl dd{margin-bottom:8px}}
+.vf-row input::placeholder{text-transform:none;letter-spacing:normal;font-family:inherit}
