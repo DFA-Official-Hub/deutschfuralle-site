@@ -20,5 +20,6 @@ var p=roleP;isAdm=await p;if(p!==roleP)return;
 var a=document.querySelector('a.acct:not(.acct-adm)'),x=document.getElementById('dfa-admin-link');
 if(isAdm&&a&&!x){var l=document.createElement('a');l.id='dfa-admin-link';l.className='acct acct-adm';l.href=a.getAttribute('href').replace('account.html','admin.html');l.textContent='Admin';if(/admin\.html$/.test(location.pathname))l.setAttribute('aria-current','page');a.parentNode.insertBefore(l,a)}else if(!isAdm&&x)x.remove();
 var y=document.getElementById('dfa-course-link');if(isStu&&a&&!y){var c=document.createElement('a');c.id='dfa-course-link';c.className='acct acct-adm';c.href=a.getAttribute('href').replace('account.html','portal.html');c.textContent='My course';if(/portal\.html$/.test(location.pathname))c.setAttribute('aria-current','page');a.parentNode.insertBefore(c,a)}else if(!isStu&&y)y.remove()}
+sb.auth.onAuthStateChange(function(_e,s){setTimeout(function(){header(s)},0)});
 window.DFA={sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
 })();
