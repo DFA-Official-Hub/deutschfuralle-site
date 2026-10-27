@@ -400,3 +400,5 @@ tr[hidden],.adm-card[hidden]{display:none}
 .adm-set{padding:18px 20px}.adm-sw{display:flex;gap:14px;align-items:flex-start;cursor:pointer}.adm-sw input{position:absolute;opacity:0;width:1px;height:1px}
 .adm-sw-ui{flex:0 0 46px;height:26px;border-radius:999px;background:#c9d6cd;position:relative;transition:background .2s;margin-top:2px}.adm-sw-ui::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
 .adm-sw input:checked+.adm-sw-ui{background:var(--g)}.adm-sw input:checked+.adm-sw-ui::after{transform:translateX(20px)}.adm-sw input:focus-visible+.adm-sw-ui{outline:2px solid var(--g);outline-offset:2px}
+
+.is-off{background:#eef1ef!important;color:#7b8780!important;border-color:#cfd8d2!important;cursor:not-allowed;box-shadow:none!important;pointer-events:none}.cert-note{display:block;flex-basis:100%;font-size:.8rem;margin-top:4px}
