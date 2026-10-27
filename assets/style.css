@@ -391,3 +391,8 @@ table.adm{width:100%;border-collapse:collapse;font-size:.9rem}.adm th,.adm td{te
 .adm-q{flex:1 1 220px;min-width:180px;padding:8px 14px;border:1.5px solid #c9d6cd;border-radius:999px;font:inherit}.adm-q:focus{outline:none;border-color:var(--g)}
 tr[hidden],.adm-card[hidden]{display:none}
 .adm-empty[hidden]{display:none}.adm-empty{margin:16px 0}
+
+.adm-fee{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.75rem;font-weight:700;margin-top:4px}.adm-fee.ok{background:#dff7dc;color:#1d6f2b}.adm-fee.pp{background:#fff3cd;color:#8a5a00}.adm-fee.od{background:#fde2e1;color:#a32020}
+.adm-dlg{border:0;border-radius:16px;padding:22px;max-width:420px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(6,35,26,.3)}.adm-dlg::backdrop{background:rgba(6,35,26,.45)}
+.adm-dlg h3{margin:0 0 6px}.adm-ck{display:flex;align-items:center;gap:10px;padding:8px 0;font-weight:500}.adm-ck.adm-dis{opacity:.5}.adm-fl{display:grid;gap:4px;margin:10px 0;font-weight:500}.adm-fl input{padding:8px 12px;border:1.5px solid #c9d6cd;border-radius:10px;font:inherit}
+.adm-dmsg{min-height:1.2em;margin:8px 0}.adm-dlg .adm-acts{margin-top:8px}
