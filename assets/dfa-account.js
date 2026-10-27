@@ -38,6 +38,7 @@ async function show(v){var p=null;if(v==='profile'){p=await DFA.profile();if(!p)
  if(v==='profile')loadSec()}
 var TS=null,shown=0;
 function cap(){if(!DFA.FEATURES.turnstile)return {};if(!TS||!TS.token){msg('Please complete the security check above the button.');return null}return {captchaToken:TS.token}}
+async function freshCap(){if(!DFA.FEATURES.turnstile)return {};for(var i=0;i<60&&!(TS&&TS.token);i++)await new Promise(function(r){setTimeout(r,250)});return TS&&TS.token?{captchaToken:TS.token}:{}}
 function capReset(){if(TS&&TS.reset)TS.reset()}
 function sdev(x){return x?new Date(x).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):''}
 async function loadSec(){var el=document.getElementById('ac-sec');if(!el)return;
@@ -69,7 +70,8 @@ login:async function(f){var b=f.querySelector('button.ac-full'),em=f.email.value
   return msg(/confirm/i.test(r.error.message)?'Please confirm your email first. Check your inbox (and spam folder) for our link.':/captcha/i.test(r.error.message)?'The security check failed. Please try again.':r.error.message)}
  var g=await DFA.gate(r.data.session);busy(b,false);if(g===false)return;done()},
 signup:async function(f){var b=f.querySelector('button.ac-full'),em=f.email.value.trim().toLowerCase();var pe=DFA.pwCheck(f.pw.value,em);if(pe)return msg(pe);var c=cap();if(!c)return;DFA.setRemember(f.rem.checked);busy(b,true);
- var ck=await sb.functions.invoke('security',{body:{action:'signup_check',email:em,hp:f.website.value,ms:Date.now()-shown}});if(ck.data&&ck.data.ok===false){busy(b,false);capReset();return msg(ck.data.error)}
+ var ck=await sb.functions.invoke('security',{body:{action:'signup_check',email:em,hp:f.website.value,ms:Date.now()-shown,captcha:c.captchaToken||''}});capReset();if(ck.data&&ck.data.ok===false){busy(b,false);return msg(ck.data.error)}
+ c=await freshCap();
  var r=await sb.auth.signUp({email:em,password:f.pw.value,options:Object.assign({emailRedirectTo:DFA.SITE+'/account.html',data:{username:f.username.value.trim(),full_name:f.full_name.value.trim(),country:f.country.value}},c)});busy(b,false);capReset();
  if(r.error)return msg(/database error|permanent email|temporary/i.test(r.error.message)?'Please use a permanent email address. Temporary or disposable email services are not accepted.':/weak|pwned|leaked|compromised/i.test(r.error.message)?'This password has appeared in a data leak or is too weak. Please choose a different one.':/rate limit/i.test(r.error.message)?'Too many attempts. Please wait a little and try again.':r.error.message);if(r.data.session)return done();
  app.innerHTML='<h2>Check your inbox</h2><p class="ac-lead">We sent a confirmation link to <b>'+E(f.email.value)+'</b>. Click it to finish creating your account. If it is not there in a few minutes, look in your spam folder.</p><button class="btn outline" type="button" data-go="login">Back to log in</button>';app.querySelector('[data-go]').onclick=function(){show('login')}},
