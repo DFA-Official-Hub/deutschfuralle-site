@@ -1,7 +1,7 @@
 /* DFA A1 mock exam (Start Deutsch 1 format). Original material by Deutsch Für Alle. Marked in the browser; nothing is uploaded except an optional score row for logged-in students. */
 (function(){
 var root=document.getElementById('mock-app');if(!root)return;
-var V='40',AU='assets/audio/a1-mock-1/',KEY='dfa-a1-mock-1',SLUG='a1-mock-1';
+var V='41',AU='assets/audio/a1-mock-1/',KEY='dfa-a1-mock-1',SLUG='a1-mock-1';
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function nl(s){return esc(s).replace(/\n/g,'<br>')}
 var RF=['Richtig','Falsch'];
