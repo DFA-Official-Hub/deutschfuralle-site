@@ -1,7 +1,8 @@
 /* DFA A1 mock exam (Start Deutsch 1 format). Original material by Deutsch Für Alle. Marked in the browser. Before the first start we ask for a few contact details (sent once to our leads function); the final score is added to that same entry. Logged-in students can also save the score to their account. */
 (function(){
 var root=document.getElementById('mock-app');if(!root)return;
-var V='43',AU='assets/audio/a1-mock-1/',KEY='dfa-a1-mock-1',SLUG='a1-mock-1';
+try{document.head.insertAdjacentHTML('beforeend','<style>.mk-rec [hidden]{display:none!important}</style>')}catch(e){}
+var V='45',AU='assets/audio/a1-mock-1/',KEY='dfa-a1-mock-1',SLUG='a1-mock-1';
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function nl(s){return esc(s).replace(/\n/g,'<br>')}
 var RF=['Richtig','Falsch'];
@@ -67,7 +68,7 @@ var SP3=[['🪟','Fenster','Können Sie bitte das Fenster aufmachen?','Ja, natü
 
 var SECS=[{k:'h',n:'Hören',min:20},{k:'l',n:'Lesen',min:25},{k:'s',n:'Schreiben',min:20},{k:'p',n:'Sprechen',min:15}];
 var st;try{st=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){st={}}
-st.ans=st.ans||{};st.done=st.done||{};st.plays=st.plays||{};st.left=st.left||{};st.self=st.self||{};st.ai=st.ai||{};
+function fix(){st.ans=st.ans||{};st.done=st.done||{};st.plays=st.plays||{};st.left=st.left||{};st.self=st.self||{};st.ai=st.ai||{};['p1','p2','p3'].forEach(function(k){var a=st.ai[k];if(a&&!(Array.isArray(a.criteria)&&typeof a.total==='number'))delete st.ai[k]});var w=st.ai.w;if(w&&!(Array.isArray(w.points)&&w.form&&typeof w.total==='number'))delete st.ai.w}fix();
 function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
 
 function radio(name,opts,letters){var cur=st.ans[name];return '<div class="ex-opts">'+opts.map(function(o,i){return '<label><input type="radio" name="'+name+'" value="'+i+'"'+(cur===i?' checked':'')+'> <span lang="de">'+(letters?'<b>'+'abc'[i]+'</b> ':'')+esc(o)+'</span></label>'}).join('')+'</div>'}
@@ -86,7 +87,7 @@ function runTimer(k){clearInterval(timer);var s=SECS.filter(function(x){return x
  timer=setInterval(function(){st.left[k]--;if(el)el.textContent=fmt(st.left[k]);if(st.left[k]<=60&&el)el.classList.add('low');if(st.left[k]%5===0)save();
   if(st.left[k]<=0){clearInterval(timer);if(k==='p'){el.textContent='0:00';return}alert('Die Zeit ist um. Your answers for '+s.n+' are now submitted.');submit(k)}},1000)}
 function show(k){clearInterval(timer);var b=document.getElementById('mk-body');root.querySelectorAll('.mk-tab').forEach(function(t){t.classList.toggle('on',t.dataset.tab===k);t.setAttribute('aria-selected',t.dataset.tab===k)});var on=root.querySelector('.mk-tab.on');if(on&&on.parentNode.scrollWidth>on.parentNode.clientWidth)on.parentNode.scrollLeft=on.offsetLeft-12;
- b.innerHTML=k==='h'?renderH():k==='l'?renderL():k==='s'?renderS():k==='p'?renderP():renderR();wire(k);st.cur=k;save();
+ try{b.innerHTML=k==='h'?renderH():k==='l'?renderL():k==='s'?renderS():k==='p'?renderP():renderR();wire(k)}catch(e){if(window.console)console.error(e);b.innerHTML='<p class="mk-warn">Something went wrong showing this part. Please reload the page.</p>'}st.cur=k;save();
  if(k!=='r'){var sb=document.getElementById('mk-start');if(sb)sb.onclick=function(){sb.remove();runTimer(k);b.classList.add('live');b.querySelectorAll('.mk-pre').forEach(function(x){x.remove()})};if(st.done[k])b.classList.add('locked')}
  var top=root.getBoundingClientRect().top+scrollY-90;if(scrollY>top)scrollTo({top:top,behavior:'smooth'})}
 
@@ -115,7 +116,7 @@ function renderS(){var h=bar('s');
  '<div class="mk-fr"><span>Zahlung <em>(5)</em></span>'+chk('s5',['bar','mit Karte','Überweisung'])+'</div></div></div>';
  h+='<div class="ex-part ac-card"><h3>Schreiben, Teil 2</h3><p class="mk-ins" lang="de">Sie haben am Samstag Geburtstag und machen eine Party. Schreiben Sie Ihrem Freund Jonas eine E-Mail.</p><ul class="mk-pts" lang="de"><li>Warum schreiben Sie?</li><li>Wann und wo ist die Party?</li><li>Was soll Jonas mitbringen?</li></ul><p class="mk-ins" lang="de">Schreiben Sie zu jedem Punkt ein bis zwei Sätze (circa 30 Wörter). Vergessen Sie nicht die Anrede und den Gruß.</p>'+
  '<textarea id="s6" data-k="s6" rows="8" lang="de" spellcheck="false" placeholder="Lieber Jonas, …">'+esc(st.ans.s6||'')+'</textarea><p class="adm-mut" id="s6c"></p></div>';
- h+='<div id="s-review"></div>';return h+foot('s')}
+ h+='<div id="s-review">'+(st.done.s&&(st.ans.s6||'').trim()?'<div class="ex-part ac-card"><h3>AI feedback on your e-mail</h3><div id="w-fb">'+wFb()+'</div></div>':'')+'</div>';return h+foot('s')}
 function renderP(){var h=bar('p')+'<p class="mk-note">In the real exam you speak in a small group with two examiners. Here you do it alone: draw a card, press record, speak (up to 60 seconds), then press <b>Check my answer</b>. Our AI examiner listens and gives you points like the Goethe examiners do (Teil 1: 3, Teil 2: 6, Teil 3: 6 points). Your recording is only sent for this check and is not kept.</p>';
  h+='<div class="ex-part ac-card"><h3>Sprechen, Teil 1: Sich vorstellen</h3><p class="mk-ins" lang="de">Stellen Sie sich vor. Sagen Sie etwas zu diesen Punkten:</p><div class="mk-chips">'+SP1.map(function(w){return '<span>'+w+'</span>'}).join('')+'</div>'+
  '<p class="mk-ins" lang="de">Danach fragt die Prüferin zum Beispiel: <i>„Buchstabieren Sie bitte Ihren Vornamen.“</i> oder <i>„Wie ist Ihre Telefonnummer?“</i> (A made-up number is fine.)</p>'+rec('p1')+samp(SP1M)+'</div>';
@@ -140,14 +141,14 @@ function wire(k){var b=document.getElementById('mk-body');
   var open=b.querySelectorAll('.ex-q[data-q]').length-b.querySelectorAll('.ex-q[data-q] input:checked').length;
   if(!confirm(open>0?open+' question(s) still have no answer. Submit anyway?':'Submit this part now?'))return;submit(k)};
  var nx=document.getElementById('mk-next');if(nx)nx.onclick=function(){show(SECS[SECS.map(function(x){return x.k}).indexOf(k)+1].k)};
- if(k==='p')wireP();if(k==='r')wireR();}
+ if(k==='p')wireP();if(k==='r')wireR();if(k==='s')drawW();}
 function wc(){var t=(st.ans.s6||'').trim(),n=t?t.split(/\s+/).length:0,el=document.getElementById('s6c');if(el)el.textContent=n+' Wörter'+(n&&n<20?' · a bit short, aim for about 30':'')}
 function play(p){if(busy||p.disabled)return;var id=p.dataset.a,max=+p.dataset.max,used=st.plays['h'+id]||0;if(used>=max)return;
  if(st.left.h==null){var sb=document.getElementById('mk-start');if(sb)sb.click()}
  busy=true;st.plays['h'+id]=used+1;save();root.classList.add('mk-busy');p.classList.add('on');p.querySelector('span').textContent='Läuft …';
  aud.src=AU+'h'+id+'.mp3?v='+V;aud.onended=aud.onerror=function(){busy=false;root.classList.remove('mk-busy');p.classList.remove('on');var left=max-st.plays['h'+id];p.querySelector('em').textContent=left+'× übrig';p.querySelector('span').textContent=left?'Noch einmal':'Schon gehört';if(!left)p.disabled=true};
  aud.play().catch(function(){aud.onended()})}
-function submit(k){clearInterval(timer);aud.pause();busy=false;st.done[k]=true;save();if(k==='s')gradeW();shell();var i=SECS.map(function(x){return x.k}).indexOf(k);show(i<3?SECS[i+1].k:'r')}
+function submit(k){clearInterval(timer);try{aud.pause()}catch(e){}busy=false;root.classList.remove('mk-busy');st.done[k]=true;save();shell();var i=SECS.map(function(x){return x.k}).indexOf(k);show(i<3?SECS[i+1].k:'r');if(k==='s')setTimeout(gradeW,0)}
 var mr=null,chunks=[];
 function wireP(){var b=document.getElementById('mk-body');
  var d2=document.getElementById('p2d'),d3=document.getElementById('p3d'),last2=-1,last3=-1;
@@ -156,15 +157,27 @@ function wireP(){var b=document.getElementById('mk-body');
   ai({kind:'ask',theme:t.th,avoid:c[0]}).then(function(j){if(tk!==askN||!j.question)return;CTX.p2='Thema: '+t.th+'. Card word: '+c[0]+'. Partner asks the student: '+j.question;var q=document.querySelector('#p2c .mk-partner p');if(q)q.textContent='„'+j.question+'“';var sa=document.getElementById('p2sa');if(sa)sa.innerHTML='<b>Antwort auf „'+esc(j.question)+'“:</b> '+esc(j.sample||'');say(j.question)}).catch(function(){say(o[1])});
   document.getElementById('p2c').innerHTML='<div class="mk-card"><small>Thema: '+t.th+'</small><b lang="de">'+c[0]+'</b></div><div class="mk-partner"><small>Ihr Partner fragt Sie:</small><p lang="de">„'+o[1]+'“</p><button type="button" class="mk-word" id="p2say">🔊 Frage anhören</button></div><details class="mk-samp"><summary>Beispiel</summary><p lang="de"><b>Frage:</b> '+c[1]+'<br><b>Antwort:</b> '+c[2]+'</p><p lang="de" id="p2sa"><b>Antwort auf „'+o[1]+'“:</b> '+o[2]+'</p></details>';document.getElementById('p2say').onclick=function(){say(document.querySelector('#p2c .mk-partner p').textContent.replace(/[„“]/g,''))}};
  d3.onclick=function(){var i=pick(SP3.length,last3);last3=i;var c=SP3[i],o=SP3[(i+1+(Math.random()*(SP3.length-1)|0))%SP3.length];CTX.p3='Picture card: '+c[1]+' ('+c[0]+'). Partner asks the student: '+o[2];
-  document.getElementById('p3c').innerHTML='<div class="mk-card pic"><span class="mk-emo" role="img" aria-label="'+c[1]+'">'+c[0]+'</span><button type="button" class="mk-word">Wort zeigen</button></div><div class="mk-partner"><small>Ihr Partner bittet Sie:</small><p lang="de">„'+o[2]+'“</p></div><details class="mk-samp"><summary>Beispiel</summary><p lang="de"><b>Bitte:</b> '+c[2]+'<br><b>Reaktion auf „'+o[2]+'“:</b> '+o[3]+'</p></details>';
-  var w=document.querySelector('#p3c .mk-word');w.onclick=function(){w.outerHTML='<b lang="de">'+c[1]+'</b>'}};
- b.querySelectorAll('.mk-rec').forEach(function(r){var btn=r.querySelector('.mk-rb'),ck=r.querySelector('.mk-ck'),au=r.querySelector('audio'),t=r.querySelector('.mk-rt'),iv;
-  btn.onclick=async function(){if(mr&&mr.state==='recording'){mr.stop();return}var pid=r.dataset.rec;if(pid!=='p1'&&!CTX[pid]){t.textContent='Draw a card first.';return}
+  document.getElementById('p3c').innerHTML='<div class="mk-card pic"><span class="mk-emo" role="img" aria-label="'+c[1]+'">'+c[0]+'</span><button type="button" class="mk-word">Wort zeigen</button></div><div class="mk-partner"><small>Ihr Partner bittet Sie:</small><p lang="de">„'+o[2]+'“</p><button type="button" class="mk-word" id="p3say">🔊 Frage anhören</button></div><details class="mk-samp"><summary>Beispiel</summary><p lang="de"><b>Bitte:</b> '+c[2]+'<br><b>Reaktion auf „'+o[2]+'“:</b> '+o[3]+'</p></details>';
+  var w=document.querySelector('#p3c .mk-card .mk-word');w.onclick=function(){w.outerHTML='<b lang="de">'+c[1]+'</b>'};document.getElementById('p3say').onclick=function(){say(o[2])};say(o[2])};
+ b.querySelectorAll('.mk-rec').forEach(function(r){var btn=r.querySelector('.mk-rb'),ck=r.querySelector('.mk-ck'),au=r.querySelector('audio'),t=r.querySelector('.mk-rt'),pid=r.dataset.rec;
+  btn.onclick=function(){if(recBusy===pid&&mr&&mr.state==='recording'){mr.stop();return}if(recBusy)return;
+   if(pid!=='p1'&&!CTX[pid]){t.textContent='Draw a card first.';return}
    if(!navigator.mediaDevices||!window.MediaRecorder){t.textContent='Recording isn’t supported in this browser.';return}
-   try{var s=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){t.textContent='Microphone blocked. Allow it in your browser settings to record.';return}
-   chunks=[];mr=new MediaRecorder(s);var sec=0;mr.ondataavailable=function(e){chunks.push(e.data)};
-   mr.onstop=function(){clearInterval(iv);s.getTracks().forEach(function(x){x.stop()});var bl=new Blob(chunks,{type:mr.mimeType});au.src=URL.createObjectURL(bl);au.hidden=false;btn.textContent='● Neu aufnehmen';t.textContent='Listen back, then press Check my answer.';ck.hidden=false;ck.disabled=false;ck.onclick=function(){gradeSp(r.dataset.rec,bl,ck)}};
-   mr.start();btn.textContent='■ Stopp';ck.hidden=true;iv=setInterval(function(){t.textContent='Aufnahme … '+fmt(++sec)+' / 1:00';if(sec>=60&&mr.state==='recording')mr.stop()},1000)}})}
+   recBusy=pid;btn.disabled=true;ck.hidden=true;t.textContent='Allow microphone… (check the prompt at the top of your browser)';
+   navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){startRec(r,s)},function(){recBusy=null;btn.disabled=false;t.textContent='Microphone blocked. Allow it in your browser settings to record.'})}})}
+var recBusy=null,MAXS=60,MINS=1.5;
+function startRec(r,s){var btn=r.querySelector('.mk-rb'),ck=r.querySelector('.mk-ck'),au=r.querySelector('audio'),t=r.querySelector('.mk-rt'),pid=r.dataset.rec,t0=Date.now(),peak=0,iv,hard,ac,an,buf;
+ chunks=[];try{mr=new MediaRecorder(s)}catch(e){s.getTracks().forEach(function(x){x.stop()});recBusy=null;btn.disabled=false;t.textContent='Recording isn’t supported in this browser.';return}
+ try{var AC=window.AudioContext||window.webkitAudioContext;ac=new AC();an=ac.createAnalyser();an.fftSize=1024;ac.createMediaStreamSource(s).connect(an);buf=new Float32Array(an.fftSize)}catch(e){an=null}
+ function lvl(){if(!an)return;an.getFloatTimeDomainData(buf);var q=0;for(var i=0;i<buf.length;i++)q+=buf[i]*buf[i];q=Math.sqrt(q/buf.length);if(q>peak)peak=q}
+ var me=mr;me.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
+ me.onstop=function(){clearInterval(iv);clearTimeout(hard);s.getTracks().forEach(function(x){x.stop()});try{ac&&ac.close()}catch(e){}
+  var dur=Math.min(MAXS,(Date.now()-t0)/1000),bl=new Blob(chunks,{type:me.mimeType||'audio/webm'});recBusy=null;btn.disabled=false;btn.textContent='● Neu aufnehmen';
+  if(dur<MINS||bl.size<3000||(an&&peak<0.012)){au.hidden=true;ck.hidden=true;t.textContent='';document.getElementById('fb-'+pid).innerHTML='<p class="mk-warn">We couldn’t hear you, please record again. Speak close to the microphone for a few seconds.</p>';return}
+  au.src=URL.createObjectURL(bl);au.hidden=false;t.textContent='Recorded '+fmt(dur)+'. Listen back, then press Check my answer.';ck.hidden=false;ck.disabled=false;ck.onclick=function(){gradeSp(pid,bl,ck,r)}};
+ me.start(1000);btn.disabled=false;btn.textContent='■ Stopp';t.textContent='Aufnahme … 0:00 / 1:00';
+ iv=setInterval(function(){lvl();var e=Math.min(MAXS,(Date.now()-t0)/1000|0);t.textContent='Aufnahme … '+fmt(e)+' / 1:00';if(e>=MAXS&&me.state==='recording')me.stop()},200);
+ hard=setTimeout(function(){if(me.state==='recording')me.stop()},MAXS*1000)}
 
 /* ---------- AI GRADING ---------- */
 var askN=0;function say(t){try{var S=window.speechSynthesis;if(!S)return;S.cancel();var u=new SpeechSynthesisUtterance(t);u.lang='de-DE';u.rate=.9;var v=S.getVoices().filter(function(x){return /^de/i.test(x.lang)})[0];if(v)u.voice=v;S.speak(u)}catch(e){}}
@@ -173,7 +186,7 @@ var WTASK='Sie haben am Samstag Geburtstag und machen eine Party. Schreiben Sie 
 var MODEL='Lieber Jonas,<br>am Samstag habe ich Geburtstag und ich mache eine kleine Party. Die Party beginnt um 19 Uhr bei mir zu Hause in der Gartenstraße 5. Kannst du bitte Musik oder einen Salat mitbringen? Ich freue mich!<br>Viele Grüße<br>Ali';
 function teacher(){return '<div class="mk-teach"><span>Want a real teacher to check your writing or speaking?</span><a class="btn sm" href="'+WA+'" target="_blank" rel="noopener">Ask on WhatsApp</a><a class="btn outline sm" href="contact.html">Contact us</a></div>'}
 async function ai(body){var L=lead();if(!L||!L.id)throw new Error('no lead');body.id=L.id;body.token=L.token;
- var r=await fetch(GF,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),j=await r.json().catch(function(){return{}});if(!r.ok||!j.ok)throw new Error(j.error||'failed');return j}
+ var r=await fetch(GF,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),j=await r.json().catch(function(){return{}});if(r.status===403&&/start form/.test(j.error||'')){try{localStorage.removeItem(LK)}catch(x){}}if(j.no_speech)return j;if(!r.ok||!j.ok)throw new Error(j.error||'failed');return j}
 function mist(a){return a&&a.length?'<p><b>Your mistakes, explained:</b></p><ul class="mk-mist">'+a.map(function(m){return '<li><s lang="de">'+esc(m.wrong)+'</s> → <b lang="de">'+esc(m.right)+'</b><br><span>'+esc(m.why)+'</span>'+(m.why_ur?'<br><span class="adm-mut">'+esc(m.why_ur)+'</span>':'')+'</li>'}).join('')+'</ul>':''}
 var wBusy=false,wErr='',wFail=false;
 function wFb(){var a=st.ai.w;
@@ -186,17 +199,20 @@ function wFb(){var a=st.ai.w;
  if(!(st.ans.s6||'').trim())return '<p class="adm-mut">No text, so 0 of 10 points.</p><p><b>Model answer:</b></p><p class="mk-tr" lang="de">'+MODEL+'</p>';
  if(wBusy)return '<div class="mk-load"><span class="mk-spin" aria-hidden="true"></span> Our AI examiner is reading your e-mail. This takes about 10 seconds…</div>';
  return '<div class="mk-ai fail"><p><b>We couldn’t check your e-mail automatically right now.</b> '+(wErr?esc(wErr)+' ':'')+'Compare it with the model answer below. Our teacher will check it for you if you send it to us.</p><p><b>Model answer (39 Wörter):</b></p><p class="mk-tr" lang="de">'+MODEL+'</p><p><button type="button" class="btn outline sm" id="w-retry">Try the AI check again</button></p>'+teacher()+'</div>'}
-function gradeW(){var t=(st.ans.s6||'').trim();if(wBusy||st.ai.w||!t)return;wBusy=true;wErr='';wFail=false;drawW();
- ai({kind:'writing',task:WTASK,text:t.slice(0,1500)}).then(function(j){st.ai.w=j;save()}).catch(function(e){wFail=true;wErr=/fill in|too long|used all|Too many/.test(e.message)?e.message:''}).finally(function(){wBusy=false;if(st.cur==='r'){var y=scrollY;show('r');scrollTo(0,y)}})}
-function drawW(){var el=document.getElementById('w-fb');if(el){el.innerHTML=wFb();var b=document.getElementById('w-retry');if(b)b.onclick=gradeW}}
+function gradeW(){var t=(st.ans.s6||'').trim();if(wBusy||st.ai.w||!t||!st.done.s)return;wBusy=true;wErr='';wFail=false;drawW();
+ ai({kind:'writing',task:WTASK,text:t.slice(0,1500)}).then(function(j){if(j.no_speech)throw new Error(j.error||'');st.ai.w=j;save()}).catch(function(e){wFail=true;wErr=/fill in|too long|used all|Too many/.test(e.message)?e.message:''}).finally(function(){wBusy=false;refresh()})}
+function refresh(){if(st.cur==='r'){var y=scrollY;show('r');scrollTo(0,y)}else drawW()}
+function drawW(){var el=document.getElementById('w-fb');if(el){el.innerHTML=wFb();var b=document.getElementById('w-retry');if(b)b.onclick=function(){wFail=false;gradeW()}}}
 function spFb(a){return '<div class="mk-ai"><div class="mk-ai-h"><b>'+a.total+'</b><span>/ '+a.max+' points</span></div><p><b>We heard:</b> <span lang="de">“'+esc(a.transcript)+'”</span></p>'+
  a.criteria.map(function(c){return '<p class="'+(c.score>=3||(a.max===3&&c.score>=2)?'ok':c.score>0?'mid':'bad')+'"><b lang="de">'+esc(c.name)+': '+c.score+'</b><br>'+esc(c.note)+'</p>'}).join('')+
  (a.clarity?'<p><b>Pronunciation:</b> '+esc(a.clarity)+'</p>':'')+'<p><b>Better version:</b> <span lang="de">'+esc(a.corrected)+'</span></p>'+mist(a.mistakes)+(a.tip?'<p class="mk-tip">💡 '+esc(a.tip)+'</p>':'')+'</div>'}
 function b64(blob){return new Promise(function(ok,no){var r=new FileReader();r.onload=function(){ok(String(r.result).split(',')[1])};r.onerror=no;r.readAsDataURL(blob)})}
-async function gradeSp(id,blob,btn){var el=document.getElementById('fb-'+id);btn.disabled=true;
+async function gradeSp(id,blob,btn,r){var el=document.getElementById('fb-'+id);if(btn.disabled)return;btn.disabled=true;var t=r&&r.querySelector('.mk-rt'),au=r&&r.querySelector('audio');
  if(blob.size>1000000){el.innerHTML='<p class="mk-warn">That recording is too long. Please keep it under one minute.</p>';btn.disabled=false;return}
  el.innerHTML='<div class="mk-load"><span class="mk-spin" aria-hidden="true"></span> Our AI examiner is listening. This takes about 10 to 20 seconds…</div>';
- try{var j=await ai({kind:'speaking',part:id,context:id==='p1'?'Introduce yourself':CTX[id],mime:blob.type||'audio/webm',audio:await b64(blob)});st.ai[id]=j;save();el.innerHTML=spFb(j)}
+ try{var j=await ai({kind:'speaking',part:id,context:id==='p1'?'Introduce yourself':CTX[id],mime:blob.type||'audio/webm',audio:await b64(blob)});
+  if(j.no_speech){el.innerHTML='<p class="mk-warn">We couldn’t hear you, please record again. Speak close to the microphone for a few seconds.</p>';btn.hidden=true;if(t)t.textContent='';return}
+  st.ai[id]=j;save();el.innerHTML=spFb(j);btn.hidden=true;if(au){au.hidden=true;au.removeAttribute('src')}if(t)t.textContent='';if(r)r.querySelector('.mk-rb').textContent='● Neu aufnehmen'}
  catch(e){el.innerHTML='<div class="mk-ai fail"><p><b>We couldn’t check this recording automatically right now.</b> '+(/fill in|too|used all|Too many|short/.test(e.message)?esc(e.message)+' ':'')+'Open the sample answer above and compare. Our teacher will check your speaking if you send it to us. You can also try again.</p>'+teacher()+'</div>';btn.disabled=false}}
 
 /* ---------- RESULTS ---------- */
@@ -214,7 +230,8 @@ function renderR(){var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),pass=tot>=
  h+='<div class="mk-mods">'+[['Hören',sc.h,sc.H,'h'],['Lesen',sc.l,sc.L,'l'],['Schreiben',sc.s,sc.S,'s'],['Sprechen',sc.p,sc.P,'p']].map(function(m){var d=st.done[m[3]];return '<div class="mk-mod"><span>'+m[0]+'</span><b>'+(d?m[2]:'–')+'</b><small>'+(d?'von 25 · '+m[1]+'/15 Rohpunkte':'not done yet')+'</small><i style="width:'+(d?m[2]*4:0)+'%"></i></div>'}).join('')+'</div>';
  h+='<p class="adm-mut">Like the real Goethe-Zertifikat A1: each module has 15 raw points, converted to 25, total 100. Hören, Lesen and the form in Schreiben Teil 1 are marked automatically. Your e-mail (10 points) and your Sprechen recordings (3 + 6 + 6 points) are marked by our AI examiner with the Goethe criteria. It is a good guide, not an official grade.</p>';
  /* Hören review */
- h+='<div class="ac-card mk-rev"><h3>Hören: Lösungen und Transkripte</h3>'+H.map(function(x){var u=st.ans['h'+x.id],ok=u===x.a;return '<details class="'+(ok?'ok':'bad')+'"><summary><b>'+x.id+'</b> '+(ok?'✓':'✗')+' <span lang="de">'+esc(x.t)+'</span></summary><p>Your answer: '+(u==null?'–':esc(x.o[u]))+' · Correct: <b lang="de">'+esc(x.o[x.a])+'</b></p><p class="mk-tr" lang="de">'+nl(x.tr)+'</p><button type="button" class="btn outline sm mk-replay" data-a="'+x.id+'">▶ Nochmal anhören</button></details>'}).join('')+'</div>';
+ var hItem=function(x){var u=st.ans['h'+x.id],ok=u===x.a;return '<details class="'+(ok?'ok':'bad')+'"><summary><b>'+x.id+'</b> '+(ok?'✓':'✗')+' <span lang="de">'+esc(x.t)+'</span></summary><p>Your answer: '+(u==null?'–':esc(x.o[u]))+' · Correct: <b lang="de">'+esc(x.o[x.a])+'</b></p><p class="mk-tr" lang="de">'+nl(x.tr)+'</p><button type="button" class="btn outline sm mk-replay" data-a="'+x.id+'">▶ Nochmal anhören</button></details>'},hW=H.filter(function(x){return st.ans['h'+x.id]!==x.a}),hR=H.filter(function(x){return st.ans['h'+x.id]===x.a});
+ h+='<div class="ac-card mk-rev"><h3>Hören: Lösungen und Transkripte ('+hR.length+'/15)</h3>'+(hW.length?'<details class="mk-samp"><summary>Show the '+hW.length+' wrong answer'+(hW.length>1?'s':'')+' with transcripts</summary>'+hW.map(hItem).join('')+'</details>':'<p class="ok">All correct!</p>')+(hR.length?'<details class="mk-samp"><summary>Show the '+hR.length+' correct answer'+(hR.length>1?'s':'')+'</summary>'+hR.map(hItem).join('')+'</details>':'')+'</div>';
  var n=0,rows=[];L1.forEach(function(t){t.q.forEach(function(x){n++;rows.push([n,x.t,RF,x.a])})});L2.forEach(function(x){n++;rows.push([n,x.t,['a','b'],x.k])});L3.forEach(function(x){n++;rows.push([n,x.t,RF,x.a])});
  h+='<div class="ac-card mk-rev"><h3>Lesen: Lösungen</h3>'+rows.map(function(r){var u=st.ans['l'+r[0]],ok=u===r[3];return '<details class="'+(ok?'ok':'bad')+'"><summary><b>'+r[0]+'</b> '+(ok?'✓':'✗')+' <span lang="de">'+esc(r[1])+'</span></summary><p>Your answer: '+(u==null?'–':r[2][u])+' · Correct: <b>'+r[2][r[3]]+'</b></p></details>'}).join('')+'</div>';
  var g=sGap(),lab=['Alter: 24','Herkunftsland: Pakistan','Sprachen: Urdu, Englisch','Kurszeit: Abend','Zahlung: Überweisung'],you=[st.ans.s1,st.ans.s2,st.ans.s3,['Vormittag','Nachmittag','Abend'][st.ans.s4],['bar','mit Karte','Überweisung'][st.ans.s5]];
@@ -224,7 +241,7 @@ function renderR(){var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),pass=tot>=
  h+='<div class="ex-submit"><button type="button" class="btn" id="mk-again">Neu starten</button><a class="btn outline" href="assets/docs/dfa-a1-mock-1-antwortbogen.pdf" download>Antwortbogen (PDF)</a>'+(SECS.every(function(s){return st.done[s.k]})&&window.DFA&&DFA.sb?'<button type="button" class="btn outline" id="mk-push">Save score to my account</button>':'')+'<span class="adm-mut" id="mk-save"></span></div>';
  return h}
 function wireR(){document.querySelectorAll('.mk-replay').forEach(function(b){b.onclick=function(){aud.onended=aud.onerror=null;aud.src=AU+'h'+b.dataset.a+'.mp3?v='+V;aud.play()}});
- document.getElementById('mk-again').onclick=function(){if(!confirm('Delete all answers and start the mock exam again?'))return;st={ans:{},done:{},plays:{},left:{},self:{}};save();shell();show('h')};
+ document.getElementById('mk-again').onclick=function(){if(!confirm('Delete all your answers and start the mock exam again? (Your contact details stay saved.)'))return;clearInterval(timer);wBusy=false;wFail=false;wErr='';st={};fix();save();shell();show('h')};
  var saved=false;document.querySelectorAll('[data-self] input').forEach(function(r){r.addEventListener('change',function(){var y=scrollY;show('r');scrollTo(0,y)})});
  var ps=document.getElementById('mk-push');if(ps)ps.onclick=pushScore;drawW();if(st.done.s&&!st.ai.w&&!wBusy&&!wFail)gradeW();if(!wBusy&&(st.ai.w||wFail||!st.done.s||!(st.ans.s6||'').trim()))sendScore()}
 async function pushScore(){if(!SECS.every(function(s){return st.done[s.k]}))return;var D=window.DFA,el=document.getElementById('mk-save');if(!D||!D.sb)return;
@@ -233,7 +250,7 @@ async function pushScore(){if(!SECS.every(function(s){return st.done[s.k]}))retu
   var r=await D.sb.from('exam_attempts').insert({exam_slug:SLUG,score:tot,max_score:100,answers:{mods:sc,ans:st.ans}});if(!r.error){st.pushed=sig;save()}el.textContent=r.error?'Could not save your score right now.':'Saved to your account.'}catch(e){}}
 /* ---------- START FORM (asked once per browser) ---------- */
 var FN='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/leads',LK='dfa-mock-lead',CONSENT='Yes, send me new course info, free learning resources and updates from Deutsch Für Alle. I can unsubscribe any time.';
-function lead(){try{return JSON.parse(localStorage.getItem(LK))||null}catch(e){return null}}
+var UU=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;function lead(){try{var L=JSON.parse(localStorage.getItem(LK));if(L&&UU.test(L.id||'')&&UU.test(L.token||''))return L}catch(e){}return null}
 function opt(a,ph){return '<option value="">'+ph+'</option>'+a.map(function(x){return '<option>'+x+'</option>'}).join('')}
 var COUNTRIES=['Pakistan','India','Bangladesh','Nepal','Sri Lanka','Afghanistan','Germany','Austria','Switzerland','United Arab Emirates','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain','United Kingdom','United States','Canada','Turkey','Iran','Egypt','Nigeria','Philippines'];
 function gateForm(go){var L=lead();if(L&&L.id)return go();
@@ -265,5 +282,6 @@ function gateForm(go){var L=lead();if(L&&L.id)return go();
   btn.disabled=false;if(ts)ts.reset()}}
 function sendScore(){var L=lead();if(!L||!L.id||!SECS.every(function(s){return st.done[s.k]}))return;var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),sig=L.id+JSON.stringify(sc);if(st.leadSent===sig)return;
  fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'score',id:L.id,token:L.token,score:tot,detail:{H:sc.H,L:sc.L,S:sc.S,P:sc.P}})}).then(function(r){if(r.ok){st.leadSent=sig;save()}}).catch(function(){})}
-gateForm(function(){shell();show(st.cur||'h')});
+gateForm(function(){shell();show(st.cur||'h');setTimeout(gradeW,0)});
+addEventListener('storage',function(e){if(e.key!==KEY)return;try{st=JSON.parse(e.newValue)||{}}catch(x){st={}}fix();if(st.cur==='r'||root.querySelector('.mk-tab.on[data-tab=r]')){var y=scrollY;show('r');scrollTo(0,y)}});
 })();
