@@ -1,71 +1,25 @@
-/* DFA A1 mock exam (Start Deutsch 1 format). Original material by Deutsch Für Alle. Marked in the browser. Before the first start we ask for a few contact details (sent once to our leads function); the final score is added to that same entry. Logged-in students can also save the score to their account. */
+/* DFA A1 mock exams 1-5 (Start Deutsch 1 format). Original material by Deutsch Für Alle. Marked in the browser. Before the first start we ask for a few contact details (sent once to our leads function); each paper gets its own lead entry (exam name) and the final score is added to it. Logged-in students can also save the score to their account. */
 (function(){
 var root=document.getElementById('mock-app');if(!root)return;
-try{document.head.insertAdjacentHTML('beforeend','<style>.mk-rec [hidden]{display:none!important}</style>')}catch(e){}
-var V='46',AU='assets/audio/a1-mock-1/',KEY='dfa-a1-mock-1',SLUG='a1-mock-1';
+try{document.head.insertAdjacentHTML('beforeend','<style>.mk-rec [hidden]{display:none!important}.mk-pick{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:0 0 1rem}.mk-pick b{margin-right:.25rem}.mk-pick a{padding:.45rem .9rem;border:1px solid currentColor;border-radius:999px;text-decoration:none;font-weight:600;font-size:.95rem;opacity:.8}.mk-pick a.on{opacity:1;background:#14532d;color:#fff;border-color:#14532d}.mk-pick a.done::after{content:" ✓"}</style>')}catch(e){}
+var PAPERS=window.DFA_MOCK_PAPERS||[];if(!PAPERS.length){root.innerHTML='<p class="mk-warn">The mock exam could not load. Please reload the page.</p>';return}
+var PN=(function(){var m=/[?&]paper=(\d)/.exec(location.search)||/#mock-(\d)/.exec(location.hash),n=m?+m[1]:0;if(!n){try{n=+localStorage.getItem('dfa-mock-paper')||1}catch(e){n=1}}return n>=1&&n<=PAPERS.length?n:1})();
+try{localStorage.setItem('dfa-mock-paper',PN)}catch(e){}
+var P=PAPERS[PN-1];
+var V='47',AU=P.au,KEY=P.key,SLUG=P.slug;
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function nl(s){return esc(s).replace(/\n/g,'<br>')}
 var RF=['Richtig','Falsch'];
-
-/* ---------- HÖREN ---------- */
-var H=[
-{id:1,t:'Wann fährt der Zug nach Hamburg heute?',o:['um 9:30 Uhr','um 9:10 Uhr','um 10:00 Uhr'],a:0,
- tr:'Frau: Entschuldigung, wann fährt der Zug nach Hamburg?\nMann: Nach Hamburg? Normalerweise um zehn nach neun. Aber heute hat er Verspätung. Er fährt erst um halb zehn.\nFrau: Um halb zehn. Okay, vielen Dank!'},
-{id:2,t:'Was kauft die Frau?',o:['nur Bananen','Tomaten und Äpfel','Tomaten und Bananen'],a:2,
- tr:'Mann: Guten Tag! Was möchten Sie?\nFrau: Ein Kilo Tomaten, bitte. Haben Sie auch Äpfel?\nMann: Äpfel haben wir heute leider nicht. Aber die Bananen sind sehr gut.\nFrau: Gut, dann nehme ich noch ein Kilo Bananen.'},
-{id:3,t:'Wo ist das Büro von Frau Malik?',o:['im ersten Stock','im zweiten Stock','im dritten Stock'],a:2,
- tr:'Frau: Entschuldigung, wo ist das Büro von Frau Malik?\nMann: Im dritten Stock, Zimmer 305. Der Aufzug ist leider kaputt. Bitte nehmen Sie die Treppe.\nFrau: Kein Problem. Danke schön!'},
-{id:4,t:'Wie viel bezahlt der Mann?',o:['2,00 €','3,50 €','5,00 €'],a:1,
- tr:'Mann: Was kostet ein Kaffee?\nFrau: Ein kleiner Kaffee kostet zwei Euro, ein großer drei Euro fünfzig.\nMann: Dann einen großen, bitte.'},
-{id:5,t:'Wann hat Herr Khan einen Termin?',o:['am Donnerstag','am Mittwoch','am Freitag'],a:0,
- tr:'Frau: Praxis Dr. Hoffmann, guten Morgen.\nMann: Guten Morgen, hier ist Imran Khan. Ich brauche bitte einen Termin. Geht es am Mittwoch?\nFrau: Mittwoch ist leider schon voll. Am Donnerstag um elf Uhr ist noch etwas frei.\nMann: Donnerstag um elf? Ja, das passt gut.'},
-{id:6,t:'Wie fährt die Frau jetzt zur Arbeit?',o:['mit dem Bus','mit dem Fahrrad','mit der U-Bahn'],a:2,
- tr:'Mann: Fährst du immer mit dem Bus zur Arbeit?\nFrau: Nein. Im Sommer fahre ich mit dem Fahrrad. Aber jetzt im Winter nehme ich die U-Bahn.'},
-{id:7,t:'Der Zug nach Frankfurt fährt heute von Gleis 4.',o:RF,a:1,
- tr:'Achtung an Gleis 4! Der Regionalexpress nach Frankfurt fährt heute nicht von Gleis 4, sondern von Gleis 7. Bitte gehen Sie zu Gleis 7.'},
-{id:8,t:'Der Supermarkt schließt bald.',o:RF,a:0,
- tr:'Liebe Kundinnen und Kunden, unser Markt schließt in fünfzehn Minuten. Bitte kommen Sie jetzt zur Kasse. Vielen Dank für Ihren Einkauf!'},
-{id:9,t:'Der Flug nach Istanbul hat Verspätung.',o:RF,a:1,
- tr:'Information für die Passagiere nach Istanbul: Bitte gehen Sie jetzt zum Ausgang B 12. Der Flug ist pünktlich.'},
-{id:10,t:'Im dritten Stock sind Kinderschuhe billiger.',o:RF,a:0,
- tr:'Heute im dritten Stock: Alle Kinderschuhe sind zwanzig Prozent billiger. Das Angebot gibt es nur bis Samstag.'},
-{id:11,t:'Was möchte Mona?',o:['morgen ins Kino gehen','heute Abend ins Kino gehen','mit Ayesha arbeiten'],a:0,
- tr:'Hallo Ayesha, hier ist Mona. Wir wollten doch heute Abend ins Kino gehen. Das geht leider nicht, ich muss arbeiten. Gehen wir morgen? Ruf mich bitte zurück. Tschüss!'},
-{id:12,t:'Bis wann kann Herr Ahmed sein Auto heute abholen?',o:['bis 16 Uhr','bis 18 Uhr','bis 20 Uhr'],a:1,
- tr:'Guten Tag, Herr Ahmed, hier ist das Autohaus Becker. Ihr Auto ist fertig. Sie können es heute bis achtzehn Uhr abholen. Morgen haben wir geschlossen. Auf Wiederhören!'},
-{id:13,t:'Wo ist das Geld?',o:['in der Küche','im Wohnzimmer','in der Schule'],a:0,
- tr:'Hallo Tim, hier ist Mama. Kannst du bitte nach der Schule einkaufen? Wir brauchen Milch, Eier und Brot. Das Geld liegt in der Küche auf dem Tisch. Danke, bis später!'},
-{id:14,t:'Wann beginnt der Deutschkurs?',o:['am Montag um 9 Uhr','am Dienstag um 12 Uhr','am Dienstag um 9 Uhr'],a:2,
- tr:'Hallo, hier spricht Daniel von der Sprachschule Lingua. Ihr Deutschkurs beginnt nicht am Montag, sondern erst am Dienstag, um neun Uhr. Bis Dienstag!'},
-{id:15,t:'Was soll Herr Schulz machen?',o:['den Schlüssel abholen','in Urlaub fahren','die Blumen gießen'],a:2,
- tr:'Hallo Herr Schulz, hier ist Frau Rana aus dem zweiten Stock. Ich bin ab morgen eine Woche im Urlaub. Können Sie bitte meine Blumen gießen? Den Schlüssel bringe ich heute Abend vorbei. Vielen Dank!'}];
+var H=P.H,L1=P.L1,L2=P.L2,L3=P.L3,SP1M=P.SP1M,SP2=P.SP2,SP3=P.SP3,FM=P.F,WR=P.W;
 var HT=[{n:'Teil 1',from:0,to:6,plays:2,ins:'Sie hören sechs kurze Gespräche. Sie hören jeden Text <b>zweimal</b>. Kreuzen Sie an: a, b oder c.',en:'Six short conversations. Each one can be played twice.'},
 {n:'Teil 2',from:6,to:10,plays:1,ins:'Sie hören vier Durchsagen. Sie hören jeden Text <b>einmal</b>. Kreuzen Sie an: Richtig oder Falsch.',en:'Four announcements. Each one plays only once, so listen carefully.'},
 {n:'Teil 3',from:10,to:15,plays:2,ins:'Sie hören fünf Nachrichten am Telefon. Sie hören jeden Text <b>zweimal</b>. Kreuzen Sie an: a, b oder c.',en:'Five phone messages. Each one can be played twice.'}];
-
-/* ---------- LESEN ---------- */
-var L1=[{h:'E-Mail',x:'Liebe Jana,\n\nich bin jetzt seit zwei Wochen in Berlin. Mein Deutschkurs ist jeden Tag von 9 bis 13 Uhr. Am Nachmittag arbeite ich in einem Restaurant. Meine Wohnung ist nicht groß, aber sie ist hell und ganz nah am Kurs. Ich gehe immer zu Fuß.\nAm Sonntag besucht mich mein Bruder. Er wohnt in Hamburg. Kommst du auch? Wir kochen pakistanisches Essen!\n\nViele Grüße\nBilal',
- q:[{t:'Bilal lernt am Vormittag Deutsch.',a:0},{t:'Bilal fährt mit dem Bus zum Kurs.',a:1},{t:'Bilals Bruder wohnt in Hamburg.',a:0}]},
-{h:'Notiz',x:'Hallo Sven,\nich bin beim Arzt und komme erst um 15 Uhr nach Hause. Das Essen ist im Kühlschrank. Du musst es nur warm machen. Und vergiss nicht: Um 16 Uhr hast du Fußballtraining!\nMama',
- q:[{t:'Die Mutter ist am Nachmittag wieder zu Hause.',a:0},{t:'Sven muss heute kochen.',a:1}]}];
-var L2=[{t:'Sie möchten am Wochenende Deutsch lernen.',a:'<b>Sprachschule Hallo</b><br>Intensivkurse Deutsch<br>Montag bis Freitag, 8 bis 12 Uhr',b:'<b>Volkshochschule Mitte</b><br>Deutsch A1 für Anfänger<br>samstags 10 bis 14 Uhr',k:1},
-{t:'Sie suchen eine günstige Wohnung für eine Person.',a:'<b>1-Zimmer-Wohnung</b><br>30 m², Küche, Bad<br>380 € warm',b:'<b>Haus mit Garten</b><br>5 Zimmer, ideal für Familien<br>1.600 € im Monat',k:0},
-{t:'Sie möchten am Sonntag frisches Brot kaufen.',a:'<b>Bäckerei Korn</b><br>Mo bis Sa 6 bis 18 Uhr<br>Sonntag geschlossen',b:'<b>Café Morgen</b><br>Bäckerei und Café<br>täglich 7 bis 17 Uhr, auch sonntags',k:1},
-{t:'Sie möchten online einen Termin beim Bürgeramt machen.',a:'<span class="url">www.stadt-info.de/buergeramt</span>Pass, Ausweis, Anmeldung:<br>Termine hier online buchen',b:'<span class="url">www.stadt-info.de/bibliothek</span>Bücher online suchen<br>und verlängern',k:0},
-{t:'Ihr Sohn ist 8 Jahre alt. Er möchte schwimmen lernen.',a:'<b>Schwimmbad Nord</b><br>Schwimmkurse für Kinder von 6 bis 10 Jahren<br>mittwochs 15 Uhr',b:'<b>Fitness-Studio Fit</b><br>Aqua-Fitness für Erwachsene<br>Mo und Do, 19 Uhr',k:0}];
-var L3=[{w:'An der Tür einer Arztpraxis',s:'Praxis vom 2. bis 13. Juni geschlossen.\nIn dringenden Fällen: Dr. Wagner, Hauptstraße 8',t:'Im Juni können Sie zu Dr. Wagner gehen.',a:0},
-{w:'In der Bibliothek',s:'Bitte nicht essen und trinken!\nWasser in Flaschen ist erlaubt.',t:'In der Bibliothek darf man Wasser trinken.',a:0},
-{w:'Im Bus',s:'Fahrkarten bitte beim Fahrer kaufen.\nNur Bargeld!',t:'Sie können im Bus mit Karte bezahlen.',a:1},
-{w:'Im Schwimmbad',s:'Montag 10 bis 14 Uhr:\nnur für Frauen',t:'Männer können am Montag um 11 Uhr schwimmen.',a:1},
-{w:'Am Supermarkt',s:'Neue Öffnungszeiten ab 1. März:\nMo bis Sa 7 bis 22 Uhr',t:'Ab März ist der Supermarkt bis 22 Uhr offen.',a:0}];
-
-/* ---------- SPRECHEN ---------- */
 var SP1=['Name','Alter','Land','Wohnort','Sprachen','Beruf','Hobby'];
-var SP1M='Ich heiße Ali Raza. Ich bin 27 Jahre alt. Ich komme aus Pakistan, aus Multan. Jetzt wohne ich in Lahore. Ich spreche Urdu, Punjabi, Englisch und ein bisschen Deutsch. Ich bin Krankenpfleger von Beruf. Mein Hobby ist Fußball.';
-var SP2=[{th:'Essen und Trinken',c:[['Frühstück','Was essen Sie zum Frühstück?','Ich esse Brot mit Ei und trinke Tee.'],['Lieblingsessen','Was ist Ihr Lieblingsessen?','Mein Lieblingsessen ist Biryani.'],['Getränk','Was trinken Sie gern?','Ich trinke gern Chai mit Milch.'],['Restaurant','Gehen Sie oft ins Restaurant?','Nein, nur am Wochenende.'],['Kochen','Kochen Sie gern?','Ja, ich koche fast jeden Abend.'],['Obst','Welches Obst mögen Sie?','Ich mag Mangos.']]},
-{th:'Freizeit',c:[['Wochenende','Was machen Sie am Wochenende?','Ich besuche meine Familie.'],['Sport','Welchen Sport machen Sie?','Ich spiele Cricket.'],['Kino','Gehen Sie gern ins Kino?','Ja, einmal im Monat.'],['Musik','Welche Musik hören Sie gern?','Ich höre gern Popmusik.'],['Urlaub','Wohin fahren Sie im Urlaub?','Ich fahre nach Murree.'],['Freunde','Wann treffen Sie Ihre Freunde?','Am Freitagabend.']]}];
-var SP3=[['🪟','Fenster','Können Sie bitte das Fenster aufmachen?','Ja, natürlich.'],['💧','Wasser','Kann ich bitte ein Glas Wasser haben?','Ja, hier, bitte.'],['✏️','Stift','Kannst du mir bitte einen Stift geben?','Klar, bitte schön.'],['📱','Handy','Machen Sie bitte Ihr Handy aus.','Oh, Entschuldigung!'],['💡','Licht','Mach bitte das Licht an.','Okay, kein Problem.'],['🍬','Zucker','Gib mir bitte den Zucker.','Bitte schön.'],['🚪','Tür','Kannst du bitte die Tür zumachen?','Ja, gern.'],['🕒','Uhr','Wie spät ist es, bitte?','Es ist Viertel nach drei.']];
-
+/* paper selector */
+(function(){var box=document.getElementById('mock-pick');if(!box){box=document.createElement('div');box.id='mock-pick';root.parentNode.insertBefore(box,root)}
+ box.className='mk-pick';box.setAttribute('role','navigation');box.setAttribute('aria-label','Choose a mock paper');
+ box.innerHTML='<b>Choose a paper:</b>'+PAPERS.map(function(p){var d=false;try{var s=JSON.parse(localStorage.getItem(p.key)||'{}');d=s.done&&s.done.h&&s.done.l&&s.done.s&&s.done.p}catch(e){}return '<a href="?paper='+p.n+'#mock-app" data-paper="'+p.n+'" class="'+(p.n===PN?'on':'')+(d?' done':'')+'"'+(p.n===PN?' aria-current="true"':'')+'>Mock '+p.n+'</a>'}).join('');
+ var dl=document.getElementById('mock-pdf');if(dl)dl.href=P.pdf;var ttl=document.getElementById('mock-title');if(ttl)ttl.textContent=P.name;})();
 var SECS=[{k:'h',n:'Hören',min:20},{k:'l',n:'Lesen',min:25},{k:'s',n:'Schreiben',min:20},{k:'p',n:'Sprechen',min:15}];
 var st;try{st=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){st={}}
 function fix(){st.ans=st.ans||{};st.done=st.done||{};st.plays=st.plays||{};st.left=st.left||{};st.self=st.self||{};st.ai=st.ai||{};['p1','p2','p3'].forEach(function(k){var a=st.ai[k];if(a&&!(Array.isArray(a.criteria)&&typeof a.total==='number'))delete st.ai[k]});var w=st.ai.w;if(w&&!(Array.isArray(w.points)&&w.form&&typeof w.total==='number'))delete st.ai.w}fix();
@@ -106,16 +60,11 @@ function renderL(){var h=bar('l'),n=0;
 function inp(id,ph){return '<input type="text" id="'+id+'" data-k="'+id+'" value="'+esc(st.ans[id]||'')+'" autocomplete="off" spellcheck="false"'+(ph?' placeholder="'+ph+'"':'')+'>'}
 function chk(id,opts){return '<div class="ex-opts">'+opts.map(function(o,i){return '<label><input type="radio" name="'+id+'" value="'+i+'"'+(st.ans[id]===i?' checked':'')+'> <span lang="de">'+o+'</span></label>'}).join('')+'</div>'}
 function renderS(){var h=bar('s');
- h+='<div class="ex-part ac-card"><h3>Schreiben, Teil 1</h3><p class="mk-ins" lang="de">Ihre Freundin Sana Mirza möchte einen Deutschkurs machen. Die Sprachschule braucht ein Formular. Im Formular fehlen fünf Informationen. Helfen Sie Ihrer Freundin und schreiben Sie die fünf Informationen in das Formular.</p>';
- h+='<div class="ex-text" lang="de">Sana Mirza ist 24 Jahre alt. Sie kommt aus Lahore in Pakistan und wohnt seit drei Monaten in Köln, in der Bergstraße 12. Sie spricht Urdu und Englisch. Am Tag arbeitet Sana in einem Hotel, darum möchte sie nur am Abend lernen. Den Kurs bezahlt sie mit Überweisung.</div>';
- h+='<div class="mk-form" lang="de"><div class="mk-fh">Sprachschule Lingua · Anmeldung</div>'+
- '<div class="mk-fr"><span>Familienname</span><b>Mirza</b></div><div class="mk-fr"><span>Vorname</span><b>Sana</b></div>'+
- '<div class="mk-fr"><span>Alter <em>(1)</em></span>'+inp('s1')+'</div><div class="mk-fr"><span>Herkunftsland <em>(2)</em></span>'+inp('s2')+'</div>'+
- '<div class="mk-fr"><span>Adresse</span><b>Bergstraße 12, 50667 Köln</b></div><div class="mk-fr"><span>Sprachen <em>(3)</em></span>'+inp('s3')+'</div>'+
- '<div class="mk-fr"><span>Kurszeit <em>(4)</em></span>'+chk('s4',['Vormittag','Nachmittag','Abend'])+'</div>'+
- '<div class="mk-fr"><span>Zahlung <em>(5)</em></span>'+chk('s5',['bar','mit Karte','Überweisung'])+'</div></div></div>';
- h+='<div class="ex-part ac-card"><h3>Schreiben, Teil 2</h3><p class="mk-ins" lang="de">Sie haben am Samstag Geburtstag und machen eine Party. Schreiben Sie Ihrem Freund Jonas eine E-Mail.</p><ul class="mk-pts" lang="de"><li>Warum schreiben Sie?</li><li>Wann und wo ist die Party?</li><li>Was soll Jonas mitbringen?</li></ul><p class="mk-ins" lang="de">Schreiben Sie zu jedem Punkt ein bis zwei Sätze (circa 30 Wörter). Vergessen Sie nicht die Anrede und den Gruß.</p>'+
- '<textarea id="s6" data-k="s6" rows="8" lang="de" spellcheck="false" placeholder="Lieber Jonas, …">'+esc(st.ans.s6||'')+'</textarea><p class="adm-mut" id="s6c"></p></div>';
+ h+='<div class="ex-part ac-card"><h3>Schreiben, Teil 1</h3><p class="mk-ins" lang="de">'+esc(FM.ins)+'</p>';
+ h+='<div class="ex-text" lang="de">'+esc(FM.text)+'</div>';
+ h+='<div class="mk-form" lang="de"><div class="mk-fh">'+esc(FM.head)+'</div>'+FM.rows.map(function(r){if(typeof r[1]==='string')return '<div class="mk-fr"><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>';var g=FM.gaps[r[1]-1],id='s'+r[1];return '<div class="mk-fr"><span>'+esc(r[0])+' <em>('+r[1]+')</em></span>'+(g.t==='c'?chk(id,g.o.map(esc)):inp(id))+'</div>'}).join('')+'</div></div>';
+ h+='<div class="ex-part ac-card"><h3>Schreiben, Teil 2</h3><p class="mk-ins" lang="de">'+esc(WR.ins)+'</p><ul class="mk-pts" lang="de">'+WR.pts.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul><p class="mk-ins" lang="de">Schreiben Sie zu jedem Punkt ein bis zwei Sätze (circa 30 Wörter). Vergessen Sie nicht die Anrede und den Gruß.</p>'+
+ '<textarea id="s6" data-k="s6" rows="8" lang="de" spellcheck="false" placeholder="'+esc(WR.ph)+'">'+esc(st.ans.s6||'')+'</textarea><p class="adm-mut" id="s6c"></p></div>';
  h+='<div id="s-review">'+(st.done.s&&(st.ans.s6||'').trim()?'<div class="ex-part ac-card"><h3>AI feedback on your e-mail</h3><div id="w-fb">'+wFb()+'</div></div>':'')+'</div>';return h+foot('s')}
 function renderP(){var h=bar('p')+'<p class="mk-note">In the real exam you speak in a small group with two examiners. Here you do it alone: draw a card, press record, speak (up to 60 seconds), then press <b>Check my answer</b>. Our AI examiner listens and gives you points like the Goethe examiners do (Teil 1: 3, Teil 2: 6, Teil 3: 6 points). Your recording is only sent for this check and is not kept.</p>';
  h+='<div class="ex-part ac-card"><h3>Sprechen, Teil 1: Sich vorstellen</h3><p class="mk-ins" lang="de">Stellen Sie sich vor. Sagen Sie etwas zu diesen Punkten:</p><div class="mk-chips">'+SP1.map(function(w){return '<span>'+w+'</span>'}).join('')+'</div>'+
@@ -181,9 +130,8 @@ function startRec(r,s){var btn=r.querySelector('.mk-rb'),ck=r.querySelector('.mk
 
 /* ---------- AI GRADING ---------- */
 var askN=0;function say(t){try{var S=window.speechSynthesis;if(!S)return;S.cancel();var u=new SpeechSynthesisUtterance(t);u.lang='de-DE';u.rate=.9;var v=S.getVoices().filter(function(x){return /^de/i.test(x.lang)})[0];if(v)u.voice=v;S.speak(u)}catch(e){}}
-var GF='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/mock-grade',CTX={},WA='https://wa.me/923182166443?text='+encodeURIComponent('Hi! I did the A1 mock exam on your website. Can a teacher check my writing and speaking?');
-var WTASK='Sie haben am Samstag Geburtstag und machen eine Party. Schreiben Sie Ihrem Freund Jonas eine E-Mail (circa 30 Wörter, Anrede und Gruß): 1) Warum schreiben Sie? 2) Wann und wo ist die Party? 3) Was soll Jonas mitbringen?';
-var MODEL='Lieber Jonas,<br>am Samstag habe ich Geburtstag und ich mache eine kleine Party. Die Party beginnt um 19 Uhr bei mir zu Hause in der Gartenstraße 5. Kannst du bitte Musik oder einen Salat mitbringen? Ich freue mich!<br>Viele Grüße<br>Ali';
+var GF='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/mock-grade',CTX={},WA='https://wa.me/923182166443?text='+encodeURIComponent('Hi! I did the '+P.name+' exam on your website. Can a teacher check my writing and speaking?');
+var WTASK=WR.task,MODEL=WR.model;
 function teacher(){return '<div class="mk-teach"><span>Want a real teacher to check your writing or speaking?</span><a class="btn sm" href="'+WA+'" target="_blank" rel="noopener">Ask on WhatsApp</a><a class="btn outline sm" href="contact.html">Contact us</a></div>'}
 async function ai(body){var L=lead();if(!L||!L.id)throw new Error('no lead');body.id=L.id;body.token=L.token;
  var r=await fetch(GF,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),j=await r.json().catch(function(){return{}});if(r.status===403&&/start form/.test(j.error||'')){try{localStorage.removeItem(LK)}catch(x){}}if(j.no_speech)return j;if(!r.ok||!j.ok)throw new Error(j.error||'failed');return j}
@@ -198,7 +146,7 @@ function wFb(){var a=st.ai.w;
   '<details class="mk-samp"><summary>Model answer</summary><p lang="de">'+MODEL+'</p></details><p class="adm-mut">Checked by our AI examiner with the Goethe A1 criteria. It is a strong guide, but not an official grade.</p>'+teacher()+'</div>';
  if(!(st.ans.s6||'').trim())return '<p class="adm-mut">No text, so 0 of 10 points.</p><p><b>Model answer:</b></p><p class="mk-tr" lang="de">'+MODEL+'</p>';
  if(wBusy)return '<div class="mk-load"><span class="mk-spin" aria-hidden="true"></span> Our AI examiner is reading your e-mail. This takes about 10 seconds…</div>';
- return '<div class="mk-ai fail"><p><b>We couldn’t check your e-mail automatically right now.</b> '+(wErr?esc(wErr)+' ':'')+'Compare it with the model answer below. Our teacher will check it for you if you send it to us.</p><p><b>Model answer (39 Wörter):</b></p><p class="mk-tr" lang="de">'+MODEL+'</p><p><button type="button" class="btn outline sm" id="w-retry">Try the AI check again</button></p>'+teacher()+'</div>'}
+ return '<div class="mk-ai fail"><p><b>We couldn’t check your e-mail automatically right now.</b> '+(wErr?esc(wErr)+' ':'')+'Compare it with the model answer below. Our teacher will check it for you if you send it to us.</p><p><b>Model answer ('+WR.words+' Wörter):</b></p><p class="mk-tr" lang="de">'+MODEL+'</p><p><button type="button" class="btn outline sm" id="w-retry">Try the AI check again</button></p>'+teacher()+'</div>'}
 function gradeW(){var t=(st.ans.s6||'').trim();if(wBusy||st.ai.w||!t||!st.done.s)return;wBusy=true;wErr='';wFail=false;drawW();
  ai({kind:'writing',task:WTASK,text:t.slice(0,1500)}).then(function(j){if(j.no_speech)throw new Error(j.error||'');st.ai.w=j;save()}).catch(function(e){wFail=true;wErr=/fill in|too long|used all|Too many/.test(e.message)?e.message:''}).finally(function(){wBusy=false;refresh()})}
 function refresh(){if(st.cur==='r'){var y=scrollY;show('r');scrollTo(0,y)}else drawW()}
@@ -217,7 +165,7 @@ async function gradeSp(id,blob,btn,r){var el=document.getElementById('fb-'+id);i
 
 /* ---------- RESULTS ---------- */
 function norm(s){return String(s||'').toLowerCase().replace(/[^a-zäöüß0-9 ]/g,' ').replace(/\s+/g,' ').trim()}
-function sGap(){var a=st.ans;return [/^(24|vierundzwanzig)( jahre)?( alt)?$/.test(norm(a.s1)),/^pakistan$/.test(norm(a.s2)),/urdu/.test(norm(a.s3))&&/englisch|english/.test(norm(a.s3)),a.s4===2,a.s5===2]}
+function sGap(){var a=st.ans;return FM.gaps.map(function(g,i){var v=a['s'+(i+1)];return g.t==='c'?v===g.a:g.ok.every(function(r){return new RegExp(r).test(norm(v))})})}
 function score(){var h=H.filter(function(x){return st.ans['h'+x.id]===x.a}).length,n=0,l=0;
  L1.forEach(function(t){t.q.forEach(function(x){n++;if(st.ans['l'+n]===x.a)l++})});L2.forEach(function(x){n++;if(st.ans['l'+n]===x.k)l++});L3.forEach(function(x){n++;if(st.ans['l'+n]===x.a)l++});
  var g=sGap().filter(Boolean).length,w=st.ai.w?st.ai.w.total:0,p=['p1','p2','p3'].reduce(function(s,k){return s+(st.ai[k]?st.ai[k].total:0)},0);
@@ -234,14 +182,14 @@ function renderR(){var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),pass=tot>=
  h+='<div class="ac-card mk-rev"><h3>Hören: Lösungen und Transkripte ('+hR.length+'/15)</h3>'+(hW.length?'<details class="mk-samp"><summary>Show the '+hW.length+' wrong answer'+(hW.length>1?'s':'')+' with transcripts</summary>'+hW.map(hItem).join('')+'</details>':'<p class="ok">All correct!</p>')+(hR.length?'<details class="mk-samp"><summary>Show the '+hR.length+' correct answer'+(hR.length>1?'s':'')+'</summary>'+hR.map(hItem).join('')+'</details>':'')+'</div>';
  var n=0,rows=[];L1.forEach(function(t){t.q.forEach(function(x){n++;rows.push([n,x.t,RF,x.a])})});L2.forEach(function(x){n++;rows.push([n,x.t,['a','b'],x.k])});L3.forEach(function(x){n++;rows.push([n,x.t,RF,x.a])});
  h+='<div class="ac-card mk-rev"><h3>Lesen: Lösungen</h3>'+rows.map(function(r){var u=st.ans['l'+r[0]],ok=u===r[3];return '<details class="'+(ok?'ok':'bad')+'"><summary><b>'+r[0]+'</b> '+(ok?'✓':'✗')+' <span lang="de">'+esc(r[1])+'</span></summary><p>Your answer: '+(u==null?'–':r[2][u])+' · Correct: <b>'+r[2][r[3]]+'</b></p></details>'}).join('')+'</div>';
- var g=sGap(),lab=['Alter: 24','Herkunftsland: Pakistan','Sprachen: Urdu, Englisch','Kurszeit: Abend','Zahlung: Überweisung'],you=[st.ans.s1,st.ans.s2,st.ans.s3,['Vormittag','Nachmittag','Abend'][st.ans.s4],['bar','mit Karte','Überweisung'][st.ans.s5]];
- h+='<div class="ac-card mk-rev"><h3>Schreiben, Teil 1: Formular ('+g.filter(Boolean).length+'/5)</h3>'+lab.map(function(x,i){return '<p class="'+(g[i]?'ok':'bad')+'">'+(g[i]?'✓':'✗')+' <span lang="de">'+x+'</span> <span class="adm-mut">· you wrote: '+esc(you[i]||'–')+'</span></p>'}).join('')+'<p class="adm-mut">Small spelling slips cost the point in the real exam too. Write <i lang="de">Pakistan</i>, not <i>Pakistani</i>.</p></div>';
- h+='<div class="ac-card mk-rev"><h3>Schreiben, Teil 2: E-Mail an Jonas'+(st.ai.w?' ('+st.ai.w.total+'/10)':'')+'</h3><p><b>Your text:</b></p><p class="mk-tr" lang="de">'+(st.ans.s6?nl(st.ans.s6):'<i>no text</i>')+'</p><div id="w-fb">'+wFb()+'</div></div>';
+ var g=sGap(),lab=FM.gaps.map(function(x){return esc(x.ex)}),you=FM.gaps.map(function(x,i){var v=st.ans['s'+(i+1)];return x.t==='c'?(v==null?'':x.o[v]):v});
+ h+='<div class="ac-card mk-rev"><h3>Schreiben, Teil 1: Formular ('+g.filter(Boolean).length+'/5)</h3>'+lab.map(function(x,i){return '<p class="'+(g[i]?'ok':'bad')+'">'+(g[i]?'✓':'✗')+' <span lang="de">'+x+'</span> <span class="adm-mut">· you wrote: '+esc(you[i]||'–')+'</span></p>'}).join('')+'<p class="adm-mut">'+FM.note+'</p></div>';
+ h+='<div class="ac-card mk-rev"><h3>Schreiben, Teil 2: '+esc(WR.title)+''+(st.ai.w?' ('+st.ai.w.total+'/10)':'')+'</h3><p><b>Your text:</b></p><p class="mk-tr" lang="de">'+(st.ans.s6?nl(st.ans.s6):'<i>no text</i>')+'</p><div id="w-fb">'+wFb()+'</div></div>';
  h+='<div class="ac-card mk-rev"><h3>Sprechen'+(st.done.p?' ('+sc.p+'/15)':'')+'</h3>'+['p1','p2','p3'].map(function(k){var a=st.ai[k];return '<p class="'+(a?(a.total>=a.max/2?'ok':'bad'):'bad')+'"><b>Teil '+k[1]+':</b> '+(a?a.total+'/'+a.max+' · <span lang="de">“'+esc(a.transcript||'')+'”</span>':'no checked recording (0 points)')+'</p>'}).join('')+'<p class="adm-mut">The full feedback for each recording is on the Sprechen tab.</p>'+teacher()+'</div>';
- h+='<div class="ex-submit"><button type="button" class="btn" id="mk-again">Neu starten</button><a class="btn outline" href="assets/docs/dfa-a1-mock-1-antwortbogen.pdf" download>Antwortbogen (PDF)</a>'+(SECS.every(function(s){return st.done[s.k]})&&window.DFA&&DFA.sb?'<button type="button" class="btn outline" id="mk-push">Save score to my account</button>':'')+'<span class="adm-mut" id="mk-save"></span></div>';
+ h+='<div class="ex-submit"><button type="button" class="btn" id="mk-again">Neu starten</button><a class="btn outline" href="'+P.pdf+'" download>Antwortbogen (PDF)</a>'+(SECS.every(function(s){return st.done[s.k]})&&window.DFA&&DFA.sb?'<button type="button" class="btn outline" id="mk-push">Save score to my account</button>':'')+'<span class="adm-mut" id="mk-save"></span></div>';
  return h}
 function wireR(){document.querySelectorAll('.mk-replay').forEach(function(b){b.onclick=function(){aud.onended=aud.onerror=null;aud.src=AU+'h'+b.dataset.a+'.mp3?v='+V;aud.play()}});
- document.getElementById('mk-again').onclick=function(){if(!confirm('Delete all your answers and start the mock exam again? (Your contact details stay saved.)'))return;clearInterval(timer);wBusy=false;wFail=false;wErr='';st={};fix();save();shell();show('h')};
+ document.getElementById('mk-again').onclick=function(){if(!confirm('Delete all your answers for '+P.name+' and start again? (Your contact details stay saved.)'))return;clearInterval(timer);wBusy=false;wFail=false;wErr='';st={};fix();save();shell();show('h')};
  var saved=false;document.querySelectorAll('[data-self] input').forEach(function(r){r.addEventListener('change',function(){var y=scrollY;show('r');scrollTo(0,y)})});
  var ps=document.getElementById('mk-push');if(ps)ps.onclick=pushScore;drawW();if(st.done.s&&!st.ai.w&&!wBusy&&!wFail)gradeW();if(!wBusy&&(st.ai.w||wFail||!st.done.s||!(st.ans.s6||'').trim()))sendScore()}
 async function pushScore(){if(!SECS.every(function(s){return st.done[s.k]}))return;var D=window.DFA,el=document.getElementById('mk-save');if(!D||!D.sb)return;
@@ -249,11 +197,15 @@ async function pushScore(){if(!SECS.every(function(s){return st.done[s.k]}))retu
   var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),sig=JSON.stringify(sc);if(st.pushed===sig){el.textContent='Saved to your account.';return}
   var r=await D.sb.from('exam_attempts').insert({exam_slug:SLUG,score:tot,max_score:100,answers:{mods:sc,ans:st.ans}});if(!r.error){st.pushed=sig;save()}el.textContent=r.error?'Could not save your score right now.':'Saved to your account.'}catch(e){}}
 /* ---------- START FORM (asked once per browser) ---------- */
-var FN='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/leads',LK='dfa-mock-lead',CONSENT='Yes, send me new course info, free learning resources and updates from Deutsch Für Alle. I can unsubscribe any time.';
-var UU=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;function lead(){try{var L=JSON.parse(localStorage.getItem(LK));if(L&&UU.test(L.id||'')&&UU.test(L.token||''))return L}catch(e){}return null}
+var FN='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/leads',LK=PN===1?'dfa-mock-lead':'dfa-mock-lead-'+SLUG,LKS=PAPERS.map(function(p){return p.n===1?'dfa-mock-lead':'dfa-mock-lead-'+p.slug}),CONSENT='Yes, send me new course info, free learning resources and updates from Deutsch Für Alle. I can unsubscribe any time.';
+var UU=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;function lead(k){try{var L=JSON.parse(localStorage.getItem(k||LK));if(L&&UU.test(L.id||'')&&UU.test(L.token||''))return L}catch(e){}return null}
+/* another paper already has a lead on this device: copy those contact details into a new entry for this paper (no second form) */
+function cloneLead(){var src=LKS.filter(function(k){return k!==LK&&lead(k)});if(!src.length)return Promise.resolve(false);var S=lead(src[0]);
+ return fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'clone',id:S.id,token:S.token,exam:SLUG,page:location.pathname})}).then(function(r){return r.json().catch(function(){return{}}).then(function(j){if(r.ok&&j.ok&&UU.test(j.id||'')){try{localStorage.setItem(LK,JSON.stringify({id:j.id,token:j.token,at:Date.now()}))}catch(x){}return true}if(j.gone){try{localStorage.removeItem(src[0])}catch(x){}return cloneLead()}return false})}).catch(function(){return false})}
 function opt(a,ph){return '<option value="">'+ph+'</option>'+a.map(function(x){return '<option>'+x+'</option>'}).join('')}
 var COUNTRIES=['Pakistan','India','Bangladesh','Nepal','Sri Lanka','Afghanistan','Germany','Austria','Switzerland','United Arab Emirates','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain','United Kingdom','United States','Canada','Turkey','Iran','Egypt','Nigeria','Philippines'];
 function gateForm(go){var L=lead();if(L&&L.id)return go();
+ if(!gateForm.tried&&LKS.some(function(k){return k!==LK&&lead(k)})){gateForm.tried=true;root.innerHTML='<p>Loading '+esc(P.name)+'…</p>';cloneLead().then(function(ok){gateForm(go)});return}
  root.innerHTML='<div class="ac-card lf"><form id="lf" novalidate><h2>Before you start</h2><p>Tell us a little about yourself so we can send your result tips and help you pick the right next step. It takes under a minute, and we only ask once on this device.</p>'+
  '<div class="lf-grid"><div><label for="lf-fn">First name</label><input id="lf-fn" name="first_name" autocomplete="given-name" required maxlength="60"></div>'+
  '<div><label for="lf-ln">Last name</label><input id="lf-ln" name="last_name" autocomplete="family-name" required maxlength="60"></div>'+

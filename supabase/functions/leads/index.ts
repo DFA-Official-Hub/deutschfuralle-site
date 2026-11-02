@@ -1,4 +1,4 @@
-// DFA mock exam lead form. Public: submit (Turnstile + disposable-email check), score (needs the row's edit token).
+// DFA mock exam lead form. Public: submit (Turnstile + disposable-email check), score (needs the row's edit token), clone (same person starts another paper: copies the contact details of a row they hold the edit token for into a new row for that exam).
 // Private: GET ?csv=1&key=<site_settings.leads_csv_key> returns all rows as CSV for the Google Sheet (IMPORTDATA).
 import { createClient } from "npm:@supabase/supabase-js@2";
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
@@ -6,7 +6,7 @@ const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: 
 const env = (k: string) => Deno.env.get(k) || "";
 const LEVELS = ["Beginner", "A1", "A2", "B1", "B2+"];
 const GOALS = ["Study in Germany", "Job", "Ausbildung", "Nursing", "Exam prep", "Hobby", "Other"];
-const EXAMS: Record<string, string> = { "a1-mock-1": "A1 Mock 1" };
+const EXAMS: Record<string, string> = { "a1-mock-1": "A1 Mock 1", "a1-mock-2": "A1 Mock 2", "a1-mock-3": "A1 Mock 3", "a1-mock-4": "A1 Mock 4", "a1-mock-5": "A1 Mock 5" };
 const t = (x: unknown, n = 120) => String(x ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 const pkt = (d: string | null) => d ? new Date(new Date(d).getTime() + 5 * 3600e3).toISOString().slice(0, 16).replace("T", " ") : "";
 const cell = (v: unknown) => { let s = String(v ?? ""); if (/^[=@]/.test(s)) s = " " + s; return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -35,6 +35,18 @@ Deno.serve(async (req) => {
       // Row gone (e.g. deleted test lead) or wrong token: answer 200 so browsers do not log a 404; the page then forgets the stale lead.
       if (error || !data?.length) return json({ ok: false, gone: true, error: "not found" });
       return json({ ok: true });
+    }
+    if (b.action === "clone") {
+      const id = t(b.id, 40), tok = t(b.token, 40), exam = EXAMS[t(b.exam, 30)];
+      if (!/^[0-9a-f-]{36}$/.test(id) || !/^[0-9a-f-]{36}$/.test(tok) || !exam) return json({ error: "bad request" }, 400);
+      const { data: src } = await db.from("mock_exam_leads").select("first_name,last_name,email,phone,country,city,level,goal,heard_from,consent,consent_text,user_id,is_test").eq("id", id).eq("edit_token", tok).maybeSingle();
+      if (!src) return json({ ok: false, gone: true, error: "not found" });
+      const since = new Date(Date.now() - 3600e3).toISOString();
+      const { count } = await db.from("mock_exam_leads").select("id", { count: "exact", head: true }).eq("email", src.email).gte("created_at", since);
+      if ((count || 0) >= 12) return json({ error: "Please wait a little and try again." }, 429);
+      const { data, error } = await db.from("mock_exam_leads").insert({ ...src, exam, page: t(b.page, 200), user_agent: t(req.headers.get("user-agent"), 200) }).select("id,edit_token").single();
+      if (error) return json({ error: "We could not save your details right now. Please try again in a minute." }, 500);
+      return json({ ok: true, id: data.id, token: data.edit_token });
     }
     if (b.action !== "submit") return json({ error: "unknown action" }, 400);
     if (t(b.hp)) return json({ error: "Sorry, something went wrong. Please try again." }, 400);
