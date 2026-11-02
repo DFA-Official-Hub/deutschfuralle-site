@@ -512,3 +512,10 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 @media(max-width:760px){.mk-facts,.mk-mods{grid-template-columns:repeat(2,1fr)}.mk-tabs{top:60px}.mk-tab{flex:1 1 30%}.mk-item{grid-template-columns:1fr}.mk-play{flex-direction:row;justify-content:center;gap:10px}.mk-ads{grid-template-columns:1fr}.mk-fr{grid-template-columns:1fr;gap:4px}}
 .ac-card label.mk-ad{flex-direction:row;font-weight:400}.ac-card .mk-ad input{width:1px!important;height:1px;padding:0!important}
 @media(max-width:760px){.mk-tabs{flex-wrap:nowrap;overflow-x:auto;gap:5px;padding:8px 0;scrollbar-width:none}.mk-tabs::-webkit-scrollbar{display:none}.mk-tab{flex:0 0 auto;padding:6px 12px;font-size:.88rem}.mk-tab small,.mk-tab span{display:none}.mk-tab i{position:static;margin-left:4px;display:inline}.mk-tab{flex-direction:row;align-items:center}.mk-bar{padding:10px 12px}.mk-time{font-size:1.35rem}}
+
+/* mock exam start form */
+.lf{max-width:820px}.lf form{display:block;max-width:none}.lf h2{margin-top:0}.lf-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin:18px 0 16px}.lf-wide{grid-column:1/-1}
+.ac-card.lf label{display:block}.ac-card.lf label .adm-mut{font-weight:400}
+.ac-card.lf label.lf-ok{display:flex;flex-direction:row;gap:10px;align-items:flex-start;font-weight:400;line-height:1.5;margin:4px 0 8px}.lf-ok input{width:20px;min-height:20px;height:20px;margin:3px 0 0;flex:none;accent-color:var(--g)}
+.lf-hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+@media (max-width:640px){.lf-grid{grid-template-columns:1fr}}

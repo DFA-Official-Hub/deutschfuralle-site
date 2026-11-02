@@ -1,4 +1,4 @@
-/* DFA A1 mock exam (Start Deutsch 1 format). Original material by Deutsch Für Alle. Marked in the browser; nothing is uploaded except an optional score row for logged-in students. */
+/* DFA A1 mock exam (Start Deutsch 1 format). Original material by Deutsch Für Alle. Marked in the browser. Before the first start we ask for a few contact details (sent once to our leads function); the final score is added to that same entry. Logged-in students can also save the score to their account. */
 (function(){
 var root=document.getElementById('mock-app');if(!root)return;
 var V='41',AU='assets/audio/a1-mock-1/',KEY='dfa-a1-mock-1',SLUG='a1-mock-1';
@@ -196,10 +196,44 @@ function renderR(){var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),pass=tot>=
 function wireR(){document.querySelectorAll('.mk-replay').forEach(function(b){b.onclick=function(){aud.onended=aud.onerror=null;aud.src=AU+'h'+b.dataset.a+'.mp3?v='+V;aud.play()}});
  document.getElementById('mk-again').onclick=function(){if(!confirm('Delete all answers and start the mock exam again?'))return;st={ans:{},done:{},plays:{},left:{},self:{}};save();shell();show('h')};
  var saved=false;document.querySelectorAll('[data-self] input').forEach(function(r){r.addEventListener('change',function(){var y=scrollY;show('r');scrollTo(0,y)})});
- var ps=document.getElementById('mk-push');if(ps)ps.onclick=pushScore}
+ var ps=document.getElementById('mk-push');if(ps)ps.onclick=pushScore;sendScore()}
 async function pushScore(){if(!SECS.every(function(s){return st.done[s.k]}))return;var D=window.DFA,el=document.getElementById('mk-save');if(!D||!D.sb)return;
  try{var s=(await D.sb.auth.getSession()).data.session;if(!s){el.innerHTML='You’re not logged in. <a href="account.html">Log in</a> in a new tab, then press save again.';return}
   var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),sig=JSON.stringify(sc);if(st.pushed===sig){el.textContent='Saved to your account.';return}
   var r=await D.sb.from('exam_attempts').insert({exam_slug:SLUG,score:tot,max_score:100,answers:{mods:sc,ans:st.ans}});if(!r.error){st.pushed=sig;save()}el.textContent=r.error?'Could not save your score right now.':'Saved to your account.'}catch(e){}}
-shell();show(st.cur||'h');
+/* ---------- START FORM (asked once per browser) ---------- */
+var FN='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/leads',LK='dfa-mock-lead',CONSENT='Yes, send me new course info, free learning resources and updates from Deutsch Für Alle. I can unsubscribe any time.';
+function lead(){try{return JSON.parse(localStorage.getItem(LK))||null}catch(e){return null}}
+function opt(a,ph){return '<option value="">'+ph+'</option>'+a.map(function(x){return '<option>'+x+'</option>'}).join('')}
+var COUNTRIES=['Pakistan','India','Bangladesh','Nepal','Sri Lanka','Afghanistan','Germany','Austria','Switzerland','United Arab Emirates','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain','United Kingdom','United States','Canada','Turkey','Iran','Egypt','Nigeria','Philippines'];
+function gateForm(go){var L=lead();if(L&&L.id)return go();
+ root.innerHTML='<div class="ac-card lf"><form id="lf" novalidate><h2>Before you start</h2><p>Tell us a little about yourself so we can send your result tips and help you pick the right next step. It takes under a minute, and we only ask once on this device.</p>'+
+ '<div class="lf-grid"><div><label for="lf-fn">First name</label><input id="lf-fn" name="first_name" autocomplete="given-name" required maxlength="60"></div>'+
+ '<div><label for="lf-ln">Last name</label><input id="lf-ln" name="last_name" autocomplete="family-name" required maxlength="60"></div>'+
+ '<div><label for="lf-em">Email</label><input id="lf-em" name="email" type="email" autocomplete="email" required maxlength="160"></div>'+
+ '<div><label for="lf-ph">Phone / WhatsApp <span class="adm-mut">(optional)</span></label><input id="lf-ph" name="phone" type="tel" autocomplete="tel" placeholder="+92 300 1234567" maxlength="24" pattern="\\+?[0-9 ()\\-]{6,24}"></div>'+
+ '<div><label for="lf-co">Country</label><input id="lf-co" name="country" list="lf-cl" autocomplete="country-name" required maxlength="60"><datalist id="lf-cl">'+COUNTRIES.map(function(c){return '<option value="'+c+'">'}).join('')+'</datalist></div>'+
+ '<div><label for="lf-ci">City <span class="adm-mut">(optional)</span></label><input id="lf-ci" name="city" autocomplete="address-level2" maxlength="80"></div>'+
+ '<div><label for="lf-lv">Your German level right now</label><select id="lf-lv" name="level" required>'+opt(['Beginner','A1','A2','B1','B2+'],'Choose one')+'</select></div>'+
+ '<div><label for="lf-go">Why are you learning German?</label><select id="lf-go" name="goal" required>'+opt(['Study in Germany','Job','Ausbildung','Nursing','Exam prep','Hobby','Other'],'Choose one')+'</select></div>'+
+ '<div class="lf-wide"><label for="lf-hd">How did you hear about us? <span class="adm-mut">(optional)</span></label><input id="lf-hd" name="heard_from" list="lf-hl" maxlength="120" placeholder="Instagram, YouTube, a friend…"><datalist id="lf-hl"><option value="Instagram"><option value="Facebook"><option value="YouTube"><option value="TikTok"><option value="WhatsApp"><option value="Google search"><option value="A friend or classmate"></datalist></div></div>'+
+ '<input type="text" name="hp" id="lf-hp" tabindex="-1" autocomplete="off" aria-hidden="true" class="lf-hp">'+
+ '<label class="lf-ok"><input type="checkbox" id="lf-ok" required> <span>'+esc(CONSENT)+' See our <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>.</span></label>'+
+ '<div class="ts-box" id="lf-ts"></div><div class="ex-submit"><button class="btn" type="submit" id="lf-go-btn">Start the mock exam</button><span class="adm-mut" id="lf-msg" role="status"></span></div></form></div>';
+ var f=document.getElementById('lf'),msg=document.getElementById('lf-msg'),btn=document.getElementById('lf-go-btn'),D=window.DFA,ts=null;
+ if(D&&D.turnstile)D.turnstile(document.getElementById('lf-ts')).then(function(b){ts=b}).catch(function(){});
+ if(D&&D.profile)D.profile().then(function(p){if(!p)return;var n=String(p.full_name||'').trim().split(/\s+/),set=function(id,v){var e=document.getElementById(id);if(e&&!e.value&&v)e.value=v};
+  set('lf-fn',n[0]);set('lf-ln',n.slice(1).join(' '));set('lf-em',p.email);set('lf-ph',p.phone);set('lf-co',p.country)}).catch(function(){});
+ f.onsubmit=async function(e){e.preventDefault();msg.textContent='';if(!f.reportValidity())return;
+  if(ts&&!ts.token){msg.textContent='Please complete the quick security check first.';return}
+  var v=function(id){return document.getElementById(id).value.trim()};btn.disabled=true;msg.textContent='Saving…';
+  var body={action:'submit',exam:SLUG,first_name:v('lf-fn'),last_name:v('lf-ln'),email:v('lf-em'),phone:v('lf-ph'),country:v('lf-co'),city:v('lf-ci'),level:v('lf-lv'),goal:v('lf-go'),heard_from:v('lf-hd'),consent:document.getElementById('lf-ok').checked,consent_text:CONSENT,hp:v('lf-hp'),captcha:ts&&ts.token,page:location.pathname};
+  var h={'Content-Type':'application/json'};try{var s=D&&D.sb&&(await D.sb.auth.getSession()).data.session;if(s)h.Authorization='Bearer '+s.access_token}catch(x){}
+  try{var r=await fetch(FN,{method:'POST',headers:h,body:JSON.stringify(body)}),j=await r.json().catch(function(){return{}});
+   if(r.ok&&j.ok){try{localStorage.setItem(LK,JSON.stringify({id:j.id,token:j.token,at:Date.now()}))}catch(x){}go();scrollTo(0,root.getBoundingClientRect().top+scrollY-90);return}
+   msg.textContent=j.error||'Something went wrong. Please try again.'}catch(x){msg.textContent='No connection. Please check your internet and try again.'}
+  btn.disabled=false;if(ts)ts.reset()}}
+function sendScore(){var L=lead();if(!L||!L.id||!SECS.every(function(s){return st.done[s.k]}))return;var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),sig=L.id+JSON.stringify(sc);if(st.leadSent===sig)return;
+ fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'score',id:L.id,token:L.token,score:tot,detail:{H:sc.H,L:sc.L,S:sc.S,P:sc.P}})}).then(function(r){if(r.ok){st.leadSent=sig;save()}}).catch(function(){})}
+gateForm(function(){shell();show(st.cur||'h')});
 })();
