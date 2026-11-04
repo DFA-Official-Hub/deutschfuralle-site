@@ -79,7 +79,7 @@ def courses(s):
                     'hasCourseInstance': {'@type': 'CourseInstance', 'courseMode': 'Online',
                                           'location': {'@type': 'VirtualLocation', 'name': 'Zoom'},
                                           'description': 'Live group classes on Zoom, ' + dur}})
-    assert len(out) == 5, len(out)
+    assert len(out) == 6, len(out)
     return out
 
 def faq(s, page):
