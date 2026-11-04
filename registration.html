@@ -72,7 +72,7 @@ if(!window.DFA_LIVE&&!d)window['ga-disable-G-L3X22MD03E']=true;})();
 <script>
 (function(){
   var FN='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/leads', SITEKEY='0x4AAAAAAFn9s78EqGLy2pKx', tsId=null, tsToken='';
-  function renderTs(){ if(window.turnstile&&!tsId&&/^0x/.test(SITEKEY)) tsId=turnstile.render('#reg-ts',{sitekey:SITEKEY,callback:function(k){tsToken=k},'expired-callback':function(){tsToken=''}}); }
+  function renderTs(){ if(window.turnstile&&!tsId&&/^0x/.test(SITEKEY)) tsId=turnstile.render('#reg-ts',{sitekey:SITEKEY,callback:function(k){tsToken=k},'expired-callback':function(){tsToken=''},'error-callback':function(){tsToken=''}}); }
   var iv=setInterval(function(){if(window.turnstile){clearInterval(iv);renderTs();}},200); setTimeout(function(){clearInterval(iv)},10000);
   function uuid(){return (crypto.randomUUID&&crypto.randomUUID())||'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
   window.sendForm=function(e,via){
@@ -88,10 +88,16 @@ if(!window.DFA_LIVE&&!d)window['ga-disable-G-L3X22MD03E']=true;})();
       consent:document.getElementById('rc').checked,consent_text:'I agree that DFA may contact me about courses',
       captcha:tsToken,hp:document.getElementById('reg-hp').value,page:location.pathname,event_id:eid,
       first_touch:window.DFAAttr?DFAAttr.first():{}};
-    var ctl=('AbortController' in window)?new AbortController():null;
-    setTimeout(function(){ if(ctl)ctl.abort(); go(); },3000);                 // 3 s fallback: never lose the lead's WhatsApp/email
-    fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true,signal:ctl?ctl.signal:undefined})
-      .then(function(){go()}).catch(function(){go()});
+    // Turnstile may still be 'Verifying…' when the button is pressed: wait up to 8 s for its token, else the server rejects the lead (400) and no row is saved.
+    function tok(){ if(!tsToken&&window.turnstile&&tsId!==null){try{tsToken=turnstile.getResponse(tsId)||''}catch(_){}} return tsToken; }
+    function post(){
+      body.captcha=tok();
+      var ctl=('AbortController' in window)?new AbortController():null;
+      setTimeout(function(){ if(ctl)ctl.abort(); go(); },3000);               // 3 s fallback: never lose the lead's WhatsApp/email
+      fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true,signal:ctl?ctl.signal:undefined})
+        .then(function(){go()}).catch(function(){go()});
+    }
+    var t0=Date.now(); (function wait(){ if(tok()||Date.now()-t0>8000||!/^0x/.test(SITEKEY)) post(); else setTimeout(wait,150); })();
     return false;
   };
 })();
