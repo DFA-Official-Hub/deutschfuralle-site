@@ -226,10 +226,11 @@ function gateForm(go){var L=lead();if(L&&L.id)return go();
  f.onsubmit=async function(e){e.preventDefault();msg.textContent='';if(!f.reportValidity())return;
   if(ts&&!ts.token){msg.textContent='Please complete the quick security check first.';return}
   var v=function(id){return document.getElementById(id).value.trim()};btn.disabled=true;msg.textContent='Saving…';
-  var body={action:'submit',exam:SLUG,first_name:v('lf-fn'),last_name:v('lf-ln'),email:v('lf-em'),phone:v('lf-ph'),country:v('lf-co'),city:v('lf-ci'),level:v('lf-lv'),goal:v('lf-go'),heard_from:v('lf-hd'),consent:document.getElementById('lf-ok').checked,consent_text:CONSENT,hp:v('lf-hp'),captcha:ts&&ts.token,page:location.pathname};
+  var eid=(crypto.randomUUID&&crypto.randomUUID())||String(Date.now());
+  var body={action:'submit',exam:SLUG,first_name:v('lf-fn'),last_name:v('lf-ln'),email:v('lf-em'),phone:v('lf-ph'),country:v('lf-co'),city:v('lf-ci'),level:v('lf-lv'),goal:v('lf-go'),heard_from:v('lf-hd'),consent:document.getElementById('lf-ok').checked,consent_text:CONSENT,hp:v('lf-hp'),captcha:ts&&ts.token,page:location.pathname,event_id:eid,first_touch:window.DFAAttr?DFAAttr.first():{}};
   var h={'Content-Type':'application/json'};try{var s=D&&D.sb&&(await D.sb.auth.getSession()).data.session;if(s)h.Authorization='Bearer '+s.access_token}catch(x){}
   try{var r=await fetch(FN,{method:'POST',headers:h,body:JSON.stringify(body)}),j=await r.json().catch(function(){return{}});
-   if(r.ok&&j.ok){try{localStorage.setItem(LK,JSON.stringify({id:j.id,token:j.token,at:Date.now()}))}catch(x){}go();scrollTo(0,root.getBoundingClientRect().top+scrollY-90);return}
+   if(r.ok&&j.ok){if(window.DFATrack)DFATrack.lead({form:'mock_exam',course:SLUG,event_id:eid});try{localStorage.setItem(LK,JSON.stringify({id:j.id,token:j.token,at:Date.now()}))}catch(x){}go();try{history.replaceState(null,'','#lead-thanks')}catch(x){}scrollTo(0,root.getBoundingClientRect().top+scrollY-90);return}
    msg.textContent=j.error||'Something went wrong. Please try again.'}catch(x){msg.textContent='No connection. Please check your internet and try again.'}
   btn.disabled=false;if(ts)ts.reset()}}
 function sendScore(){var L=lead();if(!L||!L.id||!SECS.every(function(s){return st.done[s.k]}))return;var sc=score(),tot=Math.round(sc.H+sc.L+sc.S+sc.P),sig=L.id+JSON.stringify(sc);if(st.leadSent===sig)return;
