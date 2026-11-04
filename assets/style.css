@@ -530,7 +530,7 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 .mk-teach{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #e6ece8}.mk-teach span{flex:1 1 220px;font-weight:600}
 .mk-card.pic .mk-emo{font-size:4.2rem}
 
-/* Consent banner v2 (compact): primary brand green (#04170e on #4ade6b = 11.1:1), outline secondary (#0d1712 on #fff = 18.6:1). Both one click, native buttons. */
+/* Consent banner v2 (compact): primary brand green (#04170e on #4ade6b = 10.5:1), outline secondary (#0d1712 on #fff = 18.3:1). Both one click, native buttons. */
 #dfa-cc{position:fixed;left:1rem;right:1rem;bottom:1rem;z-index:9999;max-width:640px;margin:auto;background:#fff;color:#111;border:1px solid #ddd;border-radius:12px;padding:.75rem .9rem;box-shadow:0 6px 24px rgba(0,0,0,.15);font-size:.95rem;line-height:1.45;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
 #dfa-cc p{margin:0;flex:1 1 220px;color:#1f2a24}#dfa-cc a{color:#17602a;text-decoration:underline}
 #dfa-cc .dfa-cc-btns{display:flex;gap:.5rem;justify-content:flex-end;flex:0 0 auto}
