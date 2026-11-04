@@ -19,8 +19,8 @@
   function banner(){
     if(document.getElementById('dfa-cc'))return;
     var d=document.createElement('div');d.id='dfa-cc';d.setAttribute('role','dialog');d.setAttribute('aria-live','polite');d.setAttribute('aria-label','Cookie consent');
-    d.innerHTML='<p>We use cookies for analytics and to measure our ads (Google Analytics, Meta). You can accept or reject. See our <a href="/privacy.html#cookies">Privacy Policy</a>.</p>'+
-      '<div class="dfa-cc-btns"><button type="button" class="btn outline" data-c="denied">Reject</button><button type="button" class="btn outline" data-c="granted">Accept</button></div>';
+    d.innerHTML='<p><strong>Help us make your German journey better \ud83c\udde9\ud83c\uddea</strong> We use cookies to show you the right classes, free demos and offers for your level, and to see which lessons help most. We never sell your data. <a href="/privacy.html#cookies">Privacy Policy</a></p>'+
+      '<div class="dfa-cc-btns"><button type="button" class="dfa-cc-ess" data-c="denied">Only essential</button><button type="button" class="dfa-cc-ok" data-c="granted">Accept &amp; continue</button></div>';
     d.addEventListener('click',function(e){var s=e.target.getAttribute&&e.target.getAttribute('data-c');if(!s)return;save(s);apply(s);d.remove();});
     document.body.appendChild(d);
   }

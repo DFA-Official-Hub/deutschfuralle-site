@@ -43,6 +43,6 @@
     if(/whatsapp\.com\/channel\//.test(h)){ ga('whatsapp_channel_click',{page_path:location.pathname}); return; }
     var bk=a.getAttribute('data-goatcounter-click'); if(bk){ ga('book_click',{item_id:bk,store:(h.match(/amazon|gumroad|etsy/)||['other'])[0]}); return; }
     var pd=h.match(/open\.spotify\.com\/show|podcasts\.apple\.com|castbox\.fm|pca\.st|deezer\.com\/show|player\.fm|podcastaddict\.com|tunein\.com|podchaser\.com|podfriend\.com|podcastindex\.org/);
-    if(pd){ ga('podcast_click',{platform:pd[0].replace(/^(open|podcasts)\./,'').split(/[./]/)[0]}); }
+    if(pd){ var pf=pd[0].replace(/^(open|podcasts)\./,'').split(/[./]/)[0]; ga('podcast_click',{platform:({apple:'apple_podcasts',pca:'pocketcasts'})[pf]||pf}); }
   },true);
 })();
