@@ -3,6 +3,7 @@
 generated file (HTML pages, style.min.css), then run this. It re-applies the hand edits that are not part of
 tools/seo.py and rebuilds (build.py -> tools/seo.py). Idempotent."""
 import pathlib, re, subprocess, sys
+BASE = __import__('os').environ.get('SEO_BASE', 'origin/main')
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 def edit(rel, old, new):
     p = ROOT / rel; s = p.read_text(encoding='utf-8')
@@ -18,11 +19,11 @@ for name in ('dfa-track.js', 'dfa-mock-a1.js'):
     files = [*ROOT.glob('*.html'), *ROOT.glob('books/*.html'), ROOT / 'tools/tracking-head.html']
     vers = [int(v) for f in files for v in re.findall(rf'{re.escape(name)}\?v=(\d+)', f.read_text(encoding='utf-8'))]
     if not vers: continue
-    base = subprocess.run(['git', 'show', 'origin/feat/tracking-v1:tools/tracking-head.html'], cwd=ROOT, capture_output=True, text=True).stdout
+    base = subprocess.run(['git', 'show', BASE+':tools/tracking-head.html'], cwd=ROOT, capture_output=True, text=True).stdout
     up = [int(v) for v in re.findall(rf'{re.escape(name)}\?v=(\d+)', base)]
     target = (max(up) + 1) if up else max(vers)
     if name == 'dfa-mock-a1.js':
-        exam = subprocess.run(['git', 'show', 'origin/feat/tracking-v1:exam-prep.html'], cwd=ROOT, capture_output=True, text=True).stdout
+        exam = subprocess.run(['git', 'show', BASE+':exam-prep.html'], cwd=ROOT, capture_output=True, text=True).stdout
         target = int(re.search(r'dfa-mock-a1\.js\?v=(\d+)', exam).group(1)) + 1
     for f in files:
         s = f.read_text(encoding='utf-8'); s2 = re.sub(rf'({re.escape(name)}\?v=)\d+', rf'\g<1>{target}', s)
