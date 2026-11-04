@@ -35,7 +35,8 @@ ROBOTS='<meta name="robots" content="noindex, nofollow">'
 for p in out.rglob('*.html'):
     s=p.read_text(encoding='utf-8')
     if not p.is_relative_to(out/'hub'):
-        s=re.sub(r'((?:href|src)=")/(?!/)',r'\1'+BASE,s)
+        s=re.sub(r'((?:href|src|srcset)=")/(?!/)',r'\1'+BASE,s)
+        s=re.sub(r'url\((["\']?)/(?!/)',r'url(\1'+BASE,s)
     if p==out/'links'/'index.html':
         s=s.replace('https://dfa-official-hub.github.io/dfa-links/','https://dfa-official-hub.github.io'+BASE+'hub/')
     s=re.sub(r'<script data-goatcounter="[^"]*"[^>]*></script>','',s)
