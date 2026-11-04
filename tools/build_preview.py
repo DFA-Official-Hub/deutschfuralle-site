@@ -9,6 +9,7 @@ What it changes, and only in the copy (the branch itself is untouched):
   * Root-absolute paths (href="/...", src="/...") get the project prefix /deutschfuralle-site-preview/,
     because a project Pages site is served from a sub-path.
   * Every page gets <meta name="robots" content="noindex, nofollow"> so search engines ignore the preview.
+  * The GoatCounter tag is removed, so preview visits are not counted in the production GoatCounter.
   * links/index.html redirects to the preview copy of the hub (/hub/) instead of the live hub.
   * Optional: the dfa-links branch is copied into /hub/.
 Analytics: the head snippet's hostname guard (tools/tracking-head.html) disables GA4 and the Meta Pixel on any host
@@ -37,6 +38,7 @@ for p in out.rglob('*.html'):
         s=re.sub(r'((?:href|src)=")/(?!/)',r'\1'+BASE,s)
     if p==out/'links'/'index.html':
         s=s.replace('https://dfa-official-hub.github.io/dfa-links/','https://dfa-official-hub.github.io'+BASE+'hub/')
+    s=re.sub(r'<script data-goatcounter="[^"]*"[^>]*></script>','',s)
     if ROBOTS not in s: s=re.sub(r'(<head>|<meta charset="utf-8">)',lambda m:m.group(1)+ROBOTS,s,count=1)
     p.write_text(s,encoding='utf-8')
 c=out/'assets'/'dfa-consent.js'; c.write_text(c.read_text().replace('href="/privacy.html','href="'+BASE+'privacy.html'))
