@@ -37,7 +37,7 @@
   };
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[href]'); if(!a)return; var h=a.href, loc=a.closest('footer')?'footer':a.closest('header,nav')?'header':'body';
-    if(a.matches('a[href*="wa.me/"], a[href*="api.whatsapp.com/"]')){
+    if(a.matches('a[href="/whatsapp"], a[href^="/whatsapp?"], a[href*="wa.me/"], a[href*="api.whatsapp.com/"]')){   // /whatsapp = redirect page that holds the number
       if(Date.now()<suppressUntil)return;                 // guard: registration redirect already counted as generate_lead
       var eid=uuid(); ga('whatsapp_click',{link_location:loc,page_path:location.pathname,event_id:eid}); px('Contact',{content_name:'whatsapp'},eid); return; }
     if(/whatsapp\.com\/channel\//.test(h)){ ga('whatsapp_channel_click',{page_path:location.pathname}); return; }

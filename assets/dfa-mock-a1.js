@@ -130,7 +130,7 @@ function startRec(r,s){var btn=r.querySelector('.mk-rb'),ck=r.querySelector('.mk
 
 /* ---------- AI GRADING ---------- */
 var askN=0;function say(t){try{var S=window.speechSynthesis;if(!S)return;S.cancel();var u=new SpeechSynthesisUtterance(t);u.lang='de-DE';u.rate=.9;var v=S.getVoices().filter(function(x){return /^de/i.test(x.lang)})[0];if(v)u.voice=v;S.speak(u)}catch(e){}}
-var GF='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/mock-grade',CTX={},WA='https://wa.me/923182166443?text='+encodeURIComponent('Hi! I did the '+P.name+' exam on your website. Can a teacher check my writing and speaking?');
+var GF='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/mock-grade',CTX={},WA='/whatsapp?text='+encodeURIComponent('Hi! I did the '+P.name+' exam on your website. Can a teacher check my writing and speaking?');
 var WTASK=WR.task,MODEL=WR.model;
 function teacher(){return '<div class="mk-teach"><span>Want a real teacher to check your writing or speaking?</span><a class="btn sm" href="'+WA+'" target="_blank" rel="noopener">Ask on WhatsApp</a><a class="btn outline sm" href="contact.html">Contact us</a></div>'}
 async function ai(body){var L=lead();if(!L||!L.id)throw new Error('no lead');body.id=L.id;body.token=L.token;
