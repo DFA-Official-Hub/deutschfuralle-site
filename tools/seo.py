@@ -42,6 +42,8 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'careers.html': ('Careers – Teach German with Deutsch Für Alle',
    'Are you a German teacher, or want to help our students? Join the small Deutsch Für Alle team. Send your CV and a short note, and we will get back to you.'),
  'privacy.html': (None, None),  # already good
+ 'blog/goethe-exam-pakistan.html': ('Goethe Exam in Pakistan 2026: A1 & B1 Booking & Documents',
+   'How to book the Goethe A1 or B1 exam in Pakistan: centres in Karachi, Lahore and Islamabad, payment, documents and what each level is for.'),
  'books/a1-workbook.html': ('German A1 Workbook with Answers (PDF & Paperback)',
    'German A1 workbook: 9 units, 150+ exercises, review test and answer key. Paperback and Kindle on Amazon, PDF on Etsy and Gumroad.'),
 }
@@ -86,7 +88,7 @@ def faq(s, page):
     if page == 'index.html':
         qa = re.findall(r'<details[^>]*><summary>(.*?)<i[^>]*></i></summary><p class="ans">(.*?)</p></details>', s, re.S)
     else:
-        sec = re.search(r'<section id="faq">(.*?)</section>', s, re.S).group(1)
+        sec = re.search(r'<section id="faq"[^>]*>(.*?)</section>', s, re.S).group(1)
         qa = re.findall(r'<h3>(.*?)</h3><p>(.*?)</p>', sec, re.S)
     assert qa, page
     return {'@type': 'FAQPage', 'mainEntity': [{'@type': 'Question', 'name': txt(q),
@@ -104,6 +106,13 @@ def book(s, rel, desc):
     if age: d['audience'] = {'@type': 'PeopleAudience', 'suggestedMinAge': int(age.group(1)), 'suggestedMaxAge': int(age.group(2))}
     else: d['educationalLevel'] = 'A1'
     return d, name, sub
+
+def article(s, rel, desc):
+    pub = re.search(r'<meta name="dfa:published" content="([^"]+)"', s); pub = pub.group(1) if pub else datetime.date.today().isoformat()
+    return {'@type': 'Article', 'headline': txt(re.search(r'<h1>(.*?)</h1>', s, re.S).group(1)), 'description': desc,
+            'image': OG_IMAGE, 'datePublished': pub, 'dateModified': pub, 'inLanguage': 'en',
+            'author': ORG_REF, 'publisher': {'@id': ORG_ID}, 'url': clean_url(rel),
+            'mainEntityOfPage': {'@type': 'WebPage', '@id': clean_url(rel)}}
 
 def rewrite_links(s, rel):
     d = pathlib.PurePosixPath(rel).parent
@@ -140,7 +149,7 @@ def head_block(rel, title, desc, graph, ogtype='website'):
     return '<!--seo-->\n' + '\n'.join(tags) + f'\n<script type="application/ld+json">{ld}</script>\n<!--/seo-->'
 
 def main():
-    files = sorted(str(p.relative_to(ROOT)) for p in [*ROOT.glob('*.html'), *ROOT.glob('books/*.html')])
+    files = sorted(str(p.relative_to(ROOT)) for p in [*ROOT.glob('*.html'), *ROOT.glob('books/*.html'), *ROOT.glob('blog/*.html')])
     lk = ROOT / 'links/index.html'; ls = lk.read_text(encoding='utf-8')
     if 'name="robots"' not in ls:   # short hub page that refreshes to the dfa-links site: keep it out of the index
         lk.write_text(ls.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="robots" content="noindex">', 1), encoding='utf-8'); print('updated links/index.html')
@@ -181,6 +190,9 @@ def main():
                     if len(t_new) > 60: t_new = f'{SHORT_SUB.get(sub, sub)} – {name}'
             if rel == 'courses.html': graph += courses(s)
             if rel in ('index.html', 'resources.html'): graph.append(faq(s, rel))
+            if rel.startswith('blog/'):
+                ogtype = 'article'
+                graph.append(article(s, rel, desc)); graph.append(faq(s, rel))
             if rel == 'index.html':
                 graph.append({'@type': 'WebSite', '@id': SITE + '/#website', 'url': SITE + '/', 'name': 'Deutsch Für Alle', 'publisher': {'@id': ORG_ID}})
             if t_new: s = re.sub(r'<title>.*?</title>', lambda m: f'<title>{html.escape(t_new, quote=False)}</title>', s, count=1)
@@ -198,7 +210,7 @@ def main():
         dirty = subprocess.run(['git', 'status', '--porcelain', '--', rel], cwd=ROOT, capture_output=True, text=True).stdout.strip()
         d = subprocess.run(['git', 'log', '-1', '--format=%cs', '--', rel], cwd=ROOT, capture_output=True, text=True).stdout.strip()
         return today if dirty or not d else d
-    order = lambda r: (r != 'index.html', r.startswith('books/'), r)
+    order = lambda r: (r != 'index.html', r.startswith('books/'), r.startswith('blog/'), r)
     urls = ''.join(f'  <url><loc>{clean_url(r)}</loc><lastmod>{lastmod(r)}</lastmod></url>\n' for r in sorted(public, key=order))
     (ROOT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + urls + '</urlset>\n', encoding='utf-8')
     (ROOT / 'robots.txt').write_text('# Cloudflare adds its managed rules (AI crawler blocks, Content-Signal) above these lines.\n'
