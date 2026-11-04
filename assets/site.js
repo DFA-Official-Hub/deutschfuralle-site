@@ -34,7 +34,7 @@ d.addEventListener('keydown',e=>{const n=d.getElementById('nav'),t=d.querySelect
 if(!d.querySelector('script[src*="dfa-auth"]'))try{const k=localStorage.getItem('dfa-pill'),a=d.querySelector('a.acct');
 const hasS=[localStorage,sessionStorage].some(st=>{for(let i=0;i<st.length;i++)if(/^sb-.*-auth-token$/.test(st.key(i)))return true;return false});
 if(a&&hasS){const sp=a.querySelector('span');if(sp)sp.textContent='My account';const id=k==='admin'?'dfa-admin-link':k==='student'?'dfa-course-link':'';
-if(id&&!d.getElementById(id)){const l=d.createElement('a');l.id=id;l.className='acct acct-adm';l.href=a.getAttribute('href').replace('account.html',k==='admin'?'admin.html':'portal.html');l.textContent=k==='admin'?'Admin':'My course';a.parentNode.insertBefore(l,a)}}}catch(e){}
+if(id&&!d.getElementById(id)){const l=d.createElement('a');l.id=id;l.className='acct acct-adm';l.href=a.getAttribute('href').replace(/account(\.html)?$/,function(m,x){return (k==='admin'?'admin':'portal')+(x||'')});l.textContent=k==='admin'?'Admin':'My course';a.parentNode.insertBefore(l,a)}}}catch(e){}
 /* custom cursor: fine pointers only, no reduced motion */
 const fine=matchMedia('(hover:hover) and (pointer:fine)').matches,rm=matchMedia('(prefers-reduced-motion:reduce)').matches;if(!fine)return;
 const dot=d.createElement('div'),ring=d.createElement('div');dot.className='cur-dot';ring.className='cur-ring';[dot,ring].forEach(e=>{e.setAttribute('aria-hidden','true');b.appendChild(e)});

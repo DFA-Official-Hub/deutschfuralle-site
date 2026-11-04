@@ -1,0 +1,5 @@
+# Cloudflare adds its managed rules (AI crawler blocks, Content-Signal) above these lines.
+User-agent: *
+Allow: /
+
+Sitemap: https://www.deutschfuralle.com/sitemap.xml

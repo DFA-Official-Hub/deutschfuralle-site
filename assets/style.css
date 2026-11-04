@@ -178,6 +178,8 @@ nav#nav ul{padding:12px 20px 20px}nav a{min-height:48px;font-size:1rem}.menu-tog
 .inner main>section:last-of-type{padding-bottom:24px}
 .inner main>section h2{font-size:clamp(1.8rem,3vw,2.5rem);font-weight:800;margin-bottom:.6em}
 .inner main h3{font-family:Archivo,sans-serif;font-size:1.3rem;line-height:1.2;letter-spacing:-.015em}
+/* Course names on courses.html are <h2 class="cn"> for SEO (heading order) but keep the card-title look */
+.inner main>section h2.cn{font-size:1.3rem;line-height:1.2;letter-spacing:-.015em;font-weight:700;margin:0 0 .5em}
 .inner main a:not(.btn){color:#1d6f2b;text-decoration-thickness:1px;text-underline-offset:3px}
 .inner main ul{padding-left:20px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px}

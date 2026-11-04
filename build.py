@@ -17,3 +17,6 @@ for f in glob.glob('*.html')+glob.glob('books/*.html'):
     h=re.sub(r'<!--css-->.*?<!--/css-->|<link rel="stylesheet" href="[^"]*\.css">',lambda m:'@@CSS@@',h,flags=re.S)
     h=h.replace('@@CSS@@',block,1).replace('@@CSS@@','')
     open(f,'w').write(h)
+# SEO step: canonicals, OG/Twitter, JSON-LD, titles/descriptions, clean internal links, /whatsapp links, sitemap.xml, robots.txt
+import subprocess,sys
+subprocess.run([sys.executable,'tools/seo.py'],check=True)
