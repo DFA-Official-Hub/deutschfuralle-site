@@ -77,27 +77,39 @@ if(!window.DFA_LIVE&&!d)window['ga-disable-G-L3X22MD03E']=true;})();
   function uuid(){return (crypto.randomUUID&&crypto.randomUUID())||'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
   window.sendForm=function(e,via){
     e.preventDefault(); var f=document.getElementById('regform'); if(!f.reportValidity())return false;
+    if(f.getAttribute('data-busy'))return false; f.setAttribute('data-busy','1');
     var g=function(i){return document.getElementById(i).value.trim()}, eid=uuid();
     var btns=f.querySelectorAll('button'); btns.forEach(function(b){b.disabled=true});
+    var st=document.getElementById('reg-status'); if(!st){st=document.createElement('p');st.id='reg-status';st.setAttribute('role','status');st.setAttribute('aria-live','polite');st.style.cssText='margin:.8rem 0 0;font-weight:600';btns[0].parentNode.insertAdjacentElement('afterend',st);}
+    function say(h){st.innerHTML=h;}
+    var label=via==='wa'?'WhatsApp':'your email app';
+    say('Sending… please wait a moment, then '+label+' opens.');
     var txt='Hi DFA, I want to register'+(window.DFAAttr?DFAAttr.via():'')+'.\nName: '+g('n')+'\nWhatsApp: '+g('p')+'\nCourse: '+g('c')+'\nTiming: '+g('t')+(g('m')?'\nMessage: '+g('m'):'');
     var dest = via==='wa' ? '/whatsapp?text='+encodeURIComponent(txt)   // /whatsapp forwards to wa.me with the text; the number is only in whatsapp.html
              : 'mailto:contact.deutschfuralle@gmail.com?subject='+encodeURIComponent('DFA Registration: '+g('c'))+'&body='+encodeURIComponent(txt);
-    var gone=false; function go(){ if(gone)return; gone=true; if(window.DFATrack)DFATrack.suppressWa(); location.href=dest; }
+    var saved=false;
+    // Same-tab navigation (not window.open), so no popup blocker can swallow it even after the async wait.
+    // A visible link stays on the page as a fallback (mailto with no mail app, or an app-switch that did not happen).
+    var gone=false; function go(){ if(gone)return; gone=true; if(window.DFATrack)DFATrack.suppressWa();
+      var link='<a href="'+dest.replace(/"/g,'&quot;')+'"'+(via==='wa'?' rel="nofollow"':'')+'>'+(via==='wa'?'Open WhatsApp':'Open email')+'</a>';
+      say((saved?'Thanks, we received your registration. ':'')+'Opening '+label+'… If nothing happens, tap '+link+(via==='mail'?' or write to contact.deutschfuralle@gmail.com':'')+'.');
+      btns.forEach(function(b){b.disabled=false}); f.removeAttribute('data-busy');
+      try{ location.assign(dest); }catch(_){} }
     if(window.DFATrack) DFATrack.lead({form:'registration',method:via,course:g('c'),timing:g('t'),event_id:eid});
     var body={action:'register',name:g('n'),phone:g('p'),course:g('c'),timing:g('t'),message:g('m'),via:via,
       consent:document.getElementById('rc').checked,consent_text:'I agree that DFA may contact me about courses',
-      captcha:tsToken,hp:document.getElementById('reg-hp').value,page:location.pathname,event_id:eid,
+      captcha:'',hp:document.getElementById('reg-hp').value,page:location.pathname,event_id:eid,
       first_touch:window.DFAAttr?DFAAttr.first():{}};
-    // Turnstile may still be 'Verifying…' when the button is pressed: wait up to 8 s for its token, else the server rejects the lead (400) and no row is saved.
+    // Turnstile may still be 'Verifying…': wait up to 4 s for its token so the server can save the lead; the visitor is never held longer than ~6.5 s.
     function tok(){ if(!tsToken&&window.turnstile&&tsId!==null){try{tsToken=turnstile.getResponse(tsId)||''}catch(_){}} return tsToken; }
     function post(){
       body.captcha=tok();
       var ctl=('AbortController' in window)?new AbortController():null;
-      setTimeout(function(){ if(ctl)ctl.abort(); go(); },3000);               // 3 s fallback: never lose the lead's WhatsApp/email
+      setTimeout(function(){ if(ctl)ctl.abort(); go(); },2500);               // fallback: never lose the lead's WhatsApp/email
       fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true,signal:ctl?ctl.signal:undefined})
-        .then(function(){go()}).catch(function(){go()});
+        .then(function(r){saved=r.ok;go()}).catch(function(){go()});
     }
-    var t0=Date.now(); (function wait(){ if(tok()||Date.now()-t0>8000||!/^0x/.test(SITEKEY)) post(); else setTimeout(wait,150); })();
+    var t0=Date.now(); (function wait(){ if(tok()||Date.now()-t0>4000||!/^0x/.test(SITEKEY)) post(); else setTimeout(wait,150); })();
     return false;
   };
 })();
