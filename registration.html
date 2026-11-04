@@ -12,7 +12,7 @@ if(!window.DFA_LIVE&&!d)window['ga-disable-G-L3X22MD03E']=true;})();
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-L3X22MD03E"></script>
 <script>gtag('js',new Date());gtag('config','G-L3X22MD03E',window.DFA_DEBUG?{debug_mode:true}:{});</script>
 <script src="/assets/dfa-consent.js?v=1" defer></script>
-<script src="/assets/dfa-track.js?v=3" defer></script><meta name="referrer" content="strict-origin-when-cross-origin"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/assets/dfa-track.js?v=4" defer></script><meta name="referrer" content="strict-origin-when-cross-origin"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Registration &amp; Free Demo: Deutsch Für Alle</title>
 <meta name="description" content="Deutsch Für Alle (DFA): live online German classes on Zoom, A1 to A2, with Goethe and ÖSD exam preparation.">
 <link rel="icon" href="assets/favicon.png" sizes="48x48"><link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
@@ -65,10 +65,7 @@ if(!window.DFA_LIVE&&!d)window['ga-disable-G-L3X22MD03E']=true;})();
     var dest = via==='wa' && wa ? wa.href.split('?')[0]+'?text='+encodeURIComponent(txt)
              : 'mailto:contact.deutschfuralle@gmail.com?subject='+encodeURIComponent('DFA Registration: '+g('c'))+'&body='+encodeURIComponent(txt);
     var gone=false; function go(){ if(gone)return; gone=true; if(window.DFATrack)DFATrack.suppressWa(); location.href=dest; }
-    // leave the page only when the lead is saved (or failed) AND the GA4 hit has gone out (max 1.5 s); 3 s overall fallback below
-    var saved=false, counted=false; function ready(){ if(saved&&counted) go(); }
-    function hitDone(){ counted=true; ready(); }
-    if(window.DFATrack) DFATrack.lead({form:'registration',method:via,course:g('c'),timing:g('t'),event_id:eid,cb:hitDone,max:1500}); else hitDone();
+    if(window.DFATrack) DFATrack.lead({form:'registration',method:via,course:g('c'),timing:g('t'),event_id:eid});
     var body={action:'register',name:g('n'),phone:g('p'),course:g('c'),timing:g('t'),message:g('m'),via:via,
       consent:document.getElementById('rc').checked,consent_text:'I agree that DFA may contact me about courses',
       captcha:tsToken,hp:document.getElementById('reg-hp').value,page:location.pathname,event_id:eid,
@@ -76,7 +73,7 @@ if(!window.DFA_LIVE&&!d)window['ga-disable-G-L3X22MD03E']=true;})();
     var ctl=('AbortController' in window)?new AbortController():null;
     setTimeout(function(){ if(ctl)ctl.abort(); go(); },3000);                 // 3 s fallback: never lose the lead's WhatsApp/email
     fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true,signal:ctl?ctl.signal:undefined})
-      .then(function(){saved=true;ready()}).catch(function(){saved=true;ready()});
+      .then(function(){go()}).catch(function(){go()});
     return false;
   };
 })();
