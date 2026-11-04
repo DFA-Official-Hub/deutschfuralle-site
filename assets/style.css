@@ -530,14 +530,14 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 .mk-teach{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #e6ece8}.mk-teach span{flex:1 1 220px;font-weight:600}
 .mk-card.pic .mk-emo{font-size:4.2rem}
 
-/* Consent banner v2: one primary (brand green, #04170e on #4ade6b = 11.1:1), one clearly visible outline secondary (#0d1712 on #fff = 18.6:1). Both one click, native buttons. */
-#dfa-cc{position:fixed;left:1rem;right:1rem;bottom:1rem;z-index:9999;max-width:640px;margin:auto;background:#fff;color:#111;border:1px solid #ddd;border-radius:12px;padding:1rem 1.1rem;box-shadow:0 6px 24px rgba(0,0,0,.15);font-size:.95rem;line-height:1.5}
-#dfa-cc p{margin:0 0 .85rem;color:#1f2a24}#dfa-cc p strong{display:block;color:#0d1712;font-size:1.02rem;margin-bottom:.2rem}#dfa-cc a{color:#17602a;text-decoration:underline}
-#dfa-cc .dfa-cc-btns{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
-#dfa-cc button{font:inherit;font-weight:700;font-size:.95rem;min-height:44px;padding:10px 18px;border-radius:999px;cursor:pointer;margin:0;line-height:1.2}
+/* Consent banner v2 (compact): primary brand green (#04170e on #4ade6b = 11.1:1), outline secondary (#0d1712 on #fff = 18.6:1). Both one click, native buttons. */
+#dfa-cc{position:fixed;left:1rem;right:1rem;bottom:1rem;z-index:9999;max-width:640px;margin:auto;background:#fff;color:#111;border:1px solid #ddd;border-radius:12px;padding:.75rem .9rem;box-shadow:0 6px 24px rgba(0,0,0,.15);font-size:.95rem;line-height:1.45;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+#dfa-cc p{margin:0;flex:1 1 220px;color:#1f2a24}#dfa-cc a{color:#17602a;text-decoration:underline}
+#dfa-cc .dfa-cc-btns{display:flex;gap:.5rem;justify-content:flex-end;flex:0 0 auto}
+#dfa-cc button{font:inherit;font-weight:700;font-size:.95rem;min-height:44px;padding:9px 18px;border-radius:999px;cursor:pointer;margin:0;line-height:1.2}
 #dfa-cc .dfa-cc-ok{background:#4ade6b;color:#04170e;border:2px solid #4ade6b}#dfa-cc .dfa-cc-ok:hover{background:#3cc95c;border-color:#3cc95c}
 #dfa-cc .dfa-cc-ess{background:#fff;color:#0d1712;border:2px solid #0d1712}#dfa-cc .dfa-cc-ess:hover{background:#f1f4f2}
 #dfa-cc button:focus-visible{outline:3px solid #17602a;outline-offset:2px}
 @media (max-width:1000px){#dfa-cc{bottom:92px}}/* sit above the floating WhatsApp button (right:22px;bottom:22px;58px) */
-@media (max-width:480px){#dfa-cc{left:.75rem;right:.75rem;padding:.9rem}#dfa-cc .dfa-cc-btns button{flex:1 1 auto}}
+@media (max-width:480px){#dfa-cc{left:.75rem;right:.75rem}#dfa-cc .dfa-cc-btns{flex:1 1 100%}#dfa-cc .dfa-cc-btns button{flex:1 1 0}}
 #regform .chk{display:flex;flex-direction:row;gap:10px;align-items:flex-start;font-weight:400;line-height:1.5}#regform .chk input{width:20px;min-height:20px;height:20px;margin:3px 0 0;flex:none}#reg-ts{min-height:65px}
