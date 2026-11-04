@@ -27,13 +27,20 @@
   var suppressUntil=0;
   function uuid(){return (crypto.randomUUID&&crypto.randomUUID())||String(Date.now())+Math.random().toString(16).slice(2)}
   // gtag reserves the key `event_id` and strips it from GA4 hits, so the same UUID is also sent as `dfa_event_id`
-  // (register that one as the event-scoped custom dimension). cb: called once the hit is handed off (or after 1 s).
-  function ga(n,p,cb){ p=p||{}; if(p.event_id)p.dfa_event_id=p.event_id; if(cb){p.event_callback=cb;p.event_timeout=1000;} if(window.gtag) gtag('event',n,p); else if(cb) cb(); }
+  // (register that one as the event-scoped custom dimension).
+  function ga(n,p){ p=p||{}; if(p.event_id)p.dfa_event_id=p.event_id; if(window.gtag) gtag('event',n,p); }
+  // gtag batches events (~1 s) and calls event_callback before the hit leaves, and a same-tab navigation drops the batch.
+  // sent(cb,max): cb runs once a GA4 /g/collect request started after this call has gone out, or after max ms.
+  function sent(cb,max){ var t0=performance.now(),done=false,ob=null; function fin(){ if(done)return; done=true; try{ob&&ob.disconnect()}catch(e){} cb(); }
+    if(!window.gtag||window['ga-disable-G-L3X22MD03E']||!('PerformanceObserver' in window)){ setTimeout(fin,0); return; }
+    try{ ob=new PerformanceObserver(function(l){ l.getEntries().forEach(function(e){ if(e.startTime>=t0&&/\/g\/collect/.test(e.name))fin(); }); }); ob.observe({type:'resource',buffered:false}); }catch(e){}
+    setTimeout(fin,max||1500); }
   function px(n,p,eid){ if(window.fbq&&window.DFAConsent&&DFAConsent.granted()) fbq('track',n,p||{},{eventID:eid}); }
   window.DFATrack={
-    lead:function(o){ var eid=o.event_id||uuid(); ga('generate_lead',{form:o.form,method:o.method||'',course:o.course||'',timing:o.timing||'',event_id:eid},o.cb);
+    lead:function(o){ var eid=o.event_id||uuid(); ga('generate_lead',{form:o.form,method:o.method||'',course:o.course||'',timing:o.timing||'',event_id:eid}); if(o.cb)sent(o.cb,o.max);
                       px('Lead',{content_name:o.course||o.form,content_category:o.form},eid); return eid; },
-    suppressWa:function(){ suppressUntil=Date.now()+5000; }
+    suppressWa:function(){ suppressUntil=Date.now()+5000; },
+    sent:sent
   };
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[href]'); if(!a)return; var h=a.href, loc=a.closest('footer')?'footer':a.closest('header,nav')?'header':'body';
