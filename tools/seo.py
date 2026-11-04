@@ -18,14 +18,15 @@ EMAIL = 'contact.deutschfuralle@gmail.com'
 # Never indexed, never in the sitemap: private apps, redirects, utility pages.
 PRIVATE = {'admin.html', 'portal.html', 'reader.html', 'doc.html', 'verify.html', 'account.html', '404.html',
            'kids-books.html', 'whatsapp.html'}
-NOINDEX_ADD = {'account.html', '404.html'}          # had no robots meta before
+NOINDEX_ADD = {'account.html', '404.html', 'kids-books.html'}  # had no robots meta before
+SHORT_SUB = {'Rainbow and Weather Words in German for Kids': 'Weather Words in German for Kids'}  # keeps book titles <= 60 chars
 SKIP = {'links/index.html'}                          # copy of the dfa-links hub, its own canonical; left alone
 
 TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'index.html': ('Online German Classes in Pakistan | Deutsch Für Alle',
    'Learn German live on Zoom in small groups of 2 to 4. A1 and A2 courses with Goethe and ÖSD exam prep, taught from Germany and Pakistan. Book a free demo.'),
  'courses.html': ('German Language Course Fees & A1–A2 Classes | DFA',
-   'Live online German courses from Rs. 15,000: A1 crash, intensive and normal tracks, A2, and an A1 + A2 combo. Netzwerk Neu books, recordings and exam prep.'),
+   'Live online German courses from Rs. 15,000: A1 crash, intensive and normal tracks, A2, and an A1 + A2 combo. Course books, recordings and exam prep.'),
  'exam-prep.html': ('Free Goethe A1 Mock Test Online (Start Deutsch 1) | DFA',
    "Take a full A1 practice exam in the Goethe Start Deutsch 1 format for free: Hören with audio, Lesen, Schreiben and Sprechen. Timed and marked instantly."),
  'registration.html': ('Register or Book a Free German Demo Class | DFA',
@@ -41,7 +42,8 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'careers.html': ('Careers – Teach German with Deutsch Für Alle',
    'Are you a German teacher, or want to help our students? Join the small Deutsch Für Alle team. Send your CV and a short note, and we will get back to you.'),
  'privacy.html': (None, None),  # already good
- 'books/a1-workbook.html': ('German A1 Workbook with Answers (PDF & Paperback)', None),
+ 'books/a1-workbook.html': ('German A1 Workbook with Answers (PDF & Paperback)',
+   'German A1 workbook: 9 units, 150+ exercises, review test and answer key. Paperback and Kindle on Amazon, PDF on Etsy and Gumroad.'),
 }
 
 ORG_ID = SITE + '/#organization'
@@ -139,6 +141,9 @@ def head_block(rel, title, desc, graph, ogtype='website'):
 
 def main():
     files = sorted(str(p.relative_to(ROOT)) for p in [*ROOT.glob('*.html'), *ROOT.glob('books/*.html')])
+    lk = ROOT / 'links/index.html'; ls = lk.read_text(encoding='utf-8')
+    if 'name="robots"' not in ls:   # short hub page that refreshes to the dfa-links site: keep it out of the index
+        lk.write_text(ls.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="robots" content="noindex">', 1), encoding='utf-8'); print('updated links/index.html')
     public = []
     for rel in files:
         p = ROOT / rel; s = p.read_text(encoding='utf-8'); o = s
@@ -151,9 +156,16 @@ def main():
             s = s.replace('<meta name="viewport"', '<meta name="robots" content="noindex">' + '<meta name="viewport"', 1)
         if rel == 'kids-books.html':
             s = s.replace(SITE + '/books.html', SITE + '/books')
+        if rel.startswith('books/') or rel == 'verify.html':   # last .html hrefs on public pages; site.js/dfa-auth.js handle /account
+            s = s.replace('href="../account.html"', 'href="/account"').replace('href="account.html"', 'href="/account"')
+        if rel == 'contact.html':      # card titles become H2s with the same look (.cn, see style.css)
+            s = re.sub(r'<div class="card"><h3>(WhatsApp|Email|Instagram)</h3>', r'<div class="card"><h2 class="cn">\1</h2>', s)
+        if rel == 'exam-prep.html':
+            s = s.replace('<div class="mk-cta ac-card"><h3>Want a teacher to check your writing and speaking?</h3>',
+                          '<div class="mk-cta ac-card"><h2 class="cn">Want a teacher to check your writing and speaking?</h2>')
         if rel == 'courses.html':
-            s = s.replace('<h3 style="margin-top:10px">', '<h2 class="cn">')
-            s = re.sub(r'(<h2 class="cn">[^<]*)</h3>', r'\1</h2>', s)
+            s = s.replace('<h3 style="margin-top:10px">', '<h2 class="cn" style="margin-top:10px">')
+            s = re.sub(r'(<h2 class="cn"[^>]*>[^<]*)</h3>', r'\1</h2>', s)
         noindex = re.search(r'<meta name="robots" content="[^"]*noindex', s)
         if rel not in PRIVATE and not noindex:
             public.append(rel)
@@ -163,7 +175,10 @@ def main():
             ogtype = 'website'
             if rel.startswith('books/'):
                 b, name, sub = book(s, rel, desc); graph.append(b); ogtype = 'book'
-                if not t_new: t_new = f'{sub} – {name} Book'
+                if not t_new:
+                    t_new = f'{sub} – {name} Book'
+                    if len(t_new) > 60: t_new = f'{sub} – {name}'
+                    if len(t_new) > 60: t_new = f'{SHORT_SUB.get(sub, sub)} – {name}'
             if rel == 'courses.html': graph += courses(s)
             if rel in ('index.html', 'resources.html'): graph.append(faq(s, rel))
             if rel == 'index.html':
@@ -171,6 +186,7 @@ def main():
             if t_new: s = re.sub(r'<title>.*?</title>', lambda m: f'<title>{html.escape(t_new, quote=False)}</title>', s, count=1)
             if d_new: s = re.sub(r'<meta name="description" content="[^"]*">', lambda m: f'<meta name="description" content="{attr(d_new)}">', s, count=1)
             title = html.unescape(re.search(r'<title>(.*?)</title>', s).group(1))
+            assert len(title) <= 60, (rel, len(title), title)
             s = re.sub(r'\n?<!--seo-->.*?<!--/seo-->', '', s, flags=re.S)
             s = re.sub(r'<link rel="canonical"[^>]*>\n?', '', s)
             blk = head_block(rel, title, desc, graph, ogtype)
