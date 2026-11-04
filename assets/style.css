@@ -529,3 +529,8 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 .mk-load{display:flex;align-items:center;gap:10px;padding:12px 0;color:#3c4a42}.mk-spin{width:20px;height:20px;border:3px solid #dfe8e2;border-top-color:var(--g);border-radius:50%;animation:mkspin .8s linear infinite}@keyframes mkspin{to{transform:rotate(360deg)}}
 .mk-teach{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #e6ece8}.mk-teach span{flex:1 1 220px;font-weight:600}
 .mk-card.pic .mk-emo{font-size:4.2rem}
+
+/* Cookie consent banner (assets/dfa-consent.js). Fixed position, so it causes no layout shift. */
+#dfa-cc{position:fixed;left:1rem;right:1rem;bottom:1rem;z-index:9999;max-width:640px;margin:auto;background:#fff;color:#111;border:1px solid #ddd;border-radius:12px;padding:1rem;box-shadow:0 6px 24px rgba(0,0,0,.15)}
+#dfa-cc .dfa-cc-btns{display:flex;gap:.5rem;justify-content:flex-end}#dfa-cc .btn{min-width:7rem}
+#regform .chk{display:flex;flex-direction:row;gap:10px;align-items:flex-start;font-weight:400;line-height:1.5}#regform .chk input{width:20px;min-height:20px;height:20px;margin:3px 0 0;flex:none}#reg-ts{min-height:65px}
