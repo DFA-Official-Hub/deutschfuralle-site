@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
+import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 // Deutsch Für Alle – login security: lockout, device check, email codes, login history, alerts, reports, uptime.
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
@@ -25,13 +26,55 @@ function textToHtml(text: string) {
   const linked = esc.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
   return `<!DOCTYPE html><html><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.55;color:#0d1712;max-width:640px;margin:0 auto;padding:16px"><div style="white-space:pre-wrap">${linked}</div><p style="margin-top:24px;font-size:13px;color:#5d6b63">Deutsch Für Alle · <a href="https://www.deutschfuralle.com">deutschfuralle.com</a></p></body></html>`;
 }
-async function send(to: string | string[], subject: string, text: string) {
-  // Security emails always go out when SMTP is configured (independent of the admissions email switch).
-  if (!env("ADMISSION_SMTP_PASS")) return "nosmtp";
+type SendOpts = { idempotencyKey?: string; listUnsubscribe?: boolean };
+const RESEND_FROM = () => env("RESEND_FROM") || "Deutsch Für Alle <admission@mail.deutschfuralle.com>";
+const RESEND_REPLY = () => env("RESEND_REPLY_TO") || "admission.deutschfuralle@gmail.com";
+/** SMTP fallback until 2026-11-12. Set RESEND_SMTP_FALLBACK=off to disable early. TODO(2026-11-12): remove nodemailer + ADMISSION_SMTP_* after one stable week on Resend. */
+function smtpFallbackOn() { return env("RESEND_SMTP_FALLBACK") !== "off"; }
+function mailReady() { return !!(env("RESEND_API_KEY") || env("ADMISSION_SMTP_PASS")); }
+async function sendViaSmtp(to: string | string[], subject: string, text: string, opts: SendOpts) {
   const user = env("ADMISSION_SMTP_USER") || "admission.deutschfuralle@gmail.com";
-  const t = nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass: env("ADMISSION_SMTP_PASS") } });
-  await t.sendMail({ from: `"Deutsch Für Alle" <${user}>`, replyTo: "admission.deutschfuralle@gmail.com", to, subject, text, html: textToHtml(text) });
-  return "sent";
+  const transport = nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass: env("ADMISSION_SMTP_PASS") } });
+  const headers: Record<string, string> = {};
+  if (opts.listUnsubscribe) headers["List-Unsubscribe"] = "<mailto:admission.deutschfuralle@gmail.com?subject=unsubscribe>";
+  await transport.sendMail({ from: `"Deutsch Für Alle" <${user}>`, replyTo: RESEND_REPLY(), to, subject, text, html: textToHtml(text), headers });
+  return "sent" as const;
+}
+async function sendViaResend(to: string | string[], subject: string, text: string, opts: SendOpts) {
+  const key = env("RESEND_API_KEY");
+  if (!key) throw new Error("RESEND_API_KEY missing");
+  const recipients = Array.isArray(to) ? to : [to];
+  const body: Record<string, unknown> = {
+    from: RESEND_FROM(),
+    to: recipients,
+    subject,
+    text,
+    html: textToHtml(text),
+    reply_to: RESEND_REPLY(),
+  };
+  if (opts.listUnsubscribe) {
+    body.headers = { "List-Unsubscribe": "<mailto:admission.deutschfuralle@gmail.com?subject=unsubscribe>" };
+  }
+  const headers: Record<string, string> = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  if (opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey.slice(0, 256);
+  const res = await fetch("https://api.resend.com/emails", { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = (await res.text()).replace(key, "[redacted]").slice(0, 400);
+    throw new Error(`Resend ${res.status}: ${err}`);
+  }
+  return "sent" as const;
+}
+async function send(to: string | string[], subject: string, text: string, opts: SendOpts = {}) {
+  // Security emails always go out when Resend or SMTP is configured (independent of the admissions email switch).
+  if (!mailReady()) return "nosmtp";
+  if (env("RESEND_API_KEY")) {
+    try { return await sendViaResend(to, subject, text, opts); }
+    catch (x) {
+      if (smtpFallbackOn() && env("ADMISSION_SMTP_PASS")) return await sendViaSmtp(to, subject, text, opts);
+      throw x;
+    }
+  }
+  return await sendViaSmtp(to, subject, text, opts);
 }
 const SIGN = "\n\nKind regards,\nDeutsch Für Alle\n" + SITE;
 const mask = (e: string) => e.replace(/^(.)(.*)(.@.*)$/, (_m, a, b, c) => a + "*".repeat(Math.min(b.length, 6)) + c);
@@ -57,7 +100,8 @@ async function newCode(db: any, user: any, sid: string | null, why: string) {
   await db.from("email_codes").update({ used: true }).eq("user_id", user.id).eq("used", false);
   await db.from("email_codes").insert({ user_id: user.id, session_id: sid, code_hash: await sha(user.id + ":" + code), purpose: "login", expires_at: new Date(Date.now() + CODE_MIN * 60e3).toISOString() });
   const r = await send(user.email, `Your Deutsch Für Alle sign-in code: ${code}`,
-    `Hello,\n\n${why}\n\nYour sign-in code is: ${code}\n\nEnter it on the website to finish signing in. The code is valid for ${CODE_MIN} minutes.\n\nIf this was not you, please do not share the code with anyone and change your password right away at ${SITE}/account.html.` + SIGN);
+    `Hello,\n\n${why}\n\nYour sign-in code is: ${code}\n\nEnter it on the website to finish signing in. The code is valid for ${CODE_MIN} minutes.\n\nIf this was not you, please do not share the code with anyone and change your password right away at ${SITE}/account.html.` + SIGN,
+    { idempotencyKey: `signin-code/${user.id}/${Date.now()}` });
   return r;
 }
 async function trust(db: any, user: any, sid: string, dev: string, role: string, ev: any, wasKnown: boolean) {
@@ -100,7 +144,7 @@ Deno.serve(async (req) => {
         const nd = (await db.from("auth_devices").select("user_id", { count: "exact", head: true }).gte("first_seen", since)).count || 0;
         const text = `Hello,\n\nHere is the security summary for www.deutschfuralle.com for the last 30 days.\n\nSuccessful sign-ins: ${c.login_ok || 0}\nFailed sign-ins: ${c.login_fail || 0}\nTemporary lockouts: ${c.lockout || 0}\nNew devices registered: ${nd}\nDevices refused (limit of ${MAX_DEVICES} reached): ${c.device_blocked || 0}\nSign-in codes confirmed / wrong: ${c.code_ok || 0} / ${c.code_fail || 0}\nSign-ups blocked (bot check, temporary email, rate limit): ${c.signup_blocked || 0}\nPassword changes: ${c.pw_changed || 0}\nSign-in countries: ${[...countries].join(", ") || "unknown"}\n\nAccounts with the most failed sign-ins:\n${top}\n\nFull login history: ${SITE}/admin.html#security` + SIGN;
         const to = await adminEmails(db);
-        const r = to.length ? await send(to, `DFA monthly security report – ${new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Asia/Karachi" })}`, text) : "no admins";
+        const r = to.length ? await send(to, `DFA monthly security report – ${new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Asia/Karachi" })}`, text, { listUnsubscribe: true, idempotencyKey: `security-report/${new Date().toISOString().slice(0,7)}` }) : "no admins";
         return json({ ok: true, email: r, counts: c });
       }
       if (body.action === "uptime") {
@@ -122,6 +166,17 @@ Deno.serve(async (req) => {
               : `Hello,\n\nGood news: www.deutschfuralle.com is reachable again (checked ${pkTime()}).` + SIGN);
         }
         return json({ ok: true, up: ok, why, state: next, mail: mail || null });
+      }
+      if (body.action === "deliverability_test") {
+        const to = String(body.to || "").trim().toLowerCase();
+        const allow = to === "contact.deutschfuralle@gmail.com" || to.endsWith("@mail-tester.com") || to.endsWith(".mail-tester.com");
+        if (!allow) return json({ error: "deliverability_test only allows contact.deutschfuralle@gmail.com or mail-tester.com" }, 400);
+        // Sign-in-code style (no List-Unsubscribe). Fake code — not usable.
+        const code = "000000";
+        const r = await send(to, `Your Deutsch Für Alle sign-in code: ${code}`,
+          `Hello,\n\n(This is a deliverability test for the Deutsch Für Alle sign-in code email. No account action is required.)\n\nYour sign-in code is: ${code}\n\nEnter it on the website to finish signing in. The code is valid for ${CODE_MIN} minutes.\n\nIf this was not you, please do not share the code with anyone and change your password right away at ${SITE}/account.html.` + SIGN,
+          { idempotencyKey: `security-deliverability/${to}/${Date.now()}` });
+        return json({ ok: true, email: r, to, kind: "signin_code_test" });
       }
       return json({ error: "unknown action" }, 400);
     }

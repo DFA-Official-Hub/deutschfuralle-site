@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
 import { confirmation, welcome, reminder, docsMail, receiptMail, type FeeInfo } from "./templates.ts";
-import { decodeBase64 } from "jsr:@std/encoding@1/base64";
+import { decodeBase64, encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { certificateUrls, certificatePdfUrls } from "./render.ts";
 import { buildOne, signed, buildPaymentReceipt, fileBytes, docData, warmDocAssets } from "./docs.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
@@ -11,7 +11,7 @@ const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: 
 const env = (k: string) => Deno.env.get(k) || "";
 let CUR: any = null; // service-role client of the current request
 async function sendingOn() {
-  if (!env("ADMISSION_SMTP_PASS")) return false;
+  if (!env("RESEND_API_KEY") && !env("ADMISSION_SMTP_PASS")) return false;
   if (env("SEND_EMAILS") === "on") return true;
   if (env("SEND_EMAILS") === "off_forced") return false;
   const { data } = await CUR.from("site_settings").select("value").eq("key", "send_emails").maybeSingle();
@@ -97,7 +97,7 @@ async function runReminders(db: any) {
     const stage = t >= addD(due, 3) ? 3 : t >= due ? 2 : t >= addD(due, -3) ? 1 : 0;
     if (!stage || stage <= e.reminder_stage) continue;
     const m = reminder(stage, feeInfo(e));
-    try { const r = await send(e.email, m.subject, m.text, [await qrAttachment(db)]); await logMail(db, e, "reminder-" + stage, ["reminder"], r, null); if (r === "sent") await db.from("enrollments").update({ reminder_stage: stage }).eq("id", e.id); out.push({ id: e.id, stage, r }); }
+    try { const r = await send(e.email, m.subject, m.text, [await qrAttachment(db)], { listUnsubscribe: true, idempotencyKey: `reminder/${e.id}/${stage}/${t}` }); await logMail(db, e, "reminder-" + stage, ["reminder"], r, null); if (r === "sent") await db.from("enrollments").update({ reminder_stage: stage }).eq("id", e.id); out.push({ id: e.id, stage, r }); }
     catch (x) { await logMail(db, e, "reminder-" + stage, ["reminder"], "error", null, String((x as Error).message || x)); out.push({ id: e.id, stage, error: true }); }
   }
   return { ok: true, today: t, sent: out };
@@ -107,20 +107,73 @@ function textToHtml(text: string) {
   const linked = esc.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
   return `<!DOCTYPE html><html><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.55;color:#0d1712;max-width:640px;margin:0 auto;padding:16px"><div style="white-space:pre-wrap">${linked}</div><p style="margin-top:24px;font-size:13px;color:#5d6b63">Deutsch Für Alle · <a href="https://www.deutschfuralle.com">deutschfuralle.com</a></p></body></html>`;
 }
-async function send(to: string, subject: string, text: string, attachments: { filename: string; content: Uint8Array; contentType: string }[] = []) {
-  if (!(await sendingOn())) return "off";
+type MailAtt = { filename: string; content: Uint8Array; contentType?: string };
+type SendOpts = { idempotencyKey?: string; listUnsubscribe?: boolean };
+const RESEND_FROM = () => env("RESEND_FROM") || "Deutsch Für Alle <admission@mail.deutschfuralle.com>";
+const RESEND_REPLY = () => env("RESEND_REPLY_TO") || "admission.deutschfuralle@gmail.com";
+/** SMTP fallback until 2026-11-12. Set RESEND_SMTP_FALLBACK=off to disable early. TODO(2026-11-12): remove nodemailer + ADMISSION_SMTP_* after one stable week on Resend. */
+function smtpFallbackOn() { return env("RESEND_SMTP_FALLBACK") !== "off"; }
+async function sendViaSmtp(to: string, subject: string, text: string, attachments: MailAtt[], opts: SendOpts) {
   const user = env("ADMISSION_SMTP_USER") || "admission.deutschfuralle@gmail.com";
-  const t = nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass: env("ADMISSION_SMTP_PASS") } });
-  await t.sendMail({
+  const transport = nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass: env("ADMISSION_SMTP_PASS") } });
+  const headers: Record<string, string> = {};
+  if (opts.listUnsubscribe) headers["List-Unsubscribe"] = "<mailto:admission.deutschfuralle@gmail.com?subject=unsubscribe>";
+  await transport.sendMail({
     from: `"Deutsch Für Alle" <${user}>`,
-    replyTo: "admission.deutschfuralle@gmail.com",
+    replyTo: RESEND_REPLY(),
     to,
     subject,
     text,
     html: textToHtml(text),
-    attachments: attachments.map((a) => ({ ...a, content: a.content })),
+    attachments: attachments.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
+    headers,
   });
-  return "sent";
+  return "sent" as const;
+}
+async function sendViaResend(to: string, subject: string, text: string, attachments: MailAtt[], opts: SendOpts) {
+  const key = env("RESEND_API_KEY");
+  if (!key) throw new Error("RESEND_API_KEY missing");
+  const body: Record<string, unknown> = {
+    from: RESEND_FROM(),
+    to: [to],
+    subject,
+    text,
+    html: textToHtml(text),
+    reply_to: RESEND_REPLY(),
+  };
+  if (attachments.length) {
+    body.attachments = attachments.map((a) => ({
+      filename: a.filename,
+      content: encodeBase64(a.content),
+      ...(a.contentType ? { content_type: a.contentType } : {}),
+    }));
+  }
+  if (opts.listUnsubscribe) {
+    body.headers = { "List-Unsubscribe": "<mailto:admission.deutschfuralle@gmail.com?subject=unsubscribe>" };
+  }
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+  };
+  if (opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey.slice(0, 256);
+  const res = await fetch("https://api.resend.com/emails", { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = (await res.text()).replace(key, "[redacted]").slice(0, 400);
+    throw new Error(`Resend ${res.status}: ${err}`);
+  }
+  return "sent" as const;
+}
+async function send(to: string, subject: string, text: string, attachments: MailAtt[] = [], opts: SendOpts = {}) {
+  if (!(await sendingOn())) return "off";
+  if (env("RESEND_API_KEY")) {
+    try { return await sendViaResend(to, subject, text, attachments, opts); }
+    catch (x) {
+      if (smtpFallbackOn() && env("ADMISSION_SMTP_PASS")) return await sendViaSmtp(to, subject, text, attachments, opts);
+      throw x;
+    }
+  }
+  if (env("ADMISSION_SMTP_PASS")) return await sendViaSmtp(to, subject, text, attachments, opts);
+  return "off";
 }
 /** Resolve student phone from registration_details / profiles and persist on enrollments.phone. */
 async function fillEnrollmentPhone(db: any, id: number) {
@@ -379,7 +432,7 @@ Deno.serve(async (req) => {
       if (!s?.value || s.value !== ct) return json({ error: "forbidden" }, 403);
       if (body.action === "reminders") { try { await cleanupDocJobs(db, 30); } catch (_) {} return json(await runReminders(db)); }
       if (body.action === "resend") { const r: any = await resendDocs(db, Number(body.id), Array.isArray(body.items) ? body.items.map(String) : [], null); return json(r, r.code || 200); }
-            if (body.action === "status") return json({ sending: (await sendingOn()) ? "on" : "off", smtp: !!env("ADMISSION_SMTP_PASS") });
+            if (body.action === "status") return json({ sending: (await sendingOn()) ? "on" : "off", resend: !!env("RESEND_API_KEY"), smtp: !!env("ADMISSION_SMTP_PASS"), smtp_fallback: smtpFallbackOn() });
       if (body.action === "deliverability_test") {
         const to = String(body.to || "").trim().toLowerCase();
         const allow = to === "contact.deutschfuralle@gmail.com" || to.endsWith("@mail-tester.com") || to.endsWith(".mail-tester.com");
@@ -389,7 +442,7 @@ Deno.serve(async (req) => {
         // Body is full text (not link/attachment-only). Tiny text attachment proves multipart still has text/html body.
         const note = new TextEncoder().encode("Deutsch Für Alle — test attachment for deliverability check. This email also has a full plain-text and HTML body.\n");
         try {
-          const r = await send(to, m.subject, m.text + "\n\n(This is a deliverability test message for Deutsch Für Alle. No student action is required.)", [{ filename: "dfa-deliverability-note.txt", content: note, contentType: "text/plain" }]);
+          const r = await send(to, m.subject, m.text + "\n\n(This is a deliverability test message for Deutsch Für Alle. No student action is required.)", [{ filename: "dfa-deliverability-note.txt", content: note, contentType: "text/plain" }], { idempotencyKey: `deliverability/${to}/${Date.now()}` });
           return json({ ok: true, email: r, to, subject: m.subject });
         } catch (x) { return json({ error: "Sending failed: " + String((x as Error).message || x) }, 500); }
       } if (body.action === "render_test") { const e = (await db.from("enrollments").select(ENR_SEL).eq("id", Number(body.id)).maybeSingle()).data; const t0 = Date.now(); const r = await buildOne(db, e, body.kind === "receipt" ? "receipt" : "admission", true); return json({ ok: true, ms: Date.now() - t0, bytes: r.bytes.length }); }
@@ -403,7 +456,7 @@ Deno.serve(async (req) => {
         try { await buildOne(db, e, kind); return json({ ok: true, kind }); }
         catch (x) { const m = String((x as Error).message || x).slice(0, 300); await db.from("enrollments").update({ docs_error: m }).eq("id", e.id); return json({ error: m }, 500); }
       }
-      if (body.action === "settings_get") { const se = (await db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle()).data; return json({ certificates: await imagesOn(db), emails: se?.value === "on", smtp: !!env("ADMISSION_SMTP_PASS"), forced: env("SEND_EMAILS") || null }); }
+      if (body.action === "settings_get") { const se = (await db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle()).data; return json({ certificates: await imagesOn(db), emails: se?.value === "on", resend: !!env("RESEND_API_KEY"), smtp: !!env("ADMISSION_SMTP_PASS"), smtp_fallback: smtpFallbackOn(), forced: env("SEND_EMAILS") || null }); }
       if (body.action === "cleanup_doc_jobs") return json(await cleanupDocJobs(db, Number(body.days) > 0 ? Number(body.days) : 30));
       if (body.action === "put_internal_file") {
         const path = String(body.path || "");
@@ -572,7 +625,7 @@ Deno.serve(async (req) => {
       const d = docData(e, null, null);
       const m = welcome(e.full_name, e.courses?.name || e.course_label || "your course", fmt(e.start_date), fmt(e.end_date), { fee: String(d.feeText).replace(/ \(.*$/, ""), studentId: e.student_id, invoiceNo: e.invoice_no, batch: e.batch_code, courseEnd: d.end, paid: pkr(e.amount_paid), balance: e.balance_due > 0 ? pkr(e.balance_due) : "", due: e.due_date ? fmt(e.due_date) : "the date we agreed" });
       const att = [{ filename: `DFA Confirmation of Registration ${e.student_id}.pdf`, content: await fileBytes(db, "documents", e.admission_file), contentType: "application/pdf" }, { filename: `DFA Fee Receipt ${e.invoice_no}.pdf`, content: await fileBytes(db, "documents", e.receipt_file), contentType: "application/pdf" }];
-      let r = "off"; try { r = await send(e.email, m.subject, m.text, att); } catch (x) { await logMail(db, e, "welcome", ["admission", "receipt"], "error", u.user.id, String((x as Error).message || x)); return json({ error: "Sending failed: " + String((x as Error).message || x) }, 500); }
+      let r = "off"; try { r = await send(e.email, m.subject, m.text, att, { idempotencyKey: `welcome/${e.id}/${e.invoice_no || e.id}` }); } catch (x) { await logMail(db, e, "welcome", ["admission", "receipt"], "error", u.user.id, String((x as Error).message || x)); return json({ error: "Sending failed: " + String((x as Error).message || x) }, 500); }
       if (r === "sent") { await db.from("enrollments").update({ welcome_sent_at: new Date().toISOString() }).eq("id", id); await logMail(db, e, "welcome", ["admission", "receipt"], "sent", u.user.id); }
       return json({ ok: true, email: r });
     }
@@ -600,7 +653,7 @@ Deno.serve(async (req) => {
       try { return json({ ok: true, ...(body.fmt === "pdf" ? await certificatePdfUrls(db, e) : await certificateUrls(db, e)), public: await imagesOn(db), code: e.certificate_code, no: e.certificate_no, name: e.full_name }); } catch (x) { return json({ error: "Could not create the certificate image: " + String((x as Error).message || x) }, 500); }
     }
     if (body.action === "cert_images_status") return json({ public: await imagesOn(db) });
-    if (body.action === "settings_get") { const se = (await db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle()).data; return json({ certificates: await imagesOn(db), emails: se?.value === "on", smtp: !!env("ADMISSION_SMTP_PASS"), forced: env("SEND_EMAILS") || null }); }
+    if (body.action === "settings_get") { const se = (await db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle()).data; return json({ certificates: await imagesOn(db), emails: se?.value === "on", resend: !!env("RESEND_API_KEY"), smtp: !!env("ADMISSION_SMTP_PASS"), smtp_fallback: smtpFallbackOn(), forced: env("SEND_EMAILS") || null }); }
     if (body.action === "set_emails") { const v = body.on ? "on" : "off"; await db.from("site_settings").upsert({ key: "send_emails", value: v, updated_at: new Date().toISOString() }); return json({ ok: true, emails: v === "on" }); }
     if (body.action === "cert_images") {
       const v = body.on ? "on" : "off";
