@@ -63,13 +63,34 @@ async function enr(filter){filter=filter||'all';var B=document.getElementById('a
    if(res.error||(res.data&&res.data.error)){alert((res.data&&res.data.error)||'Could not issue the certificate.');return}
    alert('Certificate '+res.data.certificate_no+' issued.\nVerify link: '+DFA.SITE+'/verify.html?code='+res.data.certificate_code);enr();return}
   if(b.dataset.a==='pay'){var c=tr.querySelector('[data-c]').value,s=tr.querySelector('[data-s]').value,pl=tr.querySelector('[data-plan]').value,fa=tr.querySelector('[data-fa]').value;if(!c)return alert('Pick the course first.');
-   if(!confirm('Have you checked that this fee is really in the bank account?\n\nMark payment received and open access from '+s+'? This creates the invoice, admission form and fee receipt (and emails them to the student when emails are switched on).'))return;b.disabled=true;
-   res=await DFA.invoke('admission',{action:'activate',id:id,course_code:c,start_date:s,plan:pl,first_amount:pl==='two'&&fa?+fa:undefined});
-   if(res.data&&res.data.error){b.disabled=false;return alert('Could not activate: '+res.data.error)}
-   var en=res.data.enrollment,steps=[['admission','Creating admission form…'],['receipt','Creating fee receipt…']],warn=[];
-   for(var k=0;k<steps.length;k++){b.textContent=steps[k][1];var rb=await DFA.invoke('admission',{action:'build_doc',id:id,kind:steps[k][0]});if(rb.data&&rb.data.error){rb=await DFA.invoke('admission',{action:'build_doc',id:id,kind:steps[k][0]})}if(rb.data&&rb.data.error)warn.push(rb.data.error)}
-   var wm='not sent (documents missing)';if(!warn.length){b.textContent='Sending welcome email…';var rw=await DFA.invoke('admission',{action:'welcome',id:id});wm=rw.data&&rw.data.error?'not sent: '+rw.data.error:rw.data.email==='sent'?'sent':rw.data.email==='already sent'?'already sent earlier':'not sent (student emails are switched off)'}
-   alert('Activated until '+d(en.end_date)+'.\nWelcome email: '+wm+(warn.length?'\n\nProblem: '+warn.join('\n')+'\nThe student is active. Use Resend documents to send the documents later.':''));enr(filter);return}
+   if(!confirm('Have you checked that this fee is really in the bank account?\n\nMark payment received and open access from '+s+'? This creates the invoice, admission form and fee receipt (and emails them to the student when emails are switched on).'))return;
+   var label0=b.textContent;b.disabled=true;b.textContent='Activating…';
+   try{
+    res=await DFA.invoke('admission',{action:'activate',id:id,course_code:c,start_date:s,plan:pl,first_amount:pl==='two'&&fa?+fa:undefined});
+    if(res.data&&res.data.error){alert('Could not activate: '+res.data.error);return}
+    var en=res.data&&res.data.enrollment;if(!en){alert((res.data&&res.data.error)||'Could not activate (no enrollment returned).');return}
+    var warn=[],wm='not sent',labels={admission:'Creating admission form…',receipt:'Creating fee receipt…',welcome:'Sending welcome email…'};
+    for(var n=0;n<8;n++){
+     var st=await DFA.invoke('admission',{action:'docs_status',id:id});
+     if(st.data&&st.data.ready&&(st.data.welcome_sent||(st.data.jobs||[]).some(function(j){return j.kind==='welcome'&&(j.status==='done'||j.status==='skipped')}))){wm=st.data.welcome_sent?'sent':((st.data.jobs||[]).some(function(j){return j.kind==='welcome'&&j.status==='skipped'})?'not sent (student emails are switched off)':'sent');break}
+     var next=((st.data&&st.data.jobs)||[]).find(function(j){return j.status==='pending'||j.status==='error'});
+     b.textContent=(next&&labels[next.kind])||'Preparing documents…';
+     var rb=await DFA.invoke('admission',{action:'process_docs',id:id});
+     if(rb.data&&rb.data.error){
+      // one automatic retry (e.g. after a 546 / cold start)
+      b.textContent='Retrying…';
+      rb=await DFA.invoke('admission',{action:'process_docs',id:id});
+     }
+     if(rb.data&&rb.data.error){warn.push(rb.data.error);break}
+     if(rb.data&&rb.data.step==='welcome'){wm=rb.data.email==='sent'?'sent':rb.data.email==='already sent'?'already sent earlier':rb.data.email==='off'?'not sent (student emails are switched off)':(rb.data.email||'not sent');}
+     if(rb.data&&rb.data.done){if(!warn.length&&wm==='not sent'){var st2=await DFA.invoke('admission',{action:'docs_status',id:id});wm=st2.data&&st2.data.welcome_sent?'sent':wm==='not sent'&&!(st2.data&&st2.data.ready)?'not sent (documents missing)':wm;}break}
+    }
+    if(warn.length&&wm==='not sent')wm='not sent (documents missing)';
+    alert('Activated until '+d(en.end_date)+'.\nWelcome email: '+wm+(warn.length?'\n\nProblem: '+warn.join('\n')+'\nThe student is active. Use Resend documents to send the documents later.':''));
+    enr(filter);
+   }catch(err){alert('Activation interrupted: '+(err&&err.message?err.message:err)+'. Check the student list — they may already be active. Use Resend documents if needed.');try{enr(filter)}catch(_e){}}
+   finally{b.disabled=false;b.textContent=label0}
+   return}
   if(b.dataset.a==='resend'){resendDlg(id,b.dataset.cert==='1',b.dataset.bal==='1');return}
   if(b.dataset.a==='inst'){payDlg(id,+b.dataset.bal);return}
   if(!confirm(b.textContent+' this enrollment?'))return;
