@@ -1,7 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
 import { confirmation, welcome, reminder, docsMail, receiptMail, type FeeInfo } from "./templates.ts";
-import { BANK_QR_B64 } from "./templates.ts";
 import { decodeBase64 } from "jsr:@std/encoding@1/base64";
 import { certificateUrls, certificatePdfUrls } from "./render.ts";
 import { buildOne, signed, buildPaymentReceipt, fileBytes, docData, warmDocAssets } from "./docs.ts";
@@ -27,7 +26,17 @@ const ENR_SEL = "*,courses(name,level,duration_days,fee_pkr,old_fee_pkr)";
 function feeInfo(e: any): FeeInfo {
   return { name: e.full_name || "", studentId: e.student_id || "–", course: e.courses?.name || e.course_label || "your course", batch: e.batch_code || "", total: pkr(e.fee_total), paid: pkr(e.amount_paid), balance: pkr(e.balance_due), due: e.due_date ? fmt(e.due_date) : "on request" };
 }
-const qrAttachment = () => ({ filename: "DFA Raast QR.jpg", content: decodeBase64(BANK_QR_B64), contentType: "image/jpeg" });
+let qrCache: Uint8Array | null = null;
+async function loadPaymentQr(db: any) {
+  if (qrCache) return qrCache;
+  const r = await db.storage.from("documents").download("internal/dfa-raast-qr.jpg");
+  if (r.error || !r.data) throw new Error("Payment QR is not configured on the server.");
+  qrCache = new Uint8Array(await r.data.arrayBuffer());
+  return qrCache;
+}
+async function qrAttachment(db: any) {
+  return { filename: "DFA Raast QR.jpg", content: await loadPaymentQr(db), contentType: "image/jpeg" };
+}
 async function logMail(db: any, e: any, kind: string, items: string[], status: string, by: string | null, error?: string) {
   await db.from("email_log").insert({ enrollment_id: e.id, kind, items, to_email: e.email, status, error: error ? error.slice(0, 300) : null, sent_by: by });
   if (status === "sent") await db.from("enrollments").update({ last_docs_sent_at: new Date().toISOString(), last_docs_sent_items: items.join(", ") }).eq("id", e.id);
@@ -72,7 +81,7 @@ async function resendDocs(db: any, id: number, want: string[], by: string | null
   const rem = want.includes("reminder") && e.balance_due > 0;
   if (want.includes("reminder") && !rem) return { error: "No balance is due for this student.", code: 400 };
   if (!names.length && !rem) return { error: "Pick at least one item.", code: 400 };
-  if (rem) att.push(qrAttachment());
+  if (rem) att.push(await qrAttachment(db));
   const m = names.length ? docsMail(e.full_name, e.courses?.name || e.course_label || "course", names, rem ? feeInfo(e) : null) : reminder(0, feeInfo(e));
   const items = [...want.filter((w) => ["admission", "receipt", "certificate"].includes(w)), ...(rem ? ["reminder"] : [])];
   try { const r = await send(e.email, m.subject, m.text, att); await logMail(db, e, "resend", items, r, by); return { ok: true, email: r, items, sent_at: new Date().toISOString() }; }
@@ -88,7 +97,7 @@ async function runReminders(db: any) {
     const stage = t >= addD(due, 3) ? 3 : t >= due ? 2 : t >= addD(due, -3) ? 1 : 0;
     if (!stage || stage <= e.reminder_stage) continue;
     const m = reminder(stage, feeInfo(e));
-    try { const r = await send(e.email, m.subject, m.text, [qrAttachment()]); await logMail(db, e, "reminder-" + stage, ["reminder"], r, null); if (r === "sent") await db.from("enrollments").update({ reminder_stage: stage }).eq("id", e.id); out.push({ id: e.id, stage, r }); }
+    try { const r = await send(e.email, m.subject, m.text, [await qrAttachment(db)]); await logMail(db, e, "reminder-" + stage, ["reminder"], r, null); if (r === "sent") await db.from("enrollments").update({ reminder_stage: stage }).eq("id", e.id); out.push({ id: e.id, stage, r }); }
     catch (x) { await logMail(db, e, "reminder-" + stage, ["reminder"], "error", null, String((x as Error).message || x)); out.push({ id: e.id, stage, error: true }); }
   }
   return { ok: true, today: t, sent: out };
@@ -192,6 +201,12 @@ async function docsStatus(db: any, enrollmentId: number) {
     jobs,
     ready: !!(e?.admission_file && e?.receipt_file),
   };
+}
+
+async function cleanupDocJobs(db: any, days = 30) {
+  const cut = new Date(Date.now() - Math.max(1, days) * 864e5).toISOString();
+  const r = await db.from("doc_jobs").delete().in("status", ["done", "skipped", "error"]).lt("updated_at", cut);
+  return { ok: !r.error, error: r.error?.message || null, older_than: cut };
 }
 
 Deno.serve(async (req) => {
@@ -322,7 +337,7 @@ Deno.serve(async (req) => {
     if (ct) {
       const s = (await db.from("site_settings").select("value").eq("key", "cron_token").maybeSingle()).data;
       if (!s?.value || s.value !== ct) return json({ error: "forbidden" }, 403);
-      if (body.action === "reminders") return json(await runReminders(db));
+      if (body.action === "reminders") { try { await cleanupDocJobs(db, 30); } catch (_) {} return json(await runReminders(db)); }
       if (body.action === "resend") { const r: any = await resendDocs(db, Number(body.id), Array.isArray(body.items) ? body.items.map(String) : [], null); return json(r, r.code || 200); }
       if (body.action === "status") return json({ sending: (await sendingOn()) ? "on" : "off", smtp: !!env("ADMISSION_SMTP_PASS") });
       if (body.action === "render_test") { const e = (await db.from("enrollments").select(ENR_SEL).eq("id", Number(body.id)).maybeSingle()).data; const t0 = Date.now(); const r = await buildOne(db, e, body.kind === "receipt" ? "receipt" : "admission", true); return json({ ok: true, ms: Date.now() - t0, bytes: r.bytes.length }); }
@@ -337,6 +352,79 @@ Deno.serve(async (req) => {
         catch (x) { const m = String((x as Error).message || x).slice(0, 300); await db.from("enrollments").update({ docs_error: m }).eq("id", e.id); return json({ error: m }, 500); }
       }
       if (body.action === "settings_get") { const se = (await db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle()).data; return json({ certificates: await imagesOn(db), emails: se?.value === "on", smtp: !!env("ADMISSION_SMTP_PASS"), forced: env("SEND_EMAILS") || null }); }
+      if (body.action === "cleanup_doc_jobs") return json(await cleanupDocJobs(db, Number(body.days) > 0 ? Number(body.days) : 30));
+      if (body.action === "put_internal_file") {
+        const path = String(body.path || "");
+        if (!path.startsWith("internal/") || path.includes("..")) return json({ error: "path must be under internal/" }, 400);
+        const bytes = decodeBase64(String(body.content_base64 || ""));
+        if (!bytes.length) return json({ error: "empty file" }, 400);
+        const up = await db.storage.from("documents").upload(path, bytes, { contentType: String(body.content_type || "application/octet-stream"), upsert: true });
+        if (up.error) return json({ error: up.error.message }, 500);
+        return json({ ok: true, path, bytes: bytes.length });
+      }
+      if (body.action === "purge_docs") {
+        // Storage API delete. Only removes paths that no enrollment/payment still references.
+        const paths = (Array.isArray(body.paths) ? body.paths : []).map((x: any) => String(x || "")).filter(Boolean);
+        if (!paths.length || paths.length > 20) return json({ error: "paths required (max 20)" }, 400);
+        if (paths.some((p: string) => p.includes("..") || p.startsWith("/"))) return json({ error: "invalid path" }, 400);
+        const linked: string[] = [];
+        for (const path of paths) {
+          const a = (await db.from("enrollments").select("id").eq("admission_file", path).limit(1)).data || [];
+          const b = (await db.from("enrollments").select("id").eq("receipt_file", path).limit(1)).data || [];
+          const c = (await db.from("enrollments").select("id").eq("certificate_file", path).limit(1)).data || [];
+          const pay = (await db.from("payments").select("id").eq("receipt_file", path).limit(1)).data || [];
+          if (a.length || b.length || c.length || pay.length) linked.push(path);
+        }
+        if (linked.length) return json({ error: "refusing to delete paths still linked to enrollments/payments", linked }, 409);
+        const rem = await db.storage.from("documents").remove(paths);
+        if (rem.error) return json({ error: rem.error.message }, 500);
+        return json({ ok: true, removed: paths });
+      }
+      if (body.action === "admin_gate_test") {
+        // Ephemeral non-admin JWT must receive 403 for process_docs / docs_status (bypasses login captcha via admin generateLink).
+        const email = `qa.gate.${Date.now()}@example.com`;
+        const password = `QaGate-${crypto.randomUUID()}!aA1`;
+        const created = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: "TEST Gate QA" } });
+        if (created.error || !created.data.user) return json({ error: "createUser: " + (created.error?.message || "failed") }, 500);
+        const uid = created.data.user.id;
+        try {
+          await db.from("profiles").upsert({ id: uid, username: `qa_gate_${Date.now()}`, full_name: "TEST Gate QA", role: "student" });
+          const anonKey = env("SUPABASE_ANON_KEY");
+          if (!anonKey) throw new Error("SUPABASE_ANON_KEY missing");
+          const client = createClient(env("SUPABASE_URL"), anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+          const link = await db.auth.admin.generateLink({ type: "magiclink", email });
+          if (link.error) return json({ error: "generateLink: " + link.error.message, uid }, 500);
+          const emailOtp = (link.data as any)?.properties?.email_otp || (link.data as any)?.email_otp;
+          const tokenHash = (link.data as any)?.properties?.hashed_token;
+          let session = null as any;
+          if (emailOtp) {
+            const v = await client.auth.verifyOtp({ email, token: String(emailOtp), type: "email" });
+            if (v.error) return json({ error: "verifyOtp: " + v.error.message, uid }, 500);
+            session = v.data.session;
+          } else if (tokenHash) {
+            const v = await client.auth.verifyOtp({ token_hash: String(tokenHash), type: "email" });
+            if (v.error) return json({ error: "verifyOtp hash: " + v.error.message, uid }, 500);
+            session = v.data.session;
+          } else {
+            return json({ error: "generateLink returned no otp/token_hash", uid, keys: Object.keys((link.data as any)?.properties || {}) }, 500);
+          }
+          if (!session?.access_token) return json({ error: "no access_token", uid }, 500);
+          const token = session.access_token;
+          const results: Record<string, number> = {};
+          for (const action of ["process_docs", "docs_status"]) {
+            const res = await fetch(`${env("SUPABASE_URL")}/functions/v1/admission`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, apikey: anonKey },
+              body: JSON.stringify({ action, id: 1 }),
+            });
+            results[action] = res.status;
+          }
+          return json({ ok: true, results, expect: { process_docs: 403, docs_status: 403 }, pass: results.process_docs === 403 && results.docs_status === 403 });
+        } finally {
+          await db.from("profiles").delete().eq("id", uid);
+          await db.auth.admin.deleteUser(uid);
+        }
+      }
       return json({ error: "unknown action" }, 400);
     }
     // admin actions need a logged-in admin
