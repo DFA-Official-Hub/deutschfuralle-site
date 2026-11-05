@@ -543,3 +543,9 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 @media (max-width:1000px){#dfa-cc{bottom:92px}}/* sit above the floating WhatsApp button (right:22px;bottom:22px;58px) */
 @media (max-width:480px){#dfa-cc{left:.75rem;right:.75rem}#dfa-cc .dfa-cc-btns{flex:1 1 100%}#dfa-cc .dfa-cc-btns button{flex:1 1 0}}
 #regform .chk{display:flex;flex-direction:row;gap:10px;align-items:flex-start;font-weight:400;line-height:1.5}#regform .chk input{width:20px;min-height:20px;height:20px;margin:3px 0 0;flex:none}#reg-ts{min-height:65px}
+
+/* Admin: WhatsApp student (wa.me → student digits only) + copy-message toast */
+.adm-acts .btn.adm-wa{background:#25d366;color:#fff;border-color:#25d366}
+.adm-acts .btn.adm-wa:hover{background:#1ebe57;border-color:#1ebe57;color:#fff;box-shadow:0 0 0 6px rgba(37,211,102,.18)}
+.adm-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(16px);z-index:10050;background:#06231a;color:#fff;padding:12px 18px;border-radius:999px;font-weight:600;font-size:.92rem;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:calc(100% - 32px);text-align:center}
+.adm-toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
