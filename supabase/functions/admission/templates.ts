@@ -1,7 +1,7 @@
-// Email templates. Plain text, sent from admission.deutschfuralle@gmail.com.
+// Email templates. Plain text. Signature address: admission@mail.deutschfuralle.com.
 // Owner approval needed before SEND_EMAILS is switched on.
 export const SITE = "https://www.deutschfuralle.com";
-const SIGN = "\n\nSee you in class,\nThe Deutsch Für Alle team\nadmission.deutschfuralle@gmail.com · " + SITE;
+const SIGN = "\n\nSee you in class,\nThe Deutsch Für Alle team\nadmission@mail.deutschfuralle.com · " + SITE;
 const COURSE_LINE: Record<string, string> = {
   "a1-crash": "You picked the A1 Crash Course ({fee}). It's the fast one: all 12 A1 chapters in about a month, five classes a week. It moves quickly, so try to keep an hour free most days for revision and homework.",
   "a1-super": "You picked the A1 Super Intensive Course ({fee}). Over roughly six weeks we cover the full A1 syllabus with Netzwerk A1 Neu, plus a few A2 topics so you're not starting from zero next time. Recordings are there if you miss a class.",
