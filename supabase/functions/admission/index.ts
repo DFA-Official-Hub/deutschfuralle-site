@@ -438,7 +438,9 @@ Deno.serve(async (req) => {
       const kind = body.kind === "receipt" ? "receipt" : "admission";
       if (kind === "receipt" && body.inv && body.inv !== e.invoice_no) { try { const r = await receiptByInv(db, e, String(body.inv)); return r ? json({ ok: true, name: e.full_name, ...r }) : json({ error: "Receipt not found." }, 404); } catch (_) { return json({ error: "Could not prepare the receipt. Please contact us." }, 500); } }
       if (!(kind === "receipt" ? e.receipt_file : e.admission_file)) { try { await buildOne(db, e, kind); } catch (_) { return json({ error: "Could not prepare the document. Please contact us." }, 500); } }
-      return json({ ok: true, name: e.full_name, ...(await signed(db, kind === "receipt" ? e.receipt_file : e.admission_file, docName(e, kind))) });
+      const path = kind === "receipt" ? e.receipt_file : e.admission_file;
+      if (!path) return json({ error: "Your documents are not ready yet." }, 404);
+      return json({ ok: true, name: e.full_name, ...(await signed(db, path, docName(e, kind))) });
     }
     if (body.action === "my_cert_file") {
       if (!u.user.email_confirmed_at || !(await imagesOn(db))) return json({ error: "Your certificate will be available here once it is released." }, 403);
@@ -534,7 +536,9 @@ Deno.serve(async (req) => {
       const kind = body.kind === "receipt" ? "receipt" : "admission";
       if (kind === "receipt" && body.inv && body.inv !== e.invoice_no) { try { const r = await receiptByInv(db, e, String(body.inv)); return r ? json({ ok: true, name: e.full_name, ...r }) : json({ error: "Receipt not found." }, 404); } catch (x) { return json({ error: "Could not create the receipt: " + String((x as Error).message || x) }, 500); } }
       if (!(kind === "receipt" ? e.receipt_file : e.admission_file) || body.rebuild) { try { await buildOne(db, e, kind); } catch (x) { return json({ error: "Could not create the document: " + String((x as Error).message || x) }, 500); } }
-      return json({ ok: true, name: e.full_name, ...(await signed(db, kind === "receipt" ? e.receipt_file : e.admission_file, docName(e, kind))) });
+      const path = kind === "receipt" ? e.receipt_file : e.admission_file;
+      if (!path) return json({ error: "Document file missing." }, 404);
+      return json({ ok: true, name: e.full_name, ...(await signed(db, path, docName(e, kind))) });
     }
     if (body.action === "cert_file_admin") {
       // Admin preview works even before images are switched on for students.

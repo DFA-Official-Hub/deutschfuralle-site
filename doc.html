@@ -22,27 +22,41 @@ main{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:2
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="assets/dfa-auth.js?v=40"></script>
 <script>
-(async function(){var M=document.getElementById('m'),A=document.getElementById('acts'),TT=document.getElementById('t'),ST=document.getElementById('st'),q=new URLSearchParams(location.search),id=+q.get('id'),t=q.get('type'),inv=q.get('inv'),no=q.get('no');
+(async function(){var M=document.getElementById('m'),A=document.getElementById('acts'),TT=document.getElementById('t'),ST=document.getElementById('st'),q=new URLSearchParams(location.search),id=+q.get('id'),t=q.get('type'),inv=q.get('inv'),no=q.get('no'),role='student';
+function status(s){ST.textContent=s;M.innerHTML='<div class="msg">'+s+'</div>'}
 async function save(u,b){var lbl=b.textContent;b.setAttribute('aria-busy','true');b.textContent='Downloading…';try{var nm=new URL(u).searchParams.get('download')||'document';var r=await fetch(u);if(!r.ok)throw 0;var bl=await r.blob(),o=URL.createObjectURL(bl),a=document.createElement('a');a.href=o;a.download=nm;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(o)},4000)}catch(e){alert('Download failed. Please try again.')}b.removeAttribute('aria-busy');b.textContent=lbl}
 function fail(h){M.innerHTML='<div class="msg">'+h+'</div>';TT.textContent='Document'}
 function back(){A.insertAdjacentHTML('beforeend','<button class="b o" type="button" id="bk">Back</button>');document.getElementById('bk').onclick=function(){if(window.opener||history.length<2){window.close();setTimeout(function(){location.href=role==='admin'?'admin.html':'portal.html'},150)}else history.back()}}
 if((!id&&!(t==='cert'&&no))||!/^(admission|receipt|cert)$/.test(t))return fail('Invalid document link.');
-var T=setTimeout(function(){fail('This is taking longer than usual. <a href="'+location.href.replace(/"/g,'')+'">Try again</a>')},20000);
-var ses=(await DFA.sb.auth.getSession()).data.session;if(!ses){clearTimeout(T);return fail('Please <a href="account.html?next='+encodeURIComponent('/doc.html'+location.search)+'">log in</a> first.')}
-var role='';try{role=localStorage.getItem('dfa-pill')||''}catch(e){}
-var adm=role==='admin'||(t==='cert'&&!no);
-function body(fmt,a){return t==='cert'?(a?{action:'cert_file_admin',id:id,fmt:fmt}:{action:'my_cert_file',no:no,fmt:fmt}):{action:a?'doc_file_admin':'my_doc',id:id,kind:t,inv:inv||undefined}}
-var r=await DFA.invoke('admission',body('png',adm));
-if(!(r.data&&r.data.url)&&!(t==='cert'&&no)){var r2=await DFA.invoke('admission',body('png',!adm));if(r2.data&&r2.data.url){r=r2;adm=!adm}}
-clearTimeout(T);
-if(!(r.data&&r.data.url&&/^https:\/\//.test(r.data.url))){back();return fail(DFA.esc((r.data&&r.data.error)||'Could not open the document.'))}
-var D=r.data,title=t==='cert'?'Certificate '+(D.no||no||''):t==='receipt'?'Fee receipt '+(inv||''):'Admission form';
-document.title=title+' | Deutsch Für Alle';TT.textContent=title.trim();ST.textContent=D.name?DFA.esc(D.name):'Deutsch Für Alle';
-if(t==='cert'){A.innerHTML='<button class="b p" type="button" id="dp">Download PDF</button><button class="b o s" type="button" id="dn">PNG</button>'+(D.code?'<a class="vlink" target="_blank" rel="noopener" href="verify.html?code='+encodeURIComponent(D.code)+'">Verify certificate</a>':'');
- M.innerHTML='<img class="img" src="'+DFA.esc(D.url)+'" alt="'+DFA.esc(title)+'">';
- document.getElementById('dp').onclick=async function(){var b=this;b.setAttribute('aria-busy','true');b.textContent='Preparing PDF…';var p=await DFA.invoke('admission',body('pdf',adm));b.removeAttribute('aria-busy');b.textContent='Download PDF';if(p.data&&p.data.download)save(p.data.download,b);else alert((p.data&&p.data.error)||'Could not prepare the PDF.')};
- document.getElementById('dn').onclick=function(){save(D.download||D.url,this)}}
-else{A.innerHTML='<button class="b p" type="button" id="dp">Download PDF</button>';document.getElementById('dp').onclick=function(){save(D.download||D.url,this)};
- M.innerHTML='<div style="width:100%;max-width:980px"><iframe class="frame" src="'+DFA.esc(D.url)+'" title="'+DFA.esc(title)+'"></iframe><p class="mob">PDF not showing? <a href="'+DFA.esc(D.url)+'" target="_blank" rel="noopener">Open it full screen</a></p></div>'}
-back()})();
+var retryHref=location.href.replace(/"/g,'');
+var T=setTimeout(function(){status('Still working…');},8000);
+var T2=setTimeout(function(){fail('This is taking longer than usual. <a href="'+retryHref+'">Try again</a>')},25000);
+try{
+ status('Checking your login…');
+ var ses=(await DFA.sb.auth.getSession()).data.session;if(!ses){return fail('Please <a href="account.html?next='+encodeURIComponent('/doc.html'+location.search)+'">log in</a> first.')}
+ // Resolve role from the profile (not a stale localStorage pill) so we do not double-call admin then student paths.
+ status('Preparing document…');
+ var prof=null;try{prof=await DFA.profile()}catch(e){prof=null}
+ role=(prof&&prof.role==='admin')?'admin':'student';
+ var adm=role==='admin';
+ function body(fmt,a){return t==='cert'?(a?{action:'cert_file_admin',id:id,fmt:fmt}:{action:'my_cert_file',no:no,fmt:fmt}):{action:a?'doc_file_admin':'my_doc',id:id,kind:t,inv:inv||undefined}}
+ var r=await DFA.invoke('admission',body('png',adm));
+ // Only flip admin/student once if the first path is forbidden (wrong role guess) — avoids a second cold start when the first call already returned a real doc error.
+ if(!(r.data&&r.data.url)&&!(t==='cert'&&no)){
+  var err=String((r.data&&r.data.error)||'');
+  var wrong= /forbidden|not available|Please confirm this sign-in|two-step|log in again|verify_session|aal2/i.test(err)||(r.error&&r.error.context&&r.error.context.status===403);
+  if(wrong||!err){status('Retrying…');var r2=await DFA.invoke('admission',body('png',!adm));if(r2.data&&r2.data.url){r=r2;adm=!adm;role=adm?'admin':'student'}}
+ }
+ if(!(r.data&&r.data.url&&/^https:\/\//.test(r.data.url))){back();return fail(DFA.esc((r.data&&r.data.error)||'Could not open the document.'))}
+ var D=r.data,title=t==='cert'?'Certificate '+(D.no||no||''):t==='receipt'?'Fee receipt '+(inv||''):'Admission form';
+ document.title=title+' | Deutsch Für Alle';TT.textContent=title.trim();ST.textContent=D.name?DFA.esc(D.name):'Deutsch Für Alle';
+ if(t==='cert'){A.innerHTML='<button class="b p" type="button" id="dp">Download PDF</button><button class="b o s" type="button" id="dn">PNG</button>'+(D.code?'<a class="vlink" target="_blank" rel="noopener" href="verify.html?code='+encodeURIComponent(D.code)+'">Verify certificate</a>':'');
+  M.innerHTML='<img class="img" src="'+DFA.esc(D.url)+'" alt="'+DFA.esc(title)+'">';
+  document.getElementById('dp').onclick=async function(){var b=this;b.setAttribute('aria-busy','true');b.textContent='Preparing PDF…';var p=await DFA.invoke('admission',body('pdf',adm));b.removeAttribute('aria-busy');b.textContent='Download PDF';if(p.data&&p.data.download)save(p.data.download,b);else alert((p.data&&p.data.error)||'Could not prepare the PDF.')};
+  document.getElementById('dn').onclick=function(){save(D.download||D.url,this)}}
+ else{A.innerHTML='<button class="b p" type="button" id="dp">Download PDF</button>';document.getElementById('dp').onclick=function(){save(D.download||D.url,this)};
+  status('Opening PDF…');
+  M.innerHTML='<div style="width:100%;max-width:980px"><iframe class="frame" src="'+DFA.esc(D.url)+'" title="'+DFA.esc(title)+'"></iframe><p class="mob">PDF not showing? <a href="'+DFA.esc(D.url)+'" target="_blank" rel="noopener">Open it full screen</a></p></div>'}
+ back();
+}finally{clearTimeout(T);clearTimeout(T2)}})();
 </script></body></html>
