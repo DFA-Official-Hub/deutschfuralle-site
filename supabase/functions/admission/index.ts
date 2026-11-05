@@ -82,7 +82,7 @@ async function resendDocs(db: any, id: number, want: string[], by: string | null
   if (want.includes("reminder") && !rem) return { error: "No balance is due for this student.", code: 400 };
   if (!names.length && !rem) return { error: "Pick at least one item.", code: 400 };
   if (rem) att.push(await qrAttachment(db));
-  const m = names.length ? docsMail(e.full_name, e.courses?.name || e.course_label || "course", names, rem ? feeInfo(e) : null) : reminder(0, feeInfo(e));
+  const m = names.length ? docsMail(e.full_name, e.courses?.name || e.course_label || "course", names, rem ? feeInfo(e) : null, e.student_id) : reminder(0, feeInfo(e));
   const items = [...want.filter((w) => ["admission", "receipt", "certificate"].includes(w)), ...(rem ? ["reminder"] : [])];
   try { const r = await send(e.email, m.subject, m.text, att); await logMail(db, e, "resend", items, r, by); return { ok: true, email: r, items, sent_at: new Date().toISOString() }; }
   catch (x) { await logMail(db, e, "resend", items, "error", by, String((x as Error).message || x)); return { error: "Sending failed: " + String((x as Error).message || x), code: 500 }; }
@@ -102,11 +102,51 @@ async function runReminders(db: any) {
   }
   return { ok: true, today: t, sent: out };
 }
+function textToHtml(text: string) {
+  const esc = String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const linked = esc.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
+  return `<!DOCTYPE html><html><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.55;color:#0d1712;max-width:640px;margin:0 auto;padding:16px"><div style="white-space:pre-wrap">${linked}</div><p style="margin-top:24px;font-size:13px;color:#5d6b63">Deutsch Für Alle · <a href="https://www.deutschfuralle.com">deutschfuralle.com</a></p></body></html>`;
+}
 async function send(to: string, subject: string, text: string, attachments: { filename: string; content: Uint8Array; contentType: string }[] = []) {
   if (!(await sendingOn())) return "off";
-  const t = nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user: env("ADMISSION_SMTP_USER") || "admission.deutschfuralle@gmail.com", pass: env("ADMISSION_SMTP_PASS") } });
-  await t.sendMail({ from: `"Deutsch Für Alle Admissions" <${env("ADMISSION_SMTP_USER") || "admission.deutschfuralle@gmail.com"}>`, to, subject, text, attachments: attachments.map((a) => ({ ...a, content: a.content })) });
+  const user = env("ADMISSION_SMTP_USER") || "admission.deutschfuralle@gmail.com";
+  const t = nodemailer.createTransport({ host: "smtp.gmail.com", port: 465, secure: true, auth: { user, pass: env("ADMISSION_SMTP_PASS") } });
+  await t.sendMail({
+    from: `"Deutsch Für Alle" <${user}>`,
+    replyTo: "admission.deutschfuralle@gmail.com",
+    to,
+    subject,
+    text,
+    html: textToHtml(text),
+    attachments: attachments.map((a) => ({ ...a, content: a.content })),
+  });
   return "sent";
+}
+/** Resolve student phone from registration_details / profiles and persist on enrollments.phone. */
+async function fillEnrollmentPhone(db: any, id: number) {
+  const e = (await db.from("enrollments").select("id,email,sheet_row,phone").eq("id", id).maybeSingle()).data;
+  if (!e) return null;
+  const usable = (p: string) => { const d = String(p || "").replace(/\D+/g, ""); return d.length >= 10 && d.length <= 15 && !/^0+$/.test(d) ? String(p).trim() : ""; };
+  if (usable(e.phone)) return usable(e.phone);
+  const fromData = (data: any) => { for (const k of Object.keys(data || {})) if (/mobile|phone/i.test(k)) { const v = usable(data[k]); if (v) return v; } return ""; };
+  let phone = "";
+  if (e.sheet_row) {
+    const data = (await db.from("registration_details").select("data").eq("sheet_row", e.sheet_row).maybeSingle()).data?.data;
+    phone = fromData(data);
+  }
+  if (!phone && e.email) {
+    const byEmail = (await db.from("registration_details").select("data").ilike("email", e.email.trim()).limit(3)).data || [];
+    for (const r of byEmail) { phone = fromData(r.data); if (phone) break; }
+  }
+  if (!phone && e.email) {
+    try {
+      const { data: ulist } = await db.auth.admin.listUsers({ page: 1, perPage: 200 });
+      const u = (ulist?.users || []).find((x: any) => String(x.email || "").toLowerCase() === String(e.email).toLowerCase());
+      if (u?.id) phone = usable(((await db.from("profiles").select("phone").eq("id", u.id).maybeSingle()).data || {}).phone || "");
+    } catch (_) { /* best effort */ }
+  }
+  if (phone) await db.from("enrollments").update({ phone }).eq("id", id);
+  return phone || null;
 }
 function courseFrom(course: string, level: string): string | null {
   const c = `${course} ${level}`.toLowerCase();
@@ -229,7 +269,7 @@ Deno.serve(async (req) => {
       const code = courseFrom(String(body.course || ""), String(body.level || ""));
       const { data: c } = code ? await db.from("courses").select("name,fee_pkr,old_fee_pkr").eq("code", code).maybeSingle() : { data: null };
       const label = c?.name || (body.course ? String(body.course).slice(0, 120) : (body.level ? `German ${String(body.level).trim()}` : null));
-      const ins = await db.from("enrollments").upsert({ email, full_name: name || null, course_code: code, course_label: label, receipt_url: receipt, sheet_row: Number(body.sheet_row) > 1 ? Math.floor(Number(body.sheet_row)) : null, source: "form", source_ref: String(body.ref || "").slice(0, 120) || null }, { onConflict: "source_ref", ignoreDuplicates: true }).select("id,confirmation_sent_at,student_id,batch_code").maybeSingle();
+      const ins = await db.from("enrollments").upsert({ email, full_name: name || null, course_code: code, course_label: label, receipt_url: receipt, sheet_row: Number(body.sheet_row) > 1 ? Math.floor(Number(body.sheet_row)) : null, source: "form", source_ref: String(body.ref || "").slice(0, 120) || null, phone: (String(body.phone || body.mobile || "").trim().slice(0, 30) || null) }, { onConflict: "source_ref", ignoreDuplicates: true }).select("id,confirmation_sent_at,student_id,batch_code").maybeSingle();
       if (ins.error) return json({ error: ins.error.message }, 500);
       if (!ins.data) {
         const ex = await db.from("enrollments").select("student_id,batch_code").eq("source_ref", String(body.ref || "").slice(0, 120)).maybeSingle();
@@ -339,8 +379,20 @@ Deno.serve(async (req) => {
       if (!s?.value || s.value !== ct) return json({ error: "forbidden" }, 403);
       if (body.action === "reminders") { try { await cleanupDocJobs(db, 30); } catch (_) {} return json(await runReminders(db)); }
       if (body.action === "resend") { const r: any = await resendDocs(db, Number(body.id), Array.isArray(body.items) ? body.items.map(String) : [], null); return json(r, r.code || 200); }
-      if (body.action === "status") return json({ sending: (await sendingOn()) ? "on" : "off", smtp: !!env("ADMISSION_SMTP_PASS") });
-      if (body.action === "render_test") { const e = (await db.from("enrollments").select(ENR_SEL).eq("id", Number(body.id)).maybeSingle()).data; const t0 = Date.now(); const r = await buildOne(db, e, body.kind === "receipt" ? "receipt" : "admission", true); return json({ ok: true, ms: Date.now() - t0, bytes: r.bytes.length }); }
+            if (body.action === "status") return json({ sending: (await sendingOn()) ? "on" : "off", smtp: !!env("ADMISSION_SMTP_PASS") });
+      if (body.action === "deliverability_test") {
+        const to = String(body.to || "").trim().toLowerCase();
+        const allow = to === "contact.deutschfuralle@gmail.com" || to.endsWith("@mail-tester.com") || to.endsWith(".mail-tester.com");
+        if (!allow) return json({ error: "deliverability_test only allows contact.deutschfuralle@gmail.com or mail-tester.com" }, 400);
+        const sid = "DFA-2026-TEST";
+        const m = docsMail("TEST Student", "A1 Crash Course", ["Confirmation of Registration (admission form)", "Fee receipt INV-2026-TEST"], null, sid);
+        // Body is full text (not link/attachment-only). Tiny text attachment proves multipart still has text/html body.
+        const note = new TextEncoder().encode("Deutsch Für Alle — test attachment for deliverability check. This email also has a full plain-text and HTML body.\n");
+        try {
+          const r = await send(to, m.subject, m.text + "\n\n(This is a deliverability test message for Deutsch Für Alle. No student action is required.)", [{ filename: "dfa-deliverability-note.txt", content: note, contentType: "text/plain" }]);
+          return json({ ok: true, email: r, to, subject: m.subject });
+        } catch (x) { return json({ error: "Sending failed: " + String((x as Error).message || x) }, 500); }
+      } if (body.action === "render_test") { const e = (await db.from("enrollments").select(ENR_SEL).eq("id", Number(body.id)).maybeSingle()).data; const t0 = Date.now(); const r = await buildOne(db, e, body.kind === "receipt" ? "receipt" : "admission", true); return json({ ok: true, ms: Date.now() - t0, bytes: r.bytes.length }); }
       if (body.action === "docs_status") return json(await docsStatus(db, Number(body.id)));
       if (body.action === "process_docs") { await enqueueDocJobs(db, Number(body.id)); const r: any = await processNextDocJob(db, Number(body.id), null); return json(r, r.code || 200); }
       if (body.action === "build_doc") {
@@ -497,6 +549,7 @@ Deno.serve(async (req) => {
       }
       const e = (await db.from("enrollments").select(ENR_SEL).eq("id", id).maybeSingle()).data || up.data;
       await enqueueDocJobs(db, id);
+      try { await fillEnrollmentPhone(db, id); } catch (_) { /* phone is best-effort */ }
       // Warm WASM/fonts in the background so the first build_doc is less likely to hit the CPU limit on a cold isolate.
       try { EdgeRuntime.waitUntil(warmDocAssets()); } catch (_) { /* older runtimes */ }
       // Documents + welcome are processed in separate requests (process_docs / build_doc) to stay inside the 2s CPU limit.

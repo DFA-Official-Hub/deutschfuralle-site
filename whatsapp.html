@@ -4,13 +4,14 @@
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Opening WhatsApp – Deutsch Für Alle</title>
-<!-- The only place the WhatsApp number appears. Every page links to /whatsapp (optionally ?text=...),
-     and this page forwards to wa.me with the same prefilled text. Tracking (whatsapp_click) fires on the
-     click on the source page, see assets/dfa-track.js, so this page loads no analytics. -->
+<!-- Number lives in the Supabase `wa` edge function (DFA_WHATSAPP_NUMBER secret / site_settings).
+     Every page links to /whatsapp (optionally ?text=...); this page forwards to the function with the same text.
+     Tracking (whatsapp_click) fires on the source page (assets/dfa-track.js); this page loads no analytics. -->
 <script>
 (function(){var t=new URLSearchParams(location.search).get('text');
-location.replace('https://wa.me/923182166443'+(t?'?text='+encodeURIComponent(t):''));})();
+var u='https://owmsddezprhrjiinznmq.supabase.co/functions/v1/wa'+(t!=null&&t!==''?('?text='+encodeURIComponent(t)):'');
+location.replace(u);})();
 </script>
-<noscript><meta http-equiv="refresh" content="0;url=https://wa.me/923182166443"></noscript>
+<noscript><meta http-equiv="refresh" content="0;url=https://owmsddezprhrjiinznmq.supabase.co/functions/v1/wa"></noscript>
 <style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;color:#0d1712;text-align:center}a{color:#1d6f2b}</style>
-</head><body><main><p>Opening WhatsApp…</p><p><a href="https://wa.me/923182166443" rel="nofollow">Tap here if nothing happens</a></p></main></body></html>
+</head><body><main><p>Opening WhatsApp…</p><p><a href="https://owmsddezprhrjiinznmq.supabase.co/functions/v1/wa" rel="nofollow">Tap here if nothing happens</a></p></main></body></html>

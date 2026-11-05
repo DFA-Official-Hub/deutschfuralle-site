@@ -6,14 +6,14 @@ For every public page it writes one <!--seo-->...<!--/seo--> block into <head> w
   Open Graph + Twitter card tags, and JSON-LD (EducationalOrganization everywhere,
   Course on /courses, Book on /books/*, FAQPage only where a visible FAQ exists).
 It also sets the title and meta description from TITLES below, rewrites internal page links to the
-clean root-relative form, points every WhatsApp link at /whatsapp (the number lives only in whatsapp.html),
+clean root-relative form, points every WhatsApp link at /whatsapp (number only in Supabase wa function secret),
 and regenerates sitemap.xml and robots.txt from the list of indexable pages.
 """
 import html, json, pathlib, re, subprocess, datetime
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SITE = 'https://www.deutschfuralle.com'
 OG_IMAGE = SITE + '/assets/og-image.jpg'
-WA = 'https://wa.me/923182166443'
+WA = '/whatsapp'  # number only in Supabase wa edge function secret
 EMAIL = 'contact.deutschfuralle@gmail.com'
 # Never indexed, never in the sitemap: private apps, redirects, utility pages.
 PRIVATE = {'admin.html', 'portal.html', 'reader.html', 'doc.html', 'verify.html', 'account.html', '404.html',
@@ -158,7 +158,9 @@ def main():
         p = ROOT / rel; s = p.read_text(encoding='utf-8'); o = s
         s = rewrite_links(s, rel)
         if rel != 'whatsapp.html':
-            s = s.replace(WA, '/whatsapp').replace('href="https://wa.me/"', 'href="/whatsapp"')  # book pages had a number-less wa.me link
+            s = s.replace(WA, '/whatsapp')
+            s = re.sub(r'https://wa\.me/\d+', '/whatsapp', s)
+            s = s.replace('href="https://wa.me/"', 'href="/whatsapp"')  # book pages had a number-less wa.me link
             s = re.sub(r'href="/whatsapp\?text=[^"]*"', lambda m: m.group(0).replace('+', '%2B'), s)  # keep "A1 + A2" literal
         s = s.replace('https://youtube.com/@deutschfuralle-o', 'https://www.youtube.com/@deutschfuraalle')
         if rel in NOINDEX_ADD and 'name="robots"' not in s:
