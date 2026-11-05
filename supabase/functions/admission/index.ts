@@ -110,7 +110,8 @@ function textToHtml(text: string) {
 type MailAtt = { filename: string; content: Uint8Array; contentType?: string };
 type SendOpts = { idempotencyKey?: string; listUnsubscribe?: boolean };
 const RESEND_FROM = () => env("RESEND_FROM") || "Deutsch Für Alle <admission@mail.deutschfuralle.com>";
-const RESEND_REPLY = () => env("RESEND_REPLY_TO") || "admission.deutschfuralle@gmail.com";
+/** Reply-To on the Resend path stays on the From domain (Cloudflare Email Routing forwards it to the Gmail inbox); avoids FREEMAIL_FORGED_REPLYTO. */
+const RESEND_REPLY = () => { const r = env("RESEND_REPLY_TO"); return r && /@mail\.deutschfuralle\.com>?$/i.test(r.trim()) ? r.trim() : "admission@mail.deutschfuralle.com"; };
 /** SMTP fallback until 2026-11-12. Set RESEND_SMTP_FALLBACK=off to disable early. TODO(2026-11-12): remove nodemailer + ADMISSION_SMTP_* after one stable week on Resend. */
 function smtpFallbackOn() { return env("RESEND_SMTP_FALLBACK") !== "off"; }
 async function sendViaSmtp(to: string, subject: string, text: string, attachments: MailAtt[], opts: SendOpts) {
@@ -120,7 +121,7 @@ async function sendViaSmtp(to: string, subject: string, text: string, attachment
   if (opts.listUnsubscribe) headers["List-Unsubscribe"] = "<mailto:admission.deutschfuralle@gmail.com?subject=unsubscribe>";
   await transport.sendMail({
     from: `"Deutsch Für Alle" <${user}>`,
-    replyTo: RESEND_REPLY(),
+    replyTo: user,
     to,
     subject,
     text,
@@ -149,7 +150,7 @@ async function sendViaResend(to: string, subject: string, text: string, attachme
     }));
   }
   if (opts.listUnsubscribe) {
-    body.headers = { "List-Unsubscribe": "<mailto:admission.deutschfuralle@gmail.com?subject=unsubscribe>" };
+    body.headers = { "List-Unsubscribe": "<mailto:admission@mail.deutschfuralle.com?subject=unsubscribe>" };
   }
   const headers: Record<string, string> = {
     Authorization: `Bearer ${key}`,
@@ -435,7 +436,7 @@ Deno.serve(async (req) => {
             if (body.action === "status") return json({ sending: (await sendingOn()) ? "on" : "off", resend: !!env("RESEND_API_KEY"), smtp: !!env("ADMISSION_SMTP_PASS"), smtp_fallback: smtpFallbackOn() });
       if (body.action === "deliverability_test") {
         const to = String(body.to || "").trim().toLowerCase();
-        const allow = to === "contact.deutschfuralle@gmail.com" || to.endsWith("@mail-tester.com") || to.endsWith(".mail-tester.com");
+        const allow = to === "contact.deutschfuralle@gmail.com" || to === "admission@mail.deutschfuralle.com" || to.endsWith("@mail-tester.com") || to.endsWith(".mail-tester.com");
         if (!allow) return json({ error: "deliverability_test only allows contact.deutschfuralle@gmail.com or mail-tester.com" }, 400);
         const sid = "DFA-2026-TEST";
         const m = docsMail("TEST Student", "A1 Crash Course", ["Confirmation of Registration (admission form)", "Fee receipt INV-2026-TEST"], null, sid);
