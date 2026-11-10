@@ -38,14 +38,14 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'reviews.html': ('Student Reviews & Goethe Exam Results | Deutsch Für Alle',
    'Real Goethe exam results and WhatsApp reviews from DFA students in Pakistan. See what our live online German classes are like before you join.'),
  'books.html': ('German Books for Kids & A1 Workbook | Deutsch Für Alle',
-   'Picture and activity books in German for kids aged 3 to 7, plus a German A1 workbook with 150+ exercises. Paperback, Kindle and printable PDF.'),
+   'Picture and activity books in German for kids aged 3 to 7, plus a German A1 workbook with 150+ exercises. Paperback and printable PDF.'),
  'careers.html': ('Careers – Teach German with Deutsch Für Alle',
    'Are you a German teacher, or want to help our students? Join the small Deutsch Für Alle team. Send your CV and a short note, and we will get back to you.'),
  'privacy.html': (None, None),  # already good
  'blog/goethe-exam-pakistan.html': ('Goethe Exam in Pakistan 2026: A1 & B1 Booking & Documents',
    'How to book the Goethe A1 or B1 exam in Pakistan: centres in Karachi, Lahore and Islamabad, payment, documents and what each level is for.'),
  'books/a1-workbook.html': ('German A1 Workbook with Answers (PDF & Paperback)',
-   'German A1 workbook: 9 units, 150+ exercises, review test and answer key. Paperback and Kindle on Amazon, PDF on Etsy and Gumroad.'),
+   'German A1 workbook: 9 units, 150+ exercises, review test and answer key. Paperback on Amazon, PDF on Etsy and Gumroad.'),
 }
 
 ORG_ID = SITE + '/#organization'
