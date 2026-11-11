@@ -1,6 +1,8 @@
 // DFA lead forms. Public: register (registration.html form, Turnstile, table registration_leads), submit (Turnstile + disposable-email check), score (needs the row's edit token), clone (same person starts another paper: copies the contact details of a row they hold the edit token for into a new row for that exam).
+// After a register/submit row is saved, a non-test lead is also appended to the "Website Leads" tab of the leads spreadsheet (sheets.ts). A Sheets problem is logged with the lead id and never fails the save.
 // Private: GET ?csv=1&key=<site_settings.leads_csv_key> returns all mock exam rows as CSV for the Google Sheet (IMPORTDATA); add &table=registration for registration_leads.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { isTestName, mockExamLead, normPhone, queueSync, registrationLead } from "./sheets.ts";
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 const env = (k: string) => Deno.env.get(k) || "";
@@ -13,7 +15,6 @@ const cell = (v: unknown) => { let s = String(v ?? ""); if (/^[=@]/.test(s)) s =
 const COURSES = ["Free Demo Class","A1 Crash Course","A1 Super Intensive Course","A1 Normal Track Course","German A2 Course","A2 Super Intensive Course","A1 + A2 Combined Program","German B1 Course","German for Kids (12-16)","B1 / B2 (ask for details)"];
 const TIMINGS = ["12:00 PM to 1:30 PM","2:00 PM to 3:30 PM","6:30 PM to 8:00 PM","9:00 PM to 10:30 PM",
   "12PM to 1PM","4:30PM to 5:30PM","8:30PM to 9:30PM","10:30PM to 11:30PM"];  // second row = old slots, still accepted from cached pages
-const normPhone = (p: string) => { let d = p.replace(/[^\d+]/g, ""); if (d.startsWith("00")) d = "+" + d.slice(2); if (/^03\d{9}$/.test(d)) d = "+92" + d.slice(1); if (/^92\d{10}$/.test(d)) d = "+" + d; return d; };
 const utm = (v: unknown) => t(v, 100).toLowerCase().replace(/[^a-z0-9._-]/g, "") || null;
 // First-touch attribution from the browser (assets/dfa-track.js DFAAttr.first()) plus the shared event_id; same shape for both lead tables.
 const attribution = (b: any) => { const ft = (b && typeof b.first_touch === "object" && b.first_touch) || {};
@@ -90,12 +91,14 @@ Deno.serve(async (req) => {
       const { count } = await db.from("registration_leads").select("id", { count: "exact", head: true }).eq("phone", phone).gte("created_at", since);
       if ((count || 0) >= 5) return json({ ok: true, throttled: true });  // never block the WhatsApp redirect
       const a = attribution(b);
-      const { error } = await db.from("registration_leads").insert({
+      const isTest = isTestName(name);
+      const { data: saved, error } = await db.from("registration_leads").insert({
         form_type: "Registration", name, phone, course, timing, message: t(b.message, 500) || null,
         consent: b.consent === true, consent_text: t(b.consent_text, 300) || null, send_via: b.via === "mail" ? "mail" : "wa",
-        ...a, page: t(b.page, 200), user_agent: t(req.headers.get("user-agent"), 200), is_test: /\bTEST\b/.test(name),
-      });
+        ...a, page: t(b.page, 200), user_agent: t(req.headers.get("user-agent"), 200), is_test: isTest,
+      }).select("id,created_at").single();
       if (error) return json({ error: "save failed" }, 500);
+      await queueSync(saved?.id, "registration_leads", () => registrationLead(saved.id, saved.created_at || new Date().toISOString(), { name, phone, raw_phone: t(b.phone, 30), course, timing, ...a }), isTest, { env });
       return json({ ok: true, event_id: a.event_id });
     }
     if (b.action !== "submit") return json({ error: "unknown action" }, 400);
@@ -116,9 +119,11 @@ Deno.serve(async (req) => {
     const auth = req.headers.get("authorization") || "";
     if (auth.startsWith("Bearer ") && auth.split(".").length === 3) { try { const { data } = await db.auth.getUser(auth.slice(7)); user_id = data?.user?.id || null; } catch (_) { /* anon */ } }
     const exam = EXAMS[t(b.exam, 30)] || "A1 Mock 1";
-    const isTest = /\bTEST\b/.test(f.first_name + " " + f.last_name);
-    const { data, error } = await db.from("mock_exam_leads").insert({ ...f, ...attribution(b), exam, consent: true, consent_text: t(b.consent_text, 300), user_id, page: t(b.page, 200), user_agent: t(req.headers.get("user-agent"), 200), is_test: isTest }).select("id,edit_token").single();
+    const isTest = isTestName(f.first_name + " " + f.last_name);
+    const a = attribution(b);
+    const { data, error } = await db.from("mock_exam_leads").insert({ ...f, ...a, exam, consent: true, consent_text: t(b.consent_text, 300), user_id, page: t(b.page, 200), user_agent: t(req.headers.get("user-agent"), 200), is_test: isTest }).select("id,edit_token,created_at").single();
     if (error) return json({ error: "We could not save your details right now. Please try again in a minute." }, 500);
+    await queueSync(data?.id, "mock_exam_leads", () => mockExamLead(data.id, data.created_at || new Date().toISOString(), { ...f, exam, ...a }), isTest, { env });
     return json({ ok: true, id: data.id, token: data.edit_token });
   } catch (_) { return json({ error: "Something went wrong. Please try again." }, 500); }
 });
