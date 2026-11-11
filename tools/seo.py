@@ -46,6 +46,10 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
    'How to book the Goethe A1 or B1 exam in Pakistan: centres in Karachi, Lahore and Islamabad, payment, documents and what each level is for.'),
  'blog/german-course-fees-pakistan.html': ('German Language Course Fees in Pakistan 2026: A1 to B2',
    "What a German course costs in Pakistan in 2026: DFA's A1 to B2 fees, what drives the price, how to save and how to choose your level."),
+ 'german-b1-course.html': ('German B1 Course in Pakistan (Online) | Deutsch Für Alle',
+   'Live online German B1 course on Zoom: 2 months, Rs. 40,000, Monday to Friday, four daily time slots. Admissions are open. Book a free demo class.'),
+ 'german-for-kids.html': ('Online German Classes for Kids (Ages 12-16) | DFA',
+   'Live online German classes on Zoom for ages 12 to 16. 3 months, Rs. 8,000 per month, Monday to Friday, four time slots. Book a free demo class.'),
  'books/a1-workbook.html': ('German A1 Workbook with Answers (PDF & Paperback)',
    'German A1 workbook: 9 units, 150+ exercises, review test and answer key. Paperback on Amazon, PDF on Etsy and Gumroad.'),
 }
@@ -68,32 +72,139 @@ def clean_url(rel):  # 'books/farben.html' -> https://www.../books/farben ; inde
     return SITE + '/' + re.sub(r'\.html$', '', rel)
 def attr(s): return html.escape(s, quote=True)
 
+# Course nodes for the two stand-alone course pages (from the approved drafts; the FAQPage is built from each page's visible FAQ)
+PAGE_COURSES = {
+ "german-b1-course.html": {
+  "@type": "Course",
+  "@id": "https://www.deutschfuralle.com/german-b1-course#course",
+  "name": "German B1 Course (Online)",
+  "description": "Live online German B1 course on Zoom, 2 months, Monday to Friday, with four daily time slots in Pakistan time. Admissions are open.",
+  "url": "https://www.deutschfuralle.com/german-b1-course",
+  "inLanguage": "en",
+  "teaches": "German language, CEFR level B1",
+  "educationalLevel": "B1",
+  "timeRequired": "P2M",
+  "provider": {
+   "@type": "EducationalOrganization",
+   "@id": "https://www.deutschfuralle.com/#organization",
+   "name": "Deutsch Für Alle",
+   "url": "https://www.deutschfuralle.com/"
+  },
+  "offers": {
+   "@type": "Offer",
+   "category": "Paid",
+   "price": "40000",
+   "priceCurrency": "PKR",
+   "availability": "https://schema.org/InStock",
+   "url": "https://www.deutschfuralle.com/german-b1-course"
+  },
+  "hasCourseInstance": {
+   "@type": "CourseInstance",
+   "courseMode": "Online",
+   "courseSchedule": {
+    "@type": "Schedule",
+    "repeatFrequency": "P1D",
+    "byDay": [
+     "https://schema.org/Monday",
+     "https://schema.org/Tuesday",
+     "https://schema.org/Wednesday",
+     "https://schema.org/Thursday",
+     "https://schema.org/Friday"
+    ],
+    "duration": "PT1H30M",
+    "scheduleTimezone": "Asia/Karachi"
+   }
+  }
+ },
+ "german-for-kids.html": {
+  "@type": "Course",
+  "@id": "https://www.deutschfuralle.com/german-for-kids#course",
+  "name": "Online German Classes for Kids (Ages 12-16)",
+  "description": "Live online German classes on Zoom for ages 12 to 16, from zero to A1. A 3-month course at PKR 8,000 per month (PKR 24,000 in total), Monday to Friday, with four daily time slots in Pakistan time. Admissions are open.",
+  "url": "https://www.deutschfuralle.com/german-for-kids",
+  "inLanguage": "en",
+  "teaches": "German language",
+  "timeRequired": "P3M",
+  "audience": {
+   "@type": "PeopleAudience",
+   "suggestedMinAge": 12,
+   "suggestedMaxAge": 16
+  },
+  "provider": {
+   "@type": "EducationalOrganization",
+   "@id": "https://www.deutschfuralle.com/#organization",
+   "name": "Deutsch Für Alle",
+   "url": "https://www.deutschfuralle.com/"
+  },
+  "offers": {
+   "@type": "Offer",
+   "category": "Paid",
+   "price": "8000",
+   "priceCurrency": "PKR",
+   "description": "PKR 8,000 per month for 3 months (PKR 24,000 in total)",
+   "availability": "https://schema.org/InStock",
+   "url": "https://www.deutschfuralle.com/german-for-kids",
+   "priceSpecification": {
+    "@type": "UnitPriceSpecification",
+    "price": "8000",
+    "priceCurrency": "PKR",
+    "billingDuration": "P1M",
+    "unitText": "month"
+   }
+  },
+  "hasCourseInstance": {
+   "@type": "CourseInstance",
+   "courseMode": "Online",
+   "courseSchedule": {
+    "@type": "Schedule",
+    "repeatFrequency": "P1D",
+    "byDay": [
+     "https://schema.org/Monday",
+     "https://schema.org/Tuesday",
+     "https://schema.org/Wednesday",
+     "https://schema.org/Thursday",
+     "https://schema.org/Friday"
+    ],
+    "duration": "PT1H30M",
+    "scheduleTimezone": "Asia/Karachi"
+   }
+  }
+ }
+}
+
 def courses(s):
     out = []
-    for card in re.findall(r'<div class="card">(?:(?!<div class="card).)*?class="price".*?Enroll via WhatsApp</a></div>', s, re.S):
+    for card in re.findall(r'<div class="card">(?:(?!<div class="card).)*?class="price".*?</a></div>', s, re.S):
         name = txt(re.search(r'<h[23][^>]*>(.*?)</h[23]>', card).group(1))
         price = re.search(r'class="price">Rs\. ([\d,]+)', card).group(1).replace(',', '')
         dur = txt(re.search(r'<strong>Duration:</strong>(.*?)</p>', card, re.S).group(1))
         desc = txt(re.search(r'</div><p>(.*?)</p>', card, re.S).group(1))
-        lvl = 'A1 and A2' if 'A1 + A2' in name else ('A2' if 'A2' in name else 'A1')
-        out.append({'@type': 'Course', 'name': name, 'description': desc, 'provider': ORG_REF,
-                    'educationalLevel': lvl, 'inLanguage': 'de', 'url': SITE + '/courses',
-                    'offers': {'@type': 'Offer', 'category': 'Paid', 'price': price, 'priceCurrency': 'PKR',
-                               'url': SITE + '/courses', 'availability': 'https://schema.org/InStock'},
-                    'hasCourseInstance': {'@type': 'CourseInstance', 'courseMode': 'Online',
-                                          'location': {'@type': 'VirtualLocation', 'name': 'Zoom'},
-                                          'description': 'Live group classes on Zoom, ' + dur}})
-    assert len(out) == 6, len(out)
-    # B1 / B2 are listed as one line under the cards ("B1 course: 2 months, Rs. 40,000 · B2 course fee: Rs. 50,000")
-    m = re.search(r'B1 course:\s*(\d+) months?,\s*<strong>Rs\. ([\d,]+)</strong>\s*·\s*B2 course fee:\s*<strong>Rs\. ([\d,]+)</strong>', s)
-    assert m, 'B1/B2 fee line not found'
-    for lvl, price, inst in (('B1', m.group(2), {'courseWorkload': 'P%sM' % m.group(1)}), ('B2', m.group(3), {})):
-        out.append({'@type': 'Course', 'name': f'German {lvl} Course', 'description': f'Live German {lvl} course on Zoom.', 'provider': ORG_REF,
-                    'educationalLevel': lvl, 'inLanguage': 'de', 'url': SITE + '/courses',
-                    'offers': {'@type': 'Offer', 'category': 'Paid', 'price': price.replace(',', ''), 'priceCurrency': 'PKR',
-                               'url': SITE + '/courses', 'availability': 'https://schema.org/InStock'},
-                    'hasCourseInstance': {'@type': 'CourseInstance', 'courseMode': 'Online',
-                                          'location': {'@type': 'VirtualLocation', 'name': 'Zoom'}, **inst}})
+        lvl = 'A1 and A2' if 'A1 + A2' in name else ('B1' if 'B1' in name else ('A2' if 'A2' in name else 'A1'))
+        link = re.search(r'<a class="btn" href="(/german-[a-z0-9-]+)"', card)
+        url = SITE + link.group(1) if link else SITE + '/courses'
+        offer = {'@type': 'Offer', 'category': 'Paid', 'price': price, 'priceCurrency': 'PKR',
+                 'url': url, 'availability': 'https://schema.org/InStock'}
+        node = {'@type': 'Course', 'name': name, 'description': desc, 'provider': ORG_REF,
+                'educationalLevel': lvl, 'inLanguage': 'de', 'url': url, 'offers': offer,
+                'hasCourseInstance': {'@type': 'CourseInstance', 'courseMode': 'Online',
+                                      'location': {'@type': 'VirtualLocation', 'name': 'Zoom'},
+                                      'description': 'Live group classes on Zoom, ' + dur}}
+        if 'B1' in name: node['hasCourseInstance']['courseWorkload'] = 'P2M'
+        if 'Kids' in name:
+            node['educationalLevel'] = 'A1'; node['audience'] = {'@type': 'PeopleAudience', 'suggestedMinAge': 12, 'suggestedMaxAge': 16}
+            node['hasCourseInstance']['courseWorkload'] = 'P3M'
+            offer['description'] = 'PKR 8,000 per month for 3 months (PKR 24,000 in total)'
+            offer['priceSpecification'] = {'@type': 'UnitPriceSpecification', 'price': price, 'priceCurrency': 'PKR', 'billingDuration': 'P1M', 'unitText': 'month'}
+        out.append(node)
+    assert len(out) == 8, len(out)
+    # B2 stays a plain fee line under the cards ("... B2 course fee: Rs. 50,000")
+    m = re.search(r'B2 course fee:\s*<strong>Rs\. ([\d,]+)</strong>', s)
+    assert m, 'B2 fee line not found'
+    out.append({'@type': 'Course', 'name': 'German B2 Course', 'description': 'Live German B2 course on Zoom.', 'provider': ORG_REF,
+                'educationalLevel': 'B2', 'inLanguage': 'de', 'url': SITE + '/courses',
+                'offers': {'@type': 'Offer', 'category': 'Paid', 'price': m.group(1).replace(',', ''), 'priceCurrency': 'PKR',
+                           'url': SITE + '/courses', 'availability': 'https://schema.org/InStock'},
+                'hasCourseInstance': {'@type': 'CourseInstance', 'courseMode': 'Online', 'location': {'@type': 'VirtualLocation', 'name': 'Zoom'}}})
     return out
 
 def faq(s, page):
@@ -203,6 +314,7 @@ def main():
                     if len(t_new) > 60: t_new = f'{sub} – {name}'
                     if len(t_new) > 60: t_new = f'{SHORT_SUB.get(sub, sub)} – {name}'
             if rel == 'courses.html': graph += courses(s)
+            if rel in PAGE_COURSES: graph += [PAGE_COURSES[rel], faq(s, rel)]
             if rel in ('index.html', 'resources.html'): graph.append(faq(s, rel))
             if rel.startswith('blog/'):
                 ogtype = 'article'

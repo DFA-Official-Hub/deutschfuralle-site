@@ -10,7 +10,7 @@ const EXAMS: Record<string, string> = { "a1-mock-1": "A1 Mock 1", "a1-mock-2": "
 const t = (x: unknown, n = 120) => String(x ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 const pkt = (d: string | null) => d ? new Date(new Date(d).getTime() + 5 * 3600e3).toISOString().slice(0, 16).replace("T", " ") : "";
 const cell = (v: unknown) => { let s = String(v ?? ""); if (/^[=@]/.test(s)) s = " " + s; return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-const COURSES = ["Free Demo Class","A1 Crash Course","A1 Super Intensive Course","A1 Normal Track Course","German A2 Course","A2 Super Intensive Course","A1 + A2 Combined Program","B1 / B2 (ask for details)"];
+const COURSES = ["Free Demo Class","A1 Crash Course","A1 Super Intensive Course","A1 Normal Track Course","German A2 Course","A2 Super Intensive Course","A1 + A2 Combined Program","German B1 Course","German for Kids (12-16)","B1 / B2 (ask for details)"];
 const TIMINGS = ["12:00 PM to 1:30 PM","2:00 PM to 3:30 PM","6:30 PM to 8:00 PM","9:00 PM to 10:30 PM",
   "12PM to 1PM","4:30PM to 5:30PM","8:30PM to 9:30PM","10:30PM to 11:30PM"];  // second row = old slots, still accepted from cached pages
 const normPhone = (p: string) => { let d = p.replace(/[^\d+]/g, ""); if (d.startsWith("00")) d = "+" + d.slice(2); if (/^03\d{9}$/.test(d)) d = "+92" + d.slice(1); if (/^92\d{10}$/.test(d)) d = "+" + d; return d; };
