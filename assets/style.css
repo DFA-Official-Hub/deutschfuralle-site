@@ -511,6 +511,7 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 .mk-tr{background:#f6f8f5;border-radius:10px;padding:10px 14px;font-size:.95rem}
 .mk-cta{margin-top:30px}.mk-strip-wrap{padding-bottom:0!important}.mk-strip{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center;background:var(--dk);color:#c9dbd0;border-radius:18px;padding:18px 22px;text-decoration:none}
 .mk-strip b{font:800 1.2rem Archivo;color:#fff}.mk-strip span{flex:1 1 320px}.mk-strip i{font-style:normal;color:var(--gl);font-weight:700}.mk-strip:hover{box-shadow:0 0 0 4px rgba(74,222,107,.25)}
+.inner main a.mk-strip:not(.btn){color:#c9dbd0;text-decoration:none}  /* beat the generic green link colour (2.66:1 on the dark strip) */
 @media(max-width:760px){.mk-facts,.mk-mods{grid-template-columns:repeat(2,1fr)}.mk-tabs{top:60px}.mk-tab{flex:1 1 30%}.mk-item{grid-template-columns:1fr}.mk-play{flex-direction:row;justify-content:center;gap:10px}.mk-ads{grid-template-columns:1fr}.mk-fr{grid-template-columns:1fr;gap:4px}}
 .ac-card label.mk-ad{flex-direction:row;font-weight:400}.ac-card .mk-ad input{width:1px!important;height:1px;padding:0!important}
 @media(max-width:760px){.mk-tabs{flex-wrap:nowrap;overflow-x:auto;gap:5px;padding:8px 0;scrollbar-width:none}.mk-tabs::-webkit-scrollbar{display:none}.mk-tab{flex:0 0 auto;padding:6px 12px;font-size:.88rem}.mk-tab small,.mk-tab span{display:none}.mk-tab i{position:static;margin-left:4px;display:inline}.mk-tab{flex-direction:row;align-items:center}.mk-bar{padding:10px 12px}.mk-time{font-size:1.35rem}}
