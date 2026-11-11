@@ -111,6 +111,16 @@ Deno.test("plan: matches by E.164 phone, and by raw / digits-only variants", () 
     assert(p.action !== "append", cell);
   }
 });
+Deno.test("plan: sheet row typed as 03.. matches a website lead stored as 92..", () => {
+  assert(phoneKeys("03001234567").has("923001234567"));
+  const p = planSync([HEADER, existing({ "Phone (E.164)": "03001234567", "Supabase id": ID2 })], reg({ phone: "923001234567", raw_phone: "923001234567" }));
+  assertEquals(p.action, "update");
+});
+Deno.test("plan: sheet row stored as 92.. matches a lead whose raw phone is 03..", () => {
+  assert(phoneKeys("923001234567").has("923001234567"));
+  const p = planSync([HEADER, existing({ "Phone (E.164)": "923001234567", "Supabase id": ID2 })], reg({ phone: "", raw_phone: "03001234567" }));
+  assertEquals(p.action, "update");
+});
 Deno.test("plan: matches by lowercase email when there is no phone match", () => {
   const rows = [HEADER, existing({ "Phone (E.164)": "+49111111111", Email: "AYA@example.com", "Supabase id": ID1 })];
   const p = planSync(rows, mock({ phone: "", }, ID2));

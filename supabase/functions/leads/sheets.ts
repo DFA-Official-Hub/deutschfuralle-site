@@ -47,7 +47,7 @@ export function normPhone(p: string, country?: string): string {
 /** Digit-only variants used for matching: E.164 digits and the raw digits ("0676091056" and "+212676091056" both match the same person). */
 export function phoneKeys(...vals: (string | null | undefined)[]): Set<string> {
   const out = new Set<string>();
-  for (const v of vals) { const d = String(v ?? "").replace(/\D/g, ""); if (d.length >= 7) out.add(d); }
+  for (const v of vals) { const d = String(v ?? "").replace(/\D/g, ""); if (d.length >= 7) { out.add(d); if (/^03\d{9}$/.test(d)) out.add("92" + d.slice(1)); } }   // hand-typed 03.. also matches the stored 92..
   return out;
 }
 
