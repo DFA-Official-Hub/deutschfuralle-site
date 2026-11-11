@@ -171,7 +171,7 @@ export function admissionSvg(d: any, img: any) {
 <text x="555" y="162" text-anchor="end">Student ID: <tspan font-weight="600">${esc2(d.studentId)}</tspan></text>
 <text x="555" y="175" text-anchor="end">Invoice No: <tspan font-weight="600">${esc2(d.invoiceNo)}</tspan></text>
 <text x="555" y="188" text-anchor="end">Admissions Office</text>
-<text x="555" y="201" text-anchor="end">admission.deutschfuralle@gmail.com</text>
+<text x="555" y="201" text-anchor="end">admission@mail.deutschfuralle.com</text>
 </g>
 <text x="40" y="236" font-family="Poppins" font-weight="600" font-size="16" fill="${INK}">Confirmation of Registration</text>
 <text x="555" y="236" font-family="Poppins" font-weight="500" font-size="10" fill="${G}" text-anchor="end">${esc2(d.studentId)}</text>
@@ -238,7 +238,7 @@ ${d.payNote ? `<text x="160" y="${ty + 176}" font-weight="600" fill="${G}">${esc
 <g font-family="${TY}" font-size="10.5" fill="${INK}"><text x="146" y="592">DEUTSCH FUR ALLE</text><text x="146" y="607">AL BARAKA</text><text x="146" y="622">****3012</text></g>
 <text x="146" y="660" font-family="Poppins" font-size="9.4" fill="#c4621a" text-decoration="underline">QUESTIONS?</text>
 <text x="146" y="678" font-family="Poppins" font-size="9.4" fill="#c4621a">Email us at</text>
-<text x="146" y="691" font-family="Poppins" font-size="9.4" fill="#c4621a">admission.deutschfuralle@gmail.com</text>
+<text x="146" y="691" font-family="Poppins" font-size="9.4" fill="#c4621a">admission@mail.deutschfuralle.com</text>
 <image href="${img.stamp}" x="447" y="545" width="104" height="104"/>
 <image href="${img.sign}" x="440" y="668" width="118" height="28"/>
 <text x="499" y="712" font-family="Poppins" font-size="8" fill="${MUT}" text-anchor="middle">Deutsch Für Alle, Accounts</text>
