@@ -30,9 +30,25 @@
   // (register that one as the event-scoped custom dimension).
   function ga(n,p){ p=p||{}; if(p.event_id)p.dfa_event_id=p.event_id; if(window.gtag) gtag('event',n,p); }
   function px(n,p,eid){ if(window.fbq&&window.DFAConsent&&DFAConsent.granted()) fbq('track',n,p||{},{eventID:eid}); }
+  // Hold-off before a page navigation (registration redirect): the hits are sent first, then `done` runs once they have had
+  // a chance to leave, never later than LEAD_CAP ms. With consent declined or the tag scripts not loaded there is nothing to wait for.
+  var LEAD_CAP=900, PX_WINDOW=400;   // fbq has no callback: it gets a fixed window (< cap); GA4 gets event_callback + beacon transport
+  function consented(){ return !!(window.DFAConsent&&DFAConsent.granted()); }
+  function gaLoaded(){ return !!(window.google_tag_manager&&window.google_tag_manager['G-L3X22MD03E']); }   // set only once gtag.js itself has loaded
+  function pxLoaded(){ return !!(window.fbq&&window.fbq.callMethod); }                                        // set only once fbevents.js has loaded
   window.DFATrack={
-    lead:function(o){ var eid=o.event_id||uuid(); ga('generate_lead',{form:o.form,method:o.method||'',course:o.course||'',timing:o.timing||'',event_id:eid});
-                      px('Lead',{content_name:o.course||o.form,content_category:o.form},eid); return eid; },
+    lead:function(o,done){
+      var eid=o.event_id||uuid(), p={form:o.form,method:o.method||'',course:o.course||'',timing:o.timing||'',event_id:eid};
+      var wait=typeof done==='function'&&consented(), waitGa=wait&&gaLoaded(), waitPx=wait&&pxLoaded(), fired=false, pend=0, cap;
+      function fin(){ if(fired)return; fired=true; clearTimeout(cap); try{done()}catch(e){} }
+      function one(){ if(--pend<=0)fin(); }
+      if(waitGa){ pend++; p.transport_type='beacon'; p.event_callback=one; }
+      if(waitPx){ pend++; }
+      ga('generate_lead',p);
+      px('Lead',{content_name:o.course||o.form,content_category:o.form},eid);
+      if(waitPx) setTimeout(one,PX_WINDOW);
+      if(typeof done==='function'){ if(pend>0) cap=setTimeout(fin,LEAD_CAP); else fin(); }
+      return eid; },
     suppressWa:function(){ suppressUntil=Date.now()+5000; }
   };
   document.addEventListener('click',function(e){
