@@ -97,7 +97,9 @@ if(!window.DFA_LIVE&&!d)window['ga-disable-G-L3X22MD03E']=true;})();
       btns.forEach(function(b){b.disabled=false}); f.removeAttribute('data-busy');
       try{ location.assign(dest); }catch(_){} }
     function trackedDone(){ tracked=true; if(wantGo)go(); }
-    if(window.DFATrack) DFATrack.lead({form:'registration',method:via,course:g('c'),timing:g('t'),event_id:eid},trackedDone); else trackedDone();
+    // Safety net: if tracking throws or an old cached dfa-track.js ignores the callback, the redirect still happens.
+    setTimeout(trackedDone,1200);
+    try{ if(window.DFATrack) DFATrack.lead({form:'registration',method:via,course:g('c'),timing:g('t'),event_id:eid},trackedDone); else trackedDone(); }catch(_){ trackedDone(); }
     var body={action:'register',name:g('n'),phone:g('p'),course:g('c'),timing:g('t'),message:g('m'),via:via,
       consent:document.getElementById('rc').checked,consent_text:'I agree that DFA may contact me about courses',
       captcha:'',hp:document.getElementById('reg-hp').value,page:location.pathname,event_id:eid,
