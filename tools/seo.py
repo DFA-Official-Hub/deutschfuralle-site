@@ -25,8 +25,8 @@ SKIP = {'links/index.html'}                          # copy of the dfa-links hub
 TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'index.html': ('Online German Classes in Pakistan | Deutsch Für Alle',
    'Learn German live on Zoom in small groups of 2 to 4. A1 and A2 courses with Goethe and ÖSD exam prep, taught from Germany and Pakistan. Book a free demo.'),
- 'courses.html': ('German Language Course Fees & A1–A2 Classes | DFA',
-   'Live online German courses from Rs. 15,000: A1 crash, intensive and normal tracks, A2, and an A1 + A2 combo. Course books, recordings and exam prep.'),
+ 'courses.html': ('German Course Fees in Pakistan: A1–B2 & Kids Classes | DFA',
+   'Live online German courses on Zoom from Rs. 15,000: A1 tracks, A2, A1 + A2 combined, B1 (2 months) and kids classes (ages 12-16). Book a free demo class.'),
  'exam-prep.html': ('Free Goethe A1 Mock Test Online (Start Deutsch 1) | DFA',
    "Take a full A1 practice exam in the Goethe Start Deutsch 1 format for free: Hören with audio, Lesen, Schreiben and Sprechen. Timed and marked instantly."),
  'registration.html': ('Register or Book a Free German Demo Class | DFA',
