@@ -30,7 +30,7 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'exam-prep.html': ('Free Goethe A1 Mock Test Online (Start Deutsch 1) | DFA',
    "Take a full A1 practice exam in the Goethe Start Deutsch 1 format for free: Hören with audio, Lesen, Schreiben and Sprechen. Timed and marked instantly."),
  'registration.html': ('Register or Book a Free German Demo Class | DFA',
-   'Try a real German lesson on Zoom before you pay. Book your free demo or register for the next A1 or A2 batch with Deutsch Für Alle.'),
+   'Try a real German lesson on Zoom before you pay. Book a free demo or register for A1, A2, B1 or kids classes (ages 12-16). Admissions are open.'),
  'contact.html': ('Contact Deutsch Für Alle – Online German Classes',
    'Questions about fees, batches or Goethe exams? Message us on WhatsApp, where we usually reply fastest, or email contact.deutschfuralle@gmail.com.'),
  'resources.html': ('Free German Learning Resources & A1 Starter Pack | DFA',
