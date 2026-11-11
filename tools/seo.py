@@ -84,6 +84,16 @@ def courses(s):
                                           'location': {'@type': 'VirtualLocation', 'name': 'Zoom'},
                                           'description': 'Live group classes on Zoom, ' + dur}})
     assert len(out) == 6, len(out)
+    # B1 / B2 are listed as one line under the cards ("B1 course: 2 months, Rs. 40,000 · B2 course fee: Rs. 50,000")
+    m = re.search(r'B1 course:\s*(\d+) months?,\s*<strong>Rs\. ([\d,]+)</strong>\s*·\s*B2 course fee:\s*<strong>Rs\. ([\d,]+)</strong>', s)
+    assert m, 'B1/B2 fee line not found'
+    for lvl, price, inst in (('B1', m.group(2), {'courseWorkload': 'P%sM' % m.group(1)}), ('B2', m.group(3), {})):
+        out.append({'@type': 'Course', 'name': f'German {lvl} Course', 'description': f'Live German {lvl} course on Zoom.', 'provider': ORG_REF,
+                    'educationalLevel': lvl, 'inLanguage': 'de', 'url': SITE + '/courses',
+                    'offers': {'@type': 'Offer', 'category': 'Paid', 'price': price.replace(',', ''), 'priceCurrency': 'PKR',
+                               'url': SITE + '/courses', 'availability': 'https://schema.org/InStock'},
+                    'hasCourseInstance': {'@type': 'CourseInstance', 'courseMode': 'Online',
+                                          'location': {'@type': 'VirtualLocation', 'name': 'Zoom'}, **inst}})
     return out
 
 def faq(s, page):
