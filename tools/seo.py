@@ -44,6 +44,8 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'privacy.html': (None, None),  # already good
  'blog/goethe-exam-pakistan.html': ('Goethe Exam in Pakistan 2026: A1 & B1 Booking & Documents',
    'How to book the Goethe A1 or B1 exam in Pakistan: centres in Karachi, Lahore and Islamabad, payment, documents and what each level is for.'),
+ 'blog/german-course-fees-pakistan.html': ('German Language Course Fees in Pakistan 2026: A1 to B2',
+   "What a German course costs in Pakistan in 2026: DFA's A1 to B2 fees, what drives the price, how to save and how to choose your level."),
  'books/a1-workbook.html': ('German A1 Workbook with Answers (PDF & Paperback)',
    'German A1 workbook: 9 units, 150+ exercises, review test and answer key. Paperback on Amazon, PDF on Etsy and Gumroad.'),
 }
