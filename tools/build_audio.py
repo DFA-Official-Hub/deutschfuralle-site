@@ -1,78 +1,144 @@
 #!/usr/bin/env python3
-"""Build the A1.1 Kursbuch audio page and its QR short links (DRAFT, noindex, not in the sitemap).
+"""Build the A1.1 Kursbuch audio page and its QR short links (noindex, not in the sitemap).
 
-Source of truth: audio/a1-1/tracks.json (the track manifest). Edit that file, then run:
-    python3 tools/build_audio.py                 # build pages from the manifest
-    python3 tools/build_audio.py --placeholder   # (re)write a PLACEHOLDER manifest first, then build
+Sources
+    Book:     the audio scripts (default below, or set AUDIO_SCRIPTS=/path/to/audio-scripts.md).
+              Every '### [Track A1.1-...]' header there is one track. The book is the master list.
+    Manifest: audio/a1-1/tracks.json holds, per track: id (as printed in the book), slug, title,
+              section, group, isExtra, url. The page and the stubs are built from it.
 
-Writes:
-    audio/a1-1/index.html        the track list, one <audio preload="none"> player per track
-    audio/a1-1/<track-id>/index.html   one stable QR stub per track (JS location.replace + noscript refresh)
+Usage
+    python3 tools/build_audio.py                    validate tracks.json against the book, then build
+    python3 tools/build_audio.py --init             write tracks.json from the book with PLACEHOLDER urls
+    python3 tools/build_audio.py --init --host URL  write tracks.json from the book with real urls:
+                                                    URL + '<book id>.mp3' (e.g. the release download base)
+The build stops with an error (exit 1) if a book track is missing from tracks.json, appears twice,
+is not in the book, has a duplicate or changed slug, a wrong extras flag or a title that differs from the book.
 
-Track-id scheme (lower case, URL-safe, never reused once printed in a QR code):
-    main tracks  <lektion>-<nn>   e.g. 1-01, 1-02 ... 7-16   (Lektion number, two-digit track within it)
-    extras       x<nn>            e.g. x01 ... x15
-    If the real book numbers its tracks differently (e.g. "1.05" or a running 1-107), keep the ids
-    matching the printed numbers so a student can type them, and set each entry's "id" in the manifest.
+Track ids and URLs (fixed by the book, audio-scripts.md v2.5)
+    Book id   A1.1-L01-02  (A1.1-Lxx-nn lesson track, A1.1-ZSn-nn Zwischenspiel, A1.1-AT-nn Abschlusstest,
+                            A1.1-PT-nn Prüfungstraining)
+    Slug      L01-02       (the book id without 'A1.1-'), so the printed URL is
+              www.deutschfuralle.com/audio/a1-1/L01-02   (case-sensitive on GitHub Pages; QR codes carry the exact case)
+    Anchor    /audio/a1-1/#t-L01-02
+    NEVER REUSE A PRINTED ID OR SLUG. Once a QR code or URL is in print, that slug must keep pointing
+    at that recording forever. If a track is cut, keep its stub (point it at the nearest track);
+    if one is added, give it a new number. Never renumber.
 
-Hosting: audio lives as GitHub Release assets in a separate public repo. Change ASSET_BASE below once
-(or give a track its own "url") to move hosts; every page and stub is regenerated from it.
-Always link the stable github.com/.../releases/download/... URL, never the signed release-assets URL
-it redirects to (that one expires).
+Extras: the 15 tracks of the Zwischenspiele (ZS1-ZS3), the A1.1-Abschlusstest (AT) and the
+Prüfungstraining (PT), as listed under "Release structure on the audio web page" in the scripts.
 
-QR_TARGET: 'page' (default) sends a scanned QR code to the track on the list page (#t-<id>).
-'asset' would send it straight to the MP3, but GitHub serves release assets as
-application/octet-stream + Content-Disposition: attachment, so a top-level visit DOWNLOADS the file
-instead of playing it (checked in Chrome, Android Chrome emulation and WebKit/iPhone emulation).
+Hosting: GitHub Release assets in a separate public DFA repo. Always use the stable
+github.com/.../releases/download/... URL, never the signed release-assets URL it redirects to (expires).
+QR stubs go to the track on this page, not to the MP3: GitHub serves release assets as
+application/octet-stream + Content-Disposition: attachment, so opening the MP3 directly downloads it.
+
+Placeholder note: while any track url still points at the test asset (TEST_ASSET), the page shows a
+"Draft preview" box. It disappears by itself once every url is real. It must be gone before go-live.
 """
-import html, json, pathlib, re, sys
+import html, json, os, pathlib, re, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SITE = 'https://www.deutschfuralle.com'
 BASE_PATH = '/audio/a1-1/'
 OUT = ROOT / 'audio' / 'a1-1'
 MANIFEST = OUT / 'tracks.json'
+SCRIPTS = pathlib.Path(os.environ.get('AUDIO_SCRIPTS', '/workspace/academics/book-series/books/A1.1-Kursbuch/audio-scripts.md'))
 TEMPLATE = ROOT / 'german-for-kids.html'   # header, nav, footer and <head> scripts are copied from this page
 
-# ---- hosting: change here only -------------------------------------------------------------
-ASSET_BASE = 'https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/'
-PLACEHOLDER_FILE = 'dfa-test-tone.mp3'   # generated test tone, NOT course audio
-QR_TARGET = 'page'                       # 'page' (recommended) or 'asset'
-# ---------------------------------------------------------------------------------------------
+# Temporary test asset (generated tone, not course audio). Any url starting with this counts as placeholder.
+TEST_ASSET = 'https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3'
+QR_TARGET = 'page'   # 'page' (decided by Head of Tech) or 'asset'
 
 FONTS = ['archivo-var-latin.woff2', 'inter-var-latin.woff2', 'montserrat-800-brand.woff2']
-ID_RE = re.compile(r'^(?:\d{1,2}-\d{2}|x\d{2})$')
+HEAD_RE = re.compile(r'^### \[Track (A1\.1-(L\d{2}|ZS\d|AT|PT)-\d{2})\] (.+?)\s*$')
+EXTRA_KINDS = ('ZS', 'AT', 'PT')
 esc = lambda s: html.escape(str(s), quote=True)
 
 
-def placeholder_manifest():
-    per_lesson = [15, 15, 15, 15, 15, 16, 16]          # 107 main tracks over 7 placeholder sections
-    tracks = []
-    for lesson, n in enumerate(per_lesson, 1):
-        for i in range(1, n + 1):
-            tracks.append({'id': f'{lesson}-{i:02d}', 'title': f'Placeholder track {lesson}.{i:02d}',
-                           'section': f'Lektion {lesson} (placeholder)', 'isExtra': False, 'file': PLACEHOLDER_FILE})
-    for i in range(1, 16):
-        tracks.append({'id': f'x{i:02d}', 'title': f'Placeholder extra {i:02d}',
-                       'section': 'Extras', 'isExtra': True, 'file': PLACEHOLDER_FILE})
-    return {'_note': 'PLACEHOLDER DATA. Every entry points to a generated test tone, not course audio. '
-                     'Replace with the real A1.1 track list before publishing.',
-            'placeholder': True, 'tracks': tracks}
+class BuildError(Exception):
+    pass
 
 
-def url_of(t):
-    return t.get('url') or ASSET_BASE + t['file']
+def slug_of(book_id):
+    return book_id[len('A1.1-'):]
 
 
-def load():
-    m = json.loads(MANIFEST.read_text(encoding='utf-8'))
-    seen = set()
-    for t in m['tracks']:
-        assert ID_RE.match(t['id']), f"bad track id {t['id']!r}"
-        assert t['id'] not in seen, f"duplicate track id {t['id']}"
-        assert t.get('url') or t.get('file'), f"track {t['id']} has no file or url"
-        seen.add(t['id'])
-    return m
+def read_book():
+    """Return the book's tracks in order: id, title, section (from the '## ' heading above it), isExtra."""
+    if not SCRIPTS.exists():
+        raise BuildError(f'audio scripts not found at {SCRIPTS} (set AUDIO_SCRIPTS=/path/to/audio-scripts.md)')
+    tracks, section, errors, seen = [], None, [], {}
+    for n, line in enumerate(SCRIPTS.read_text(encoding='utf-8').splitlines(), 1):
+        if line.startswith('## '):
+            section = line[3:].strip()
+        elif line.startswith('### [Track'):
+            m = HEAD_RE.match(line)
+            if not m:
+                errors.append(f'scripts line {n}: track header not in the A1.1-<part>-<nn> format: {line!r}'); continue
+            bid, part, title = m.group(1), m.group(2), m.group(3)
+            if bid in seen:
+                errors.append(f'scripts line {n}: {bid} appears twice in the book (first on line {seen[bid]})'); continue
+            seen[bid] = n
+            extra = part.startswith(EXTRA_KINDS)
+            tracks.append({'id': bid, 'slug': slug_of(bid), 'title': title, 'section': section,
+                           'group': 'extras' if extra else 'course', 'isExtra': extra})
+    if errors:
+        raise BuildError('\n'.join(errors))
+    if not tracks:
+        raise BuildError(f'no "### [Track ...]" headers found in {SCRIPTS}')
+    return tracks
+
+
+def extras_order(t):   # Zwischenspiele first (they sit between the lessons), then Abschlusstest, then Prüfungstraining
+    part = t['id'].split('-')[1]
+    return ({'AT': 1, 'PT': 2}.get(part, 0), t['id'])
+
+
+def init_manifest(host=None):
+    book = read_book()
+    course = [t for t in book if not t['isExtra']]
+    extras = sorted((t for t in book if t['isExtra']), key=extras_order)
+    for t in course + extras:
+        t['url'] = (host.rstrip('/') + '/' + t['id'] + '.mp3') if host else f'{TEST_ASSET}?track={t["slug"]}'
+    MANIFEST.write_text(json.dumps({
+        'book': 'DFA Sprachsteg A1.1 Kursbuch', 'source': 'audio-scripts.md',
+        '_note': 'Generated from the "### [Track ...]" headers of audio-scripts.md. A printed id/slug is never reused.'
+                 + ('' if host else ' PLACEHOLDER urls: every track plays the same generated test tone.'),
+        'tracks': course + extras}, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
+
+
+def validate(manifest, book):
+    errs = []
+    tracks = manifest.get('tracks', [])
+    book_by_id = {t['id']: t for t in book}
+    ids = [t.get('id') for t in tracks]
+    for i in sorted({i for i in ids if ids.count(i) > 1}):
+        errs.append(f'duplicate track: {i} is in tracks.json {ids.count(i)} times')
+    for i in [b['id'] for b in book if b['id'] not in ids]:
+        errs.append(f'missing track: {i} is in the book but not in tracks.json')
+    for i in [i for i in dict.fromkeys(ids) if i not in book_by_id]:
+        errs.append(f'unknown track: {i} is in tracks.json but not in the book')
+    slugs = {}
+    for t in tracks:
+        s = str(t.get('slug', '')); k = s.lower()
+        if k in slugs and slugs[k] != t.get('id'):
+            errs.append(f'duplicate slug: {s!r} is used by {slugs[k]} and {t.get("id")}')
+        slugs.setdefault(k, t.get('id'))
+        b = book_by_id.get(t.get('id'))
+        if not b:
+            continue
+        if s != b['slug']:
+            errs.append(f'{t["id"]}: slug {s!r} must be {b["slug"]!r} (the printed URL)')
+        if t.get('isExtra') is not b['isExtra']:
+            errs.append(f'{t["id"]}: isExtra must be {b["isExtra"]}')
+        if t.get('title') != b['title']:
+            errs.append(f'{t["id"]}: title {t.get("title")!r} differs from the book {b["title"]!r}')
+        if not str(t.get('url', '')).startswith('https://'):
+            errs.append(f'{t["id"]}: url must be an https URL')
+    if errs:
+        raise BuildError(f'tracks.json does not match the book ({len(errs)} problem{"s" if len(errs) > 1 else ""}):\n  - '
+                         + '\n  - '.join(errs))
 
 
 def template_parts():
@@ -89,117 +155,164 @@ def template_parts():
 
 PAGE_CSS = """<style>
 .au-note{background:#fff7e0;border:1px solid #e9c46a;color:#4a3b00;border-radius:12px;padding:12px 16px;margin:0 0 22px}
-main nav ul.au-jump{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;padding:0;list-style:none}
+main nav ul.au-jump{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;margin:0 0 26px;padding:0;list-style:none}
 .au-jump a{display:inline-block;padding:6px 12px;border:1px solid #cfe0d3;border-radius:999px;text-decoration:none;color:#1d6f2b;font-weight:600;font-size:.92rem;background:#fff}
 .au-jump a:focus-visible,.au-jump a:hover{background:#e7f3e8;outline:3px solid var(--g);outline-offset:2px}
-.au-sec{margin:0 0 30px;scroll-margin-top:96px}
-.au-list{list-style:none;margin:10px 0 0;padding:0;border:1px solid #dfe7e1;border-radius:14px;background:#fff;overflow:hidden}
-.au-item{display:grid;grid-template-columns:4.2rem 1fr minmax(240px,320px);gap:6px 14px;align-items:center;padding:10px 16px;border-top:1px solid #e1ece3;scroll-margin-top:96px}
+.au-group{margin:34px 0 0}
+.au-sec{margin:0 0 26px;scroll-margin-top:96px}
+.au-sec h3{margin:18px 0 8px;font-size:1.1rem}
+.au-list{list-style:none;margin:8px 0 0;padding:0;border:1px solid #dfe7e1;border-radius:14px;background:#fff;overflow:hidden}
+.au-item{display:grid;grid-template-columns:5.2rem 1fr minmax(240px,320px) auto;gap:6px 14px;align-items:center;padding:10px 16px;border-top:1px solid #e1ece3;scroll-margin:96px 0 200px}
 .au-item:first-child{border-top:0}
 .au-item:nth-child(even){background:#f6faf7}
 .au-num{font-family:Archivo,system-ui,sans-serif;font-weight:700;color:#1d6f2b;font-variant-numeric:tabular-nums}
 .au-title{margin:0;font-weight:600;color:var(--ink)}
 .au-item audio{width:100%;height:40px}
 .au-item audio:focus-visible{outline:3px solid var(--g);outline-offset:2px;border-radius:20px}
+.au-dl{font-size:.88rem;color:#1d6f2b;font-weight:600}
 .au-item:focus{outline:3px solid var(--g);outline-offset:-3px}
 .au-item.is-target{background:#e3f4e5;box-shadow:inset 4px 0 0 #2b8a3e}
-.au-help{color:#4b5a52}
+.au-help{color:#4b5a52;margin:4px 0 0}
+.au-ai{color:#4b5a52;font-size:.92rem;margin-top:26px}
 .visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-@media(max-width:640px){.au-item{grid-template-columns:3.4rem 1fr;padding:12px}.au-item audio{grid-column:1/-1}}
+@media(max-width:640px){.au-item{grid-template-columns:4.4rem 1fr;padding:12px}.au-item audio{grid-column:1/-1}.au-dl{grid-column:1/-1;justify-self:end}}
+body.au-cc-open main{padding-bottom:220px}
 </style>"""
 
 PAGE_JS = """<script>
 (function(){
-  var players=document.querySelectorAll('.au-item audio');
-  // one track at a time
+  var players=[].slice.call(document.querySelectorAll('.au-item audio'));
+  // one track at a time: starting a track pauses any other
   players.forEach(function(a){a.addEventListener('play',function(){players.forEach(function(b){if(b!==a&&!b.paused)b.pause();});});});
-  // a QR short link lands on #t-<id>: highlight that track and move keyboard focus to its player
+  // while the cookie banner is open, add room at the bottom so it never sits over the last players
+  function cc(){var b=document.getElementById('dfa-cc');var on=false;if(b){var st=getComputedStyle(b);on=st.display!=='none'&&st.visibility!=='hidden'&&b.getBoundingClientRect().height>0;}document.body.classList.toggle('au-cc-open',on);}
+  // a QR short link lands on #t-<id>: highlight that track, keep it clear of the header and the banner, focus it
   function target(){
+    cc();
     var id=decodeURIComponent(location.hash.slice(1));if(!/^t-/.test(id))return;
     var li=document.getElementById(id);if(!li)return;
     document.querySelectorAll('.au-item.is-target').forEach(function(x){x.classList.remove('is-target');});
     li.classList.add('is-target');li.setAttribute('tabindex','-1');
-    li.scrollIntoView({block:'center'});li.focus({preventScroll:true});   // next Tab press lands on this track's player
+    var r=li.getBoundingClientRect(),hdr=document.querySelector('header.site'),top=(hdr?hdr.offsetHeight:70)+16;
+    window.scrollTo(0,window.pageYOffset+r.top-Math.max(top,(window.innerHeight*0.3)|0));
+    li.focus({preventScroll:true});   // the next Tab press lands on this track's player
   }
   window.addEventListener('hashchange',target);
   if(document.readyState==='complete')target();else window.addEventListener('load',function(){setTimeout(target,0);});
+  if(window.MutationObserver)new MutationObserver(cc).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','hidden']});
 })();
 </script>"""
 
 
 def item(t):
-    tid = esc(t['id']); title = esc(t['title'])
-    return (f'<li class="au-item" id="t-{tid}"><span class="au-num" aria-hidden="true">{tid}</span>'
-            f'<p class="au-title" id="lbl-{tid}"><span class="visually-hidden">Track {tid}: </span>{title}</p>'
-            f'<audio controls preload="none" src="{esc(url_of(t))}" aria-labelledby="lbl-{tid}">'
-            f'<a href="{esc(url_of(t))}">Download track {tid}</a></audio></li>')
+    s = esc(t['slug']); title = esc(t['title']); url = esc(t['url'])
+    return (f'<li class="au-item" id="t-{s}"><span class="au-num" aria-hidden="true">{s}</span>'
+            f'<p class="au-title" id="lbl-{s}"><span class="visually-hidden">Track {s}: </span>{title}</p>'
+            f'<audio controls preload="none" src="{url}" aria-labelledby="lbl-{s}"></audio>'
+            f'<a class="au-dl" href="{url}" aria-label="Download track {s}">Download</a></li>')
+
+
+def sections(tracks):
+    out, order = {}, []
+    for t in tracks:
+        if t['section'] not in out:
+            out[t['section']] = []; order.append(t['section'])
+        out[t['section']].append(t)
+    return [(name, out[name]) for name in order]
 
 
 def build_page(m):
     csp, scripts, header, footer, cssblock = template_parts()
-    main, extras, order = {}, [], []
-    for t in m['tracks']:
-        if t.get('isExtra'): extras.append(t); continue
-        if t['section'] not in main: main[t['section']] = []; order.append(t['section'])
-        main[t['section']].append(t)
-    secs = [(f's{i}', name, main[name]) for i, name in enumerate(order, 1)]
-    if extras: secs.append(('extras', 'Extras', extras))
-    jump = ''.join(f'<li><a href="#{sid}">{esc(name)}</a></li>' for sid, name, _ in secs)
-    body = ''.join(
-        f'<section class="au-sec" id="{sid}" aria-labelledby="h-{sid}"><h2 id="h-{sid}">{esc(name)}</h2>'
-        + (f'<p class="au-help">{len(ts)} extra tracks that go with the book.</p>' if sid == 'extras' else '')
-        + f'<ol class="au-list">{"".join(item(t) for t in ts)}</ol></section>'
-        for sid, name, ts in secs)
-    n_main = sum(len(v) for v in main.values())
-    note = ('<p class="au-note" role="note"><strong>Draft preview.</strong> These are placeholder entries that all play '
-            'the same test tone. The real A1.1 tracks will replace them.</p>') if m.get('placeholder') else ''
+    course = sections([t for t in m['tracks'] if not t['isExtra']])
+    extras = sections([t for t in m['tracks'] if t['isExtra']])
+    n_course = sum(len(v) for _, v in course); n_extra = sum(len(v) for _, v in extras)
+    placeholder = any(t['url'].startswith(TEST_ASSET) for t in m['tracks'])
+
+    def sec_html(prefix, i, name, ts):
+        sid = f'{prefix}{i}'
+        return (f'<section class="au-sec" id="{sid}" aria-labelledby="h-{sid}"><h3 id="h-{sid}">{esc(name)}</h3>'
+                f'<ol class="au-list">{"".join(item(t) for t in ts)}</ol></section>')
+
+    jump = ''.join(f'<li><a href="#c{i}">{esc(name.split(" · ")[0])}</a></li>' for i, (name, _) in enumerate(course, 1))
+    jump += '<li><a href="#extras">Exam practice &amp; extras</a></li>'
+    note = ('<p class="au-note" role="note"><strong>Draft preview.</strong> For now every player here plays the same '
+            'test tone. The real recordings will replace it.</p>') if placeholder else ''
     title = 'A1.1 Kursbuch Audio – Deutsch Für Alle'
-    desc = 'Listen to the A1.1 coursebook audio online: every track with its own player, plus the extras.'
+    desc = 'All the listening tracks for the DFA A1.1 Kursbuch, free to play online: lessons 1 to 12, songs, reviews and exam practice.'
     head = (f'<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">{csp}\n{scripts}'
             f'<meta name="robots" content="noindex"><meta name="referrer" content="strict-origin-when-cross-origin">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>{esc(title)}</title>\n'
             f'<meta name="description" content="{esc(desc)}">\n<link rel="canonical" href="{SITE}{BASE_PATH}">\n'
             f'<link rel="icon" href="/assets/favicon.png" sizes="48x48"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">\n'
             f'{cssblock}{PAGE_CSS}</head>')
-    page = (f'{head}<body class="concept-b inner">{header}\n<main id="main">\n'
-            f'<div class="page-head"><h1>A1.1 Kursbuch Audio</h1><p>All {n_main} tracks from the A1.1 coursebook, plus '
-            f'{len(extras)} extras. Press play on any track. You don\'t need an account.</p></div>\n'
-            f'<section style="max-width:980px">{note}'
-            f'<p>Each track has its own player, so you can pause, go back and listen again as often as you like. '
-            f'If your book or worksheet has a QR code next to an exercise, scanning it brings you straight to that track on this page.</p>'
-            f'<nav aria-label="Jump to a section"><ul class="au-jump">{jump}</ul></nav>{body}'
-            f'<p>Is a track not playing? Email <a href="mailto:contact.deutschfuralle@gmail.com">contact.deutschfuralle@gmail.com</a> '
-            f'or <a href="/whatsapp" target="_blank" rel="noopener">message us on WhatsApp</a> with the track number.</p>'
-            f'</section>\n</main>\n{footer}{PAGE_JS}</body></html>\n')
+    body = (
+        f'<div class="page-head"><h1>A1.1 Kursbuch Audio</h1><p>All the listening tracks for your A1.1 book, in one place. '
+        f'Free to play, no account needed.</p></div>\n'
+        f'<section style="max-width:980px">{note}'
+        f'<p>Every track has the same number as in your book, so find the exercise you\'re working on and press play. '
+        f'Listen as many times as you like. If you scan a QR code in the book, you\'ll land right on that track.</p>'
+        f'<nav aria-label="Jump to a lesson"><ul class="au-jump">{jump}</ul></nav>'
+        f'<div class="au-group" id="course"><h2>Course audio</h2>'
+        f'<p class="au-help">{n_course} tracks for Lektion 1 to 12, in the order they come up in the book.</p>'
+        + ''.join(sec_html('c', i, n, ts) for i, (n, ts) in enumerate(course, 1)) +
+        f'</div><div class="au-group" id="extras"><h2>Exam practice &amp; extras</h2>'
+        f'<p class="au-help">{n_extra} tracks: the songs and reviews from the three Zwischenspiele, the listening part of the '
+        f'A1.1 final test, and Start Deutsch 1 exam practice. Use them when you reach those pages, or any time you want extra listening.</p>'
+        + ''.join(sec_html('e', i, n, ts) for i, (n, ts) in enumerate(extras, 1)) +
+        f'</div>'
+        f'<p class="au-ai" lang="de">Die Stimmen und die Musik in diesen Aufnahmen sind KI-generiert. '
+        f'<span lang="en">/ The voices and the music in these recordings are AI-generated.</span></p>'
+        f'<p>Is a track not playing? Email <a href="mailto:contact.deutschfuralle@gmail.com">contact.deutschfuralle@gmail.com</a> '
+        f'or <a href="/whatsapp" target="_blank" rel="noopener">message us on WhatsApp</a> with the track number.</p>'
+        f'</section>')
+    page = f'{head}<body class="concept-b inner">{header}\n<main id="main">\n{body}\n</main>\n{footer}{PAGE_JS}</body></html>\n'
     (OUT / 'index.html').write_text(page, encoding='utf-8')
-    return n_main, len(extras)
+    return n_course, n_extra, placeholder
 
 
-def build_stubs(m):
-    keep = set()
-    for t in m['tracks']:
-        tid = t['id']; keep.add(tid)
-        dest = f'{BASE_PATH}#t-{tid}' if QR_TARGET == 'page' else url_of(t)
-        d = OUT / tid; d.mkdir(exist_ok=True)
-        (d / 'index.html').write_text(
-            '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">\n'
-            f'<title>Track {esc(tid)} – A1.1 Kursbuch Audio</title>\n'
+def stub(slug, dest):
+    return ('<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">\n'
+            f'<title>Track {esc(slug)} – A1.1 Kursbuch Audio</title>\n'
             '<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex">\n'
             f'<link rel="canonical" href="{SITE}{BASE_PATH}">\n'
             f'<script>location.replace({json.dumps(dest)})</script>\n'
             f'<noscript><meta http-equiv="refresh" content="0;url={esc(dest)}"></noscript>\n'
             '</head><body style="font-family:system-ui,sans-serif;padding:2rem">'
-            f'<p>Opening <a href="{esc(dest)}">track {esc(tid)}</a>…</p></body></html>\n', encoding='utf-8')
-    for d in OUT.iterdir():                     # remove stubs for ids no longer in the manifest
-        if d.is_dir() and ID_RE.match(d.name) and d.name not in keep:
-            (d / 'index.html').unlink(missing_ok=True); d.rmdir()
-    return len(keep)
+            f'<p>Opening <a href="{esc(dest)}">track {esc(slug)}</a>…</p></body></html>\n')
+
+
+def build_stubs(m):
+    keep = set()
+    for t in m['tracks']:
+        dest = f'{BASE_PATH}#t-{t["slug"]}' if QR_TARGET == 'page' else t['url']
+        # One stub per printed slug. No lower-case alias folders: L01-01/ and l01-01/ would collide when the repo is
+        # cloned on Windows or macOS (case-insensitive file systems).
+        d = t['slug']; keep.add(d); (OUT / d).mkdir(exist_ok=True)
+        (OUT / d / 'index.html').write_text(stub(d, dest), encoding='utf-8')
+    removed = []
+    for d in OUT.iterdir():   # every folder under audio/a1-1/ is a generated stub; drop ones no longer in the manifest
+        if d.is_dir() and d.name not in keep:
+            for f in d.iterdir(): f.unlink()
+            d.rmdir(); removed.append(d.name)
+    return len(keep), removed
+
+
+def main(argv):
+    OUT.mkdir(parents=True, exist_ok=True)
+    if '--init' in argv:
+        host = argv[argv.index('--host') + 1] if '--host' in argv else None
+        init_manifest(host)
+    book = read_book()
+    m = json.loads(MANIFEST.read_text(encoding='utf-8'))
+    validate(m, book)
+    a, b, ph = build_page(m)
+    n, removed = build_stubs(m)
+    print(f'audio/a1-1: {len(book)} book tracks = {a} course + {b} extras; {n} stub pages (target={QR_TARGET})'
+          + (f'; removed {len(removed)} old stubs' if removed else '') + (' [PLACEHOLDER urls: draft note shown]' if ph else ''))
 
 
 if __name__ == '__main__':
-    OUT.mkdir(parents=True, exist_ok=True)
-    if '--placeholder' in sys.argv:
-        MANIFEST.write_text(json.dumps(placeholder_manifest(), indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
-    m = load()
-    a, b = build_page(m); n = build_stubs(m)
-    print(f'audio/a1-1: {a} main + {b} extras, {n} QR stubs (target={QR_TARGET}){" [PLACEHOLDER DATA]" if m.get("placeholder") else ""}')
+    try:
+        main(sys.argv[1:])
+    except BuildError as e:
+        sys.exit(f'build_audio: ERROR: {e}')
