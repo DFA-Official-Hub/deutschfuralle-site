@@ -23,10 +23,11 @@ main nav ul.au-jump{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;margi
 .au-jump a{display:inline-block;padding:6px 12px;border:1px solid #cfe0d3;border-radius:999px;text-decoration:none;color:#1d6f2b;font-weight:600;font-size:.92rem;background:#fff}
 .au-jump a:focus-visible,.au-jump a:hover{background:#e7f3e8;outline:3px solid var(--g);outline-offset:2px}
 .au-group{margin:34px 0 0}
-.au-sec{margin:0 0 26px;scroll-margin-top:96px}
+.au-sec,.au-group h2,.au-sec h3{scroll-margin-top:var(--au-top,108px)}
+.au-sec{margin:0 0 26px}
 .au-sec h3{margin:18px 0 8px;font-size:1.1rem}
 .au-list{list-style:none;margin:8px 0 0;padding:0;border:1px solid #dfe7e1;border-radius:14px;background:#fff;overflow:hidden}
-.au-item{display:grid;grid-template-columns:5.2rem 1fr minmax(240px,320px) auto;gap:6px 14px;align-items:center;padding:10px 16px;border-top:1px solid #e1ece3;scroll-margin:96px 0 200px}
+.au-item{display:grid;grid-template-columns:5.2rem 1fr minmax(240px,320px) auto;gap:6px 14px;align-items:center;padding:10px 16px;border-top:1px solid #e1ece3;scroll-margin:var(--au-top,108px) 0 200px}
 .au-item:first-child{border-top:0}
 .au-item:nth-child(even){background:#f6faf7}
 .au-num{font-family:Archivo,system-ui,sans-serif;font-weight:700;color:#1d6f2b;font-variant-numeric:tabular-nums}
@@ -83,8 +84,18 @@ body.au-cc-open main{padding-bottom:220px}
     var li=document.getElementById(id);if(!li)return;
     document.querySelectorAll('.au-item.is-target').forEach(function(x){x.classList.remove('is-target');});
     li.classList.add('is-target');li.setAttribute('tabindex','-1');
-    var r=li.getBoundingClientRect(),hdr=document.querySelector('header.site'),top=(hdr?hdr.offsetHeight:70)+16;
-    window.scrollTo(0,window.pageYOffset+r.top-Math.max(top,(window.innerHeight*0.3)|0));
+    // scroll-margin-top = full (unshrunk) header height + 24px breathing room; measured live, CSS default 108px
+    var hdr=document.querySelector('header.site');if(hdr)document.documentElement.style.setProperty('--au-top',(Math.max(hdr.offsetHeight,84)+24)+'px');
+    // the first track of a section brings its heading along (and the group heading for the first section),
+    // so no heading is left half under the sticky header
+    var anchor=li,sec=li.closest('.au-sec');
+    if(sec&&li===sec.querySelector('.au-item')){anchor=sec.querySelector('h3')||li;var g=sec.closest('.au-group');if(g&&sec===g.querySelector('.au-sec'))anchor=g.querySelector('h2')||anchor;}
+    // give the track itself the extra margin (so the browser's own #fragment scroll lands the same way)
+    var top=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--au-top'))||108;
+    var extra=Math.max(0,li.getBoundingClientRect().top-anchor.getBoundingClientRect().top);
+    var room=window.innerHeight-(document.body.classList.contains('au-cc-open')?230:10)-li.offsetHeight;
+    li.style.scrollMarginTop=(top+(top+extra<=room?extra:0))+'px';
+    li.scrollIntoView({block:'start'});
     li.focus({preventScroll:true});   // the next Tab press lands on this track's player
   }
   window.addEventListener('hashchange',target);
