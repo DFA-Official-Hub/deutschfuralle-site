@@ -1,0 +1,860 @@
+{
+ "_note": "PLACEHOLDER DATA. Every entry points to a generated test tone, not course audio. Replace with the real A1.1 track list before publishing.",
+ "placeholder": true,
+ "tracks": [
+  {
+   "id": "1-01",
+   "title": "Placeholder track 1.01",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-02",
+   "title": "Placeholder track 1.02",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-03",
+   "title": "Placeholder track 1.03",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-04",
+   "title": "Placeholder track 1.04",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-05",
+   "title": "Placeholder track 1.05",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-06",
+   "title": "Placeholder track 1.06",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-07",
+   "title": "Placeholder track 1.07",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-08",
+   "title": "Placeholder track 1.08",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-09",
+   "title": "Placeholder track 1.09",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-10",
+   "title": "Placeholder track 1.10",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-11",
+   "title": "Placeholder track 1.11",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-12",
+   "title": "Placeholder track 1.12",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-13",
+   "title": "Placeholder track 1.13",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-14",
+   "title": "Placeholder track 1.14",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "1-15",
+   "title": "Placeholder track 1.15",
+   "section": "Lektion 1 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-01",
+   "title": "Placeholder track 2.01",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-02",
+   "title": "Placeholder track 2.02",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-03",
+   "title": "Placeholder track 2.03",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-04",
+   "title": "Placeholder track 2.04",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-05",
+   "title": "Placeholder track 2.05",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-06",
+   "title": "Placeholder track 2.06",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-07",
+   "title": "Placeholder track 2.07",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-08",
+   "title": "Placeholder track 2.08",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-09",
+   "title": "Placeholder track 2.09",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-10",
+   "title": "Placeholder track 2.10",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-11",
+   "title": "Placeholder track 2.11",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-12",
+   "title": "Placeholder track 2.12",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-13",
+   "title": "Placeholder track 2.13",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-14",
+   "title": "Placeholder track 2.14",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "2-15",
+   "title": "Placeholder track 2.15",
+   "section": "Lektion 2 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-01",
+   "title": "Placeholder track 3.01",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-02",
+   "title": "Placeholder track 3.02",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-03",
+   "title": "Placeholder track 3.03",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-04",
+   "title": "Placeholder track 3.04",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-05",
+   "title": "Placeholder track 3.05",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-06",
+   "title": "Placeholder track 3.06",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-07",
+   "title": "Placeholder track 3.07",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-08",
+   "title": "Placeholder track 3.08",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-09",
+   "title": "Placeholder track 3.09",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-10",
+   "title": "Placeholder track 3.10",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-11",
+   "title": "Placeholder track 3.11",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-12",
+   "title": "Placeholder track 3.12",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-13",
+   "title": "Placeholder track 3.13",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-14",
+   "title": "Placeholder track 3.14",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "3-15",
+   "title": "Placeholder track 3.15",
+   "section": "Lektion 3 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-01",
+   "title": "Placeholder track 4.01",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-02",
+   "title": "Placeholder track 4.02",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-03",
+   "title": "Placeholder track 4.03",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-04",
+   "title": "Placeholder track 4.04",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-05",
+   "title": "Placeholder track 4.05",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-06",
+   "title": "Placeholder track 4.06",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-07",
+   "title": "Placeholder track 4.07",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-08",
+   "title": "Placeholder track 4.08",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-09",
+   "title": "Placeholder track 4.09",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-10",
+   "title": "Placeholder track 4.10",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-11",
+   "title": "Placeholder track 4.11",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-12",
+   "title": "Placeholder track 4.12",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-13",
+   "title": "Placeholder track 4.13",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-14",
+   "title": "Placeholder track 4.14",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "4-15",
+   "title": "Placeholder track 4.15",
+   "section": "Lektion 4 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-01",
+   "title": "Placeholder track 5.01",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-02",
+   "title": "Placeholder track 5.02",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-03",
+   "title": "Placeholder track 5.03",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-04",
+   "title": "Placeholder track 5.04",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-05",
+   "title": "Placeholder track 5.05",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-06",
+   "title": "Placeholder track 5.06",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-07",
+   "title": "Placeholder track 5.07",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-08",
+   "title": "Placeholder track 5.08",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-09",
+   "title": "Placeholder track 5.09",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-10",
+   "title": "Placeholder track 5.10",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-11",
+   "title": "Placeholder track 5.11",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-12",
+   "title": "Placeholder track 5.12",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-13",
+   "title": "Placeholder track 5.13",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-14",
+   "title": "Placeholder track 5.14",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "5-15",
+   "title": "Placeholder track 5.15",
+   "section": "Lektion 5 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-01",
+   "title": "Placeholder track 6.01",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-02",
+   "title": "Placeholder track 6.02",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-03",
+   "title": "Placeholder track 6.03",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-04",
+   "title": "Placeholder track 6.04",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-05",
+   "title": "Placeholder track 6.05",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-06",
+   "title": "Placeholder track 6.06",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-07",
+   "title": "Placeholder track 6.07",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-08",
+   "title": "Placeholder track 6.08",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-09",
+   "title": "Placeholder track 6.09",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-10",
+   "title": "Placeholder track 6.10",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-11",
+   "title": "Placeholder track 6.11",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-12",
+   "title": "Placeholder track 6.12",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-13",
+   "title": "Placeholder track 6.13",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-14",
+   "title": "Placeholder track 6.14",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-15",
+   "title": "Placeholder track 6.15",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "6-16",
+   "title": "Placeholder track 6.16",
+   "section": "Lektion 6 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-01",
+   "title": "Placeholder track 7.01",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-02",
+   "title": "Placeholder track 7.02",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-03",
+   "title": "Placeholder track 7.03",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-04",
+   "title": "Placeholder track 7.04",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-05",
+   "title": "Placeholder track 7.05",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-06",
+   "title": "Placeholder track 7.06",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-07",
+   "title": "Placeholder track 7.07",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-08",
+   "title": "Placeholder track 7.08",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-09",
+   "title": "Placeholder track 7.09",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-10",
+   "title": "Placeholder track 7.10",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-11",
+   "title": "Placeholder track 7.11",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-12",
+   "title": "Placeholder track 7.12",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-13",
+   "title": "Placeholder track 7.13",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-14",
+   "title": "Placeholder track 7.14",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-15",
+   "title": "Placeholder track 7.15",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "7-16",
+   "title": "Placeholder track 7.16",
+   "section": "Lektion 7 (placeholder)",
+   "isExtra": false,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x01",
+   "title": "Placeholder extra 01",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x02",
+   "title": "Placeholder extra 02",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x03",
+   "title": "Placeholder extra 03",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x04",
+   "title": "Placeholder extra 04",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x05",
+   "title": "Placeholder extra 05",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x06",
+   "title": "Placeholder extra 06",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x07",
+   "title": "Placeholder extra 07",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x08",
+   "title": "Placeholder extra 08",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x09",
+   "title": "Placeholder extra 09",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x10",
+   "title": "Placeholder extra 10",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x11",
+   "title": "Placeholder extra 11",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x12",
+   "title": "Placeholder extra 12",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x13",
+   "title": "Placeholder extra 13",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x14",
+   "title": "Placeholder extra 14",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  },
+  {
+   "id": "x15",
+   "title": "Placeholder extra 15",
+   "section": "Extras",
+   "isExtra": true,
+   "file": "dfa-test-tone.mp3"
+  }
+ ]
+}

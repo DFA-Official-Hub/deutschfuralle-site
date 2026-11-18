@@ -20,3 +20,5 @@ for f in glob.glob('*.html')+glob.glob('books/*.html')+glob.glob('blog/*.html'):
 # SEO step: canonicals, OG/Twitter, JSON-LD, titles/descriptions, clean internal links, /whatsapp links, sitemap.xml, robots.txt
 import subprocess,sys
 subprocess.run([sys.executable,'tools/seo.py'],check=True)
+# Audio page + QR stubs (audio/a1-1/, noindex, not in the sitemap)
+subprocess.run([sys.executable,'tools/build_audio.py'],check=True)
