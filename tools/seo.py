@@ -44,6 +44,8 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
  'privacy.html': (None, None),  # already good
  'blog/goethe-exam-pakistan.html': ('Goethe Exam in Pakistan 2026: A1 & B1 Booking & Documents',
    'How to book the Goethe A1 or B1 exam in Pakistan: centres in Karachi, Lahore and Islamabad, payment, documents and what each level is for.'),
+ 'blog/german-a1-spouse-visa-pakistan.html': ('German A1 for Spouse Visa from Pakistan: 2026 Guide',
+   'German language test for spouse visa: what the A1 rule means for Pakistani applicants, accepted certificates, exemptions and exam timing.'),
  'blog/german-course-fees-pakistan.html': ('German Language Course Fees in Pakistan 2026: A1 to B2',
    "What a German course costs in Pakistan in 2026: DFA's A1 to B2 fees, what drives the price, how to save and how to choose your level."),
  'german-b1-course.html': ('German B1 Course in Pakistan (Online) | Deutsch Für Alle',
@@ -232,8 +234,9 @@ def book(s, rel, desc):
 
 def article(s, rel, desc):
     pub = re.search(r'<meta name="dfa:published" content="([^"]+)"', s); pub = pub.group(1) if pub else datetime.date.today().isoformat()
+    mod = re.search(r'<meta name="dfa:modified" content="([^"]+)"', s); mod = mod.group(1) if mod else pub
     return {'@type': 'Article', 'headline': txt(re.search(r'<h1>(.*?)</h1>', s, re.S).group(1)), 'description': desc,
-            'image': OG_IMAGE, 'datePublished': pub, 'dateModified': pub, 'inLanguage': 'en',
+            'image': OG_IMAGE, 'datePublished': pub, 'dateModified': mod, 'inLanguage': 'en',
             'author': ORG_REF, 'publisher': {'@id': ORG_ID}, 'url': clean_url(rel),
             'mainEntityOfPage': {'@type': 'WebPage', '@id': clean_url(rel)}}
 
