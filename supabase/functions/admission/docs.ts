@@ -70,7 +70,7 @@ export function docData(e: any, details: any, pay?: any) {
     date: long(paid), paidDate: paid.split("-").reverse().join("-"),
     regular: reg ? `${pkr(reg)}/- PKR` : "–", discount: reg > fee ? `${pkr(reg - fee)}/- PKR` : "", total: amt ? `${pkr(amt)}/- PKR` : "–",
     invoiceNo2: pay?.invoice_no || e.invoice_no, before: before ? `${pkr(before)}/- PKR` : "",
-    payNote: !pay || (pay.installments || 1) <= 1 && bal === 0 ? "" : bal > 0 ? `Installment ${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)} · Balance due PKR ${pkr(bal)}${e.due_date ? " by " + long(e.due_date) : ""}` : `Final installment (${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)}) · Fee paid in full`,
+    payNote: pay?.installment_label ? `${pay.installment_label}${bal > 0 ? ` · Balance due PKR ${pkr(bal)}${e.due_date ? " by " + long(e.due_date) : ""}` : " · Fee paid in full"}` : !pay || (pay.installments || 1) <= 1 && bal === 0 ? "" : bal > 0 ? `Installment ${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)} · Balance due PKR ${pkr(bal)}${e.due_date ? " by " + long(e.due_date) : ""}` : `Final installment (${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)}) · Fee paid in full`,
   };
 }
 async function pdfFromSvg(svg: string, fonts: Uint8Array[]) {

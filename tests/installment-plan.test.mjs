@@ -41,6 +41,37 @@ assert.match(P.normalize([{ amount: 10, due: '2026-12-01' }, { amount: 1, due: '
 const ali = P.normalize([{ amount: 10000, due: '2026-11-21' }, { amount: 10000, due: '2026-12-11' }, { amount: 12000, due: '2027-01-11' }]);
 assert.equal(ali.error, undefined); assert.equal(ali.total, 32000); assert.equal(ali.plan.length, 3);
 
+// amounts must be real whole numbers up to 1,000,000 (no 1e15, no strings like '1e4')
+assert.match(P.normalize([{ amount: 1e15, due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error, /Installment 1/);
+assert.match(P.normalize([{ amount: '1e4', due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error, /Installment 1/);
+assert.match(P.normalize([{ amount: 1000001, due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error, /Installment 1/);
+assert.equal(P.normalize([{ amount: 1000000, due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error, undefined);
+
+// paid installments are locked (Head of Tech repro: 10k/10k/10k with 10,000 paid -> 5,000/12,500/12,500 must fail)
+const t3 = [{ no: 1, amount: 10000, due: '2026-11-01' }, { no: 2, amount: 10000, due: '2026-12-01' }, { no: 3, amount: 10000, due: '2027-01-01' }];
+const lk = P.lockedRows(t3, 10000);
+assert.deepEqual(plain(lk), [{ amount: 10000, due: '2026-11-01' }]);
+assert.match(P.checkLocked(lk, P.normalize([{ amount: 5000, due: '2026-11-01' }, { amount: 12500, due: '2026-12-01' }, { amount: 12500, due: '2027-01-01' }]).plan), /Installment 1 is already paid/);
+assert.match(P.checkLocked(lk, P.normalize([{ amount: 10000, due: '2026-11-05' }, { amount: 20000, due: '2026-12-01' }]).plan), /Installment 1 is already paid/);
+assert.equal(P.checkLocked(lk, P.normalize([{ amount: 10000, due: '2026-11-01' }, { amount: 5000, due: '2026-11-20' }, { amount: 15000, due: '2027-02-01' }]).plan), null);
+assert.equal(P.lockedRows(t3, 15000).length, 1, 'a part-paid installment is not locked');
+// legacy row (no plan): each recorded payment is a paid installment
+const legacy = P.lockedRows(null, 20000, [{ amount: 20000, paid_on: '2026-11-12', installment_no: 1 }]);
+assert.deepEqual(plain(legacy), [{ amount: 20000, due: '2026-11-12' }]);
+assert.match(P.checkLocked(legacy, P.normalize([{ amount: 15000, due: '2026-11-12' }, { amount: 25000, due: '2026-12-12' }]).plan), /already paid/);
+assert.equal(P.checkLocked(legacy, P.normalize([{ amount: 20000, due: '2026-11-12' }, { amount: 10000, due: '2026-12-12' }, { amount: 10000, due: '2027-01-12' }]).plan), null);
+assert.match(P.checkLocked([{ amount: 1, due: '2026-11-01' }, { amount: 1, due: '2026-11-02' }], [{ no: 1, amount: 1, due: '2026-11-01' }]), /at least 2/);
+
+// receipt labels follow the money, not the payment count (Head of Tech example)
+assert.equal(P.payLabel(t3, 0, 10000), 'Installment 1 of 3');
+assert.equal(P.payLabel(t3, 10000, 15000), 'Installment 2 of 3 (part payment)');
+assert.equal(P.payLabel(t3, 15000, 20000), 'Installment 2 of 3 (part payment)', '3rd payment finishing installment 2 is not "3 of 3"');
+assert.equal(P.payLabel(t3, 20000, 30000), 'Installment 3 of 3');
+assert.equal(P.payLabel(t3, 10000, 30000), 'Installments 2\u20133 of 3');
+assert.equal(P.payLabel(t3, 15000, 30000), 'Installments 2\u20133 of 3 (part payment)');
+assert.equal(P.payLabel(null, 0, 100), '');
+assert.deepEqual(Object.keys(P.METHODS), ['cash', 'bank', 'jazzcash', 'easypaisa', 'other']);
+
 // status: payments fill installments in order
 const st = P.status(ali.plan, 15000, [{ amount: 10000, paid_on: '2026-11-21', installment_no: 1 }, { amount: 5000, paid_on: '2026-12-05', installment_no: 2 }]);
 assert.deepEqual(plain(st.map((s) => [s.status, s.left, s.paid_on])), [['paid', 0, '2026-11-21'], ['partial', 5000, null], ['due', 12000, null]]);
@@ -52,8 +83,13 @@ assert.deepEqual(plain(P.status(ali.plan, 22000, [{ amount: 10000, paid_on: '202
 // server copy behaves the same (deno runs plan.ts)
 let deno = 'deno'; try { execFileSync(deno, ['--version']); } catch { deno = path.join(process.env.HOME || '', '.deno/bin/deno'); }
 const script = `import * as S from "${path.join(root, 'supabase/functions/admission/plan.ts')}";
+const T3 = ${JSON.stringify(t3)};
 const out = { a: S.splitEven(40000, 3), b: S.splitEven(25000, 4), c: S.suggest(50000, 4, "2026-01-31"), d: S.normalize(${JSON.stringify(ali.plan)}),
  e: S.status(${JSON.stringify(ali.plan)}, 15000), f: S.next(${JSON.stringify(ali.plan)}, 20000), g: S.normalize([{amount:5,due:"2026-12-01"},{amount:5,due:"2026-11-01"}]),
+ k: [S.normalize([{amount:1e15,due:"2026-11-21"},{amount:1,due:"2026-11-22"}]).error, S.normalize([{amount:"1e4",due:"2026-11-21"},{amount:1,due:"2026-11-22"}]).error],
+ l: S.checkLocked(S.lockedRows(T3, 10000), S.normalize([{amount:5000,due:"2026-11-01"},{amount:12500,due:"2026-12-01"},{amount:12500,due:"2027-01-01"}]).plan),
+ m: [S.payLabel(T3,0,10000), S.payLabel(T3,10000,15000), S.payLabel(T3,15000,20000), S.payLabel(T3,10000,30000), S.payLabel(T3,15000,30000)],
+ o: S.lockedRows(null, 20000, [{amount:20000,paid_on:"2026-11-12",installment_no:1}]), p: [S.method("JazzCash"), S.method("card"), S.method("")],
  h: S.planCount({ payment_plan: "two" }), i: S.planCount({ installment_plan: ${JSON.stringify(ali.plan)} }), j: S.planCount({ payment_plan: "full" }) };
 console.log(JSON.stringify(out));`;
 const srv = JSON.parse(execFileSync(deno, ['eval', '--ext=ts', script], { encoding: 'utf8' }));
@@ -65,6 +101,11 @@ assert.deepEqual(srv.e, plain(P.status(ali.plan, 15000)));
 assert.deepEqual(srv.f, plain(P.next(ali.plan, 20000)));
 assert.deepEqual(srv.g, plain(P.normalize([{ amount: 5, due: '2026-12-01' }, { amount: 5, due: '2026-11-01' }])));
 assert.deepEqual([srv.h, srv.i, srv.j], [2, 3, 1]);
+assert.deepEqual(srv.k, [P.normalize([{ amount: 1e15, due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error, P.normalize([{ amount: '1e4', due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error]);
+assert.equal(srv.l, P.checkLocked(P.lockedRows(t3, 10000), P.normalize([{ amount: 5000, due: '2026-11-01' }, { amount: 12500, due: '2026-12-01' }, { amount: 12500, due: '2027-01-01' }]).plan));
+assert.deepEqual(srv.m, [P.payLabel(t3, 0, 10000), P.payLabel(t3, 10000, 15000), P.payLabel(t3, 15000, 20000), P.payLabel(t3, 10000, 30000), P.payLabel(t3, 15000, 30000)]);
+assert.deepEqual(srv.o, plain(P.lockedRows(null, 20000, [{ amount: 20000, paid_on: '2026-11-12', installment_no: 1 }])));
+assert.deepEqual(srv.p, ['jazzcash', null, null]);
 
 // admin: course order (Ali, t84u)
 const admin = read('assets/dfa-admin.js');
@@ -92,15 +133,39 @@ assert.deepEqual(fields.filter((f) => !/title=|'\+T\(/.test(f)), [], 'every admi
 const idx = read('supabase/functions/admission/index.ts');
 assert.ok(idx.includes('body.plan === "custom"') && idx.includes('installments: plan ? plan.length : two ? 2 : 1'));
 assert.ok(idx.includes('installments: Math.max(planCount(e), n)'));
-assert.ok(idx.includes('upd.due_date = planDue(e.installment_plan, after)'));
+assert.ok(idx.includes('const nd = planDue(plan, after); upd.due_date = nd;'));
 assert.ok(idx.includes('body.action === "set_plan"'));
+// set_plan: server lock + conditional write; record_payment: label, method, safe amount_paid update; clear resets the schedule
+const sp = idx.slice(idx.indexOf('body.action === "set_plan"'), idx.indexOf('body.action === "set_due"'));
+assert.ok(sp.includes('checkLocked(lockedRows(e.installment_plan, paid, pays), np.plan!)'));
+assert.ok(sp.includes('.eq("amount_paid", paid)') && sp.includes('"Reload, a payment was just recorded."') && sp.includes('409'));
+assert.ok(/body\.clear[\s\S]*due_date: due, reminder_stage: open \? 0 : 3/.test(sp), 'clear resets due date + reminders');
+const rp = idx.slice(idx.indexOf('body.action === "record_payment"'), idx.indexOf('body.action === "set_plan"'));
+assert.ok(rp.includes('installment_label: plan ? payLabel(plan, before, after) : null') && rp.includes('method: payMethod(body.method)'));
+assert.ok(rp.includes('.eq("amount_paid", before)'));
+assert.ok(idx.includes('installment_label: plan ? payLabel(plan, 0, first) : null, method: payMethod(body.method)'));
+assert.ok(read('supabase/functions/admission/docs.ts').includes('pay?.installment_label ?'));
+// escaping of stored plan values
+assert.ok(admin.includes("value=\"'+E(x.amount)+'\"") && admin.includes("value=\"'+E(x.due)+'\"") && admin.includes("E(pk(s.amount))"));
+assert.ok(read('assets/dfa-portal.js').includes("E(f(s.amount))"));
+assert.ok(admin.includes('dated before today'), 'past-date warning');
+assert.ok(admin.includes('<select data-pm') && admin.includes('<select name="pm"') && admin.includes("method:f.pm.value||undefined") && admin.includes("method:tr.querySelector('[data-pm]').value||undefined"));
+assert.ok(admin.includes("row('Payments',histHtml(PAYS[x.id]),'hist')"));
+assert.match(read('assets/style.css'), /\.adm-i\{[^}]*width:24px;height:24px/);
 const mig = read('supabase/migrations/20261121120000_custom_installment_plan.sql');
 assert.match(mig, /add column if not exists installment_plan jsonb/);
 assert.match(mig, /'full'::text, 'two'::text, 'custom'::text/);
+assert.match(mig, /add column if not exists installment_label text/);
+assert.match(mig, /add column if not exists method text/);
+assert.match(mig, /method is null or method = any \(array\['cash'::text, 'bank'::text, 'jazzcash'::text, 'easypaisa'::text, 'other'::text\]\)/);
+assert.match(mig, /create unique index if not exists payments_enrollment_installment_no_key on public\.payments \(enrollment_id, installment_no\)/);
+assert.ok(!/\bdrop (table|column)\b|\bdelete from\b|\btruncate\b/i.test(mig), 'migration is not destructive');
+
 
 // portal shows the schedule; receipts use the plan count
 const portal = read('assets/dfa-portal.js'), auth = read('assets/dfa-auth.js');
 assert.ok(portal.includes('installment_plan,courses(') && portal.includes('ptSched('));
 assert.ok(auth.includes('function receiptPills(id,pays,cls,inv,planN)') && auth.includes('planN||0'));
-for (const f of ['admin.html', 'portal.html']) assert.match(read(f), /<script src="assets\/dfa-plan\.js\?v=1" defer><\/script>/);
+for (const f of ['admin.html', 'portal.html']) assert.match(read(f), /<script src="assets\/dfa-plan\.js\?v=2" defer><\/script>/);
+assert.ok(auth.includes('paid_on,method,installment_label') && auth.includes("p.installment_label?'Receipt · '+p.installment_label"));
 console.log('installment-plan: all checks passed');
