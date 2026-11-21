@@ -86,11 +86,15 @@ export function payLabel(plan: Inst[] | null | undefined, before: number, after:
   return a === b ? `Installment ${a + 1} of ${n}${tag}` : `Installments ${a + 1}–${b + 1} of ${n}${tag}`;
 }
 /** After a payment row is inserted: work everything out from the sum of ALL payments (the record of truth),
-    never from the enrollment row read before the insert (it may be stale if another payment landed meanwhile). */
-export function settle(o: { plan: Inst[] | null | undefined; feeTotal: number | null | undefined; amount: number; sumAfter: number }): { before: number; after: number; fin: boolean; label: string | null; over: boolean } {
-  const fee = Number(o.feeTotal) || 0, after = Number(o.sumAfter) || 0, before = Math.max(after - (Number(o.amount) || 0), 0);
-  const plan = Array.isArray(o.plan) && o.plan.length ? o.plan : null;
-  return { before, after, fin: !fee || after >= fee, label: plan ? payLabel(plan, before, after) : null, over: !!fee && after > fee };
+    never from the enrollment row read before the insert (it may be stale if another payment landed meanwhile).
+    bad = true when the re-read failed (readOk false) or the sum can't include this payment (sum < amount): don't trust it,
+    don't touch amount_paid and don't send a receipt. over = true when the total is now above the fee (undo the insert). */
+export function settle(o: { plan: Inst[] | null | undefined; feeTotal: number | null | undefined; amount: number; sumAfter: number; readOk?: boolean }): { before: number; after: number; fin: boolean; label: string | null; over: boolean; bad: boolean } {
+  const fee = Number(o.feeTotal) || 0, amt = Number(o.amount) || 0, after = Number(o.sumAfter) || 0;
+  const bad = o.readOk === false || !Number.isFinite(Number(o.sumAfter)) || after < amt;
+  if (bad) return { before: 0, after: 0, fin: false, label: null, over: false, bad: true };
+  const before = after - amt, plan = Array.isArray(o.plan) && o.plan.length ? o.plan : null;
+  return { before, after, fin: !fee || after >= fee, label: plan ? payLabel(plan, before, after) : null, over: !!fee && after > fee, bad: false };
 }
 export const METHODS = ["cash", "bank", "jazzcash", "easypaisa", "other"] as const;
 export function method(v: unknown): string | null { const m = String(v || "").toLowerCase(); return (METHODS as readonly string[]).includes(m) ? m : null; }

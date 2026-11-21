@@ -714,11 +714,14 @@ Deno.serve(async (req) => {
       const ins = await db.from("payments").insert({ enrollment_id: id, amount, paid_on: paidOn, proof_url: proof, installment_no: n, installments: Math.max(planCount(e), n), is_final: fin, installment_label: plan ? payLabel(plan, before, after) : null, method: payMethod(body.method), created_by: u.user.id }).select("*").single();
       if (ins.error) return json({ error: /duplicate|unique/i.test(ins.error.message || "") ? "Another payment was just saved for this student. Reload the page and check before adding it again." : ins.error.message }, ins.error && /duplicate|unique/i.test(ins.error.message || "") ? 409 : 400);
       // The insert and the enrollment update are separate requests, so recompute everything from the sum of all payments now stored.
-      const all = (await db.from("payments").select("amount").eq("enrollment_id", id)).data || [];
-      const st = settle({ plan, feeTotal: e.fee_total, amount, sumAfter: all.reduce((t: number, p: { amount: number }) => t + (Number(p.amount) || 0), 0) });
+      const rr = await db.from("payments").select("amount").eq("enrollment_id", id);
+      const st = settle({ plan, feeTotal: e.fee_total, amount, readOk: !rr.error && Array.isArray(rr.data), sumAfter: (rr.data || []).reduce((t: number, p: { amount: number }) => t + (Number(p.amount) || 0), 0) });
+      // Re-read failed or can't include this payment: don't write amount_paid or send a receipt from a wrong total.
+      if (st.bad) return json({ ok: true, payment: ins.data, email: "not sent", warning: "Payment saved; reload and check" + (rr.error ? " (" + rr.error.message + ")" : "") + "." });
       if (st.over) {
         // Another payment landed meanwhile and this one would take the total above the fee: undo it.
-        await db.from("payments").delete().eq("id", ins.data.id);
+        const del = await db.from("payments").delete().eq("id", ins.data.id);
+        if (del.error) return json({ error: "This payment would take the total above the fee, but it could not be removed: the payment row " + (ins.data.invoice_no || ins.data.id) + " still exists. Reload, check the payments and delete the extra one before doing anything else. (" + del.error.message + ")" }, 500);
         return json({ error: "Another payment was just saved for this student, and this one would take the total above the fee. Reload the page and check the balance." }, 409);
       }
       before = st.before; after = st.after;
@@ -730,7 +733,8 @@ Deno.serve(async (req) => {
       // Reminders restart only when the due date moves; a part payment towards the same installment keeps the reminder stage.
       const upd: Record<string, unknown> = { amount_paid: after, reminder_stage: st.fin ? 3 : 0 };
       if (plan) { const nd = planDue(plan, after); upd.due_date = nd; if (!st.fin && nd === (e.due_date ? String(e.due_date).slice(0, 10) : null)) upd.reminder_stage = e.reminder_stage || 0; e.due_date = nd; }
-      const w = await db.from("enrollments").update(upd).eq("id", id).select("id").maybeSingle();
+      // Conditional: a stale request (smaller total) must never overwrite a newer, higher amount_paid; then no row changes and the warning below fires.
+      const w = await db.from("enrollments").update(upd).eq("id", id).lte("amount_paid", after).select("id").maybeSingle();
       const warnings: string[] = [];
       if (w.error || !w.data) warnings.push("Payment saved, but the student's paid total could not be updated: " + (w.error?.message || "no row updated") + ". Reload and check before adding anything else.");
       e.amount_paid = after; e.balance_due = Math.max((e.fee_total || 0) - after, 0);
