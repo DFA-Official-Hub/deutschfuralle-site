@@ -1,4 +1,4 @@
-/** admin/portal/reader (private app pages, auth codes and ids in the URL): no analytics at all, i.e. no GoatCounter,
+/** admin/portal/reader/account (private app pages; account.html is the auth redirect landing, auth codes and ids in the URL): no analytics at all, i.e. no GoatCounter,
  * no GA4 (gtag), no Meta (fbq) and no dfa-track, and no GoatCounter hosts in the CSP. Public pages keep GoatCounter.
  * Run: node --test tests/*.test.mjs */
 import test from 'node:test';
@@ -15,16 +15,24 @@ const cspOf = html => {
   return Object.fromEntries(m[1].split(';').map(s => s.trim()).filter(Boolean).map(d => { const [k, ...v] = d.split(/\s+/); return [k, v]; }));
 };
 
-for (const page of ['admin.html', 'portal.html', 'reader.html']) {
+for (const page of ['admin.html', 'portal.html', 'reader.html', 'account.html']) {
   const html = read(page);
   test(`${page}: zero goatcounter / zgo.at / count.js references`, () => {
-    for (const re of [/goatcounter/i, /zgo\.at/i, /count\.js/i]) assert.ok(!re.test(html), `${page} matches ${re}`);
+    // \b: dfa-account.js is not count.js
+    for (const re of [/goatcounter/i, /zgo\.at/i, /\bcount\.js/i]) assert.ok(!re.test(html), `${page} matches ${re}`);
   });
   test(`${page}: no gtag, fbq or dfa-track`, () => {
     for (const re of [/gtag/i, /fbq/i, /dfa-track/i]) assert.ok(!re.test(html), `${page} matches ${re}`);
   });
   test(`${page}: CSP script-src / connect-src keep their other entries`, () => {
     const c = cspOf(html);
+    if (page === 'account.html') {   // no analytics hosts at all; Supabase, Turnstile and jsdelivr stay
+      assert.deepEqual(c['script-src'], ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com']);
+      assert.deepEqual(c['connect-src'], ["'self'", 'https://owmsddezprhrjiinznmq.supabase.co', 'wss://owmsddezprhrjiinznmq.supabase.co', 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com']);
+      const all = Object.values(c).flat().join(' ');
+      assert.ok(!/googletagmanager|google-analytics|connect\.facebook\.net|www\.facebook\.com|zgo\.at|goatcounter|cloudflareinsights/.test(all), all);
+      return;
+    }
     assert.deepEqual(c['script-src'], ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com',
       'https://static.cloudflareinsights.com', 'https://www.googletagmanager.com', 'https://connect.facebook.net']);
     assert.ok(c['connect-src'].includes('https://owmsddezprhrjiinznmq.supabase.co'));
