@@ -46,6 +46,8 @@ TITLES = {  # title, meta description (audit 2026-11-04, lightly edited)
    'How to book the Goethe A1 or B1 exam in Pakistan: centres in Karachi, Lahore and Islamabad, payment, documents and what each level is for.'),
  'blog/german-a1-spouse-visa-pakistan.html': ('German A1 for Spouse Visa from Pakistan: 2026 Guide',
    'German language test for spouse visa: what the A1 rule means for Pakistani applicants, accepted certificates, exemptions and exam timing.'),
+ 'blog/ausbildung-germany-pakistan-german-level.html': ('Ausbildung in Germany for Pakistanis: Why B1 German Matters',
+   'Ausbildung in Germany for Pakistani students: visa requirements, why B1 German is the usual minimum, when B2 helps, and a realistic timeline from zero.'),
  'blog/german-course-fees-pakistan.html': ('German Language Course Fees in Pakistan 2026: A1 to B2',
    "What a German course costs in Pakistan in 2026: DFA's A1 to B2 fees, what drives the price, how to save and how to choose your level."),
  'german-b1-course.html': ('German B1 Course in Pakistan (Online) | Deutsch Für Alle',
