@@ -4,6 +4,7 @@ import { confirmation, welcome, reminder, docsMail, receiptMail, type FeeInfo } 
 import { decodeBase64, encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { certificateUrls, certificatePdfUrls } from "./render.ts";
 import { buildOne, signed, buildPaymentReceipt, fileBytes, docData, warmDocAssets } from "./docs.ts";
+import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
 async function imagesOn(db: any) { const { data } = await db.from("site_settings").select("value").eq("key", "certificate_images_public").maybeSingle(); return data?.value === "on"; }
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-intake-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
@@ -24,8 +25,13 @@ const todayPk = () => new Date(Date.now() + 5 * 3600e3).toISOString().slice(0, 1
 const addD = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 const ENR_SEL = "*,courses(name,level,duration_days,fee_pkr,old_fee_pkr)";
 function feeInfo(e: any): FeeInfo {
-  return { name: e.full_name || "", studentId: e.student_id || "–", course: e.courses?.name || e.course_label || "your course", batch: e.batch_code || "", total: pkr(e.fee_total), paid: pkr(e.amount_paid), balance: pkr(e.balance_due), due: e.due_date ? fmt(e.due_date) : "on request" };
+  const n = Array.isArray(e.installment_plan) ? nextInst(e.installment_plan, e.amount_paid) : null;
+  return { name: e.full_name || "", studentId: e.student_id || "–", course: e.courses?.name || e.course_label || "your course", batch: e.batch_code || "", total: pkr(e.fee_total), paid: pkr(e.amount_paid), balance: pkr(e.balance_due), due: e.due_date ? fmt(e.due_date) : "on request", next: n ? `${pkr(n.left)} (installment ${n.no} of ${n.of})` : undefined };
 }
+/** Custom plan: due date of the first installment that is not fully paid (null when paid in full). */
+function planDue(plan: Inst[] | null | undefined, paid: number): string | null { const n = Array.isArray(plan) ? nextInst(plan, paid) : null; return n ? n.due : null; }
+/** "PKR 10,000 (installment 2 of 4)" for the next open installment of a custom plan, else "". */
+function nextText(e: any): string { const n = Array.isArray(e.installment_plan) ? nextInst(e.installment_plan, e.amount_paid) : null; return n ? `${pkr(n.left)} (installment ${n.no} of ${n.of})` : ""; }
 let qrCache: Uint8Array | null = null;
 async function loadPaymentQr(db: any) {
   if (qrCache) return qrCache;
@@ -261,7 +267,7 @@ async function processNextDocJob(db: any, enrollmentId: number, by: string | nul
       return { error: msg, code: 409, step: "welcome" };
     }
     const d = docData(e, null, null);
-    const m = welcome(e.full_name, e.courses?.name || e.course_label || "your course", fmt(e.start_date), fmt(e.end_date), { fee: String(d.feeText).replace(/ \(.*$/, ""), studentId: e.student_id, invoiceNo: e.invoice_no, batch: e.batch_code, courseEnd: d.end, paid: pkr(e.amount_paid), balance: e.balance_due > 0 ? pkr(e.balance_due) : "", due: e.due_date ? fmt(e.due_date) : "the date we agreed" });
+    const m = welcome(e.full_name, e.courses?.name || e.course_label || "your course", fmt(e.start_date), fmt(e.end_date), { fee: String(d.feeText).replace(/ \(.*$/, ""), studentId: e.student_id, invoiceNo: e.invoice_no, batch: e.batch_code, courseEnd: d.end, paid: pkr(e.amount_paid), balance: e.balance_due > 0 ? pkr(e.balance_due) : "", due: e.due_date ? fmt(e.due_date) : "the date we agreed", next: nextText(e) });
     const att = [{ filename: `DFA Confirmation of Registration ${e.student_id}.pdf`, content: await fileBytes(db, "documents", e.admission_file), contentType: "application/pdf" }, { filename: `DFA Fee Receipt ${e.invoice_no}.pdf`, content: await fileBytes(db, "documents", e.receipt_file), contentType: "application/pdf" }];
     let r = "off";
     try { r = await send(e.email, m.subject, m.text, att); }
@@ -583,21 +589,29 @@ Deno.serve(async (req) => {
       if (body.start_date && /^\d{4}-\d{2}-\d{2}$/.test(body.start_date)) patch.start_date = body.start_date;
       const pre = (await db.from("enrollments").select("course_code,receipt_url").eq("id", id).maybeSingle()).data;
       const cc = (await db.from("courses").select("fee_pkr").eq("code", String(body.course_code || pre?.course_code || "")).maybeSingle()).data;
-      const total = Math.round(Number(body.fee_total)) > 0 ? Math.round(Number(body.fee_total)) : Number(cc?.fee_pkr) || 0;
-      const two = body.plan === "two";
-      let first = two ? (Math.round(Number(body.first_amount)) > 0 ? Math.round(Number(body.first_amount)) : Math.ceil(total / 2)) : total;
+      let total = Math.round(Number(body.fee_total)) > 0 ? Math.round(Number(body.fee_total)) : Number(cc?.fee_pkr) || 0;
+      const custom = body.plan === "custom", two = body.plan === "two";
+      let plan: Inst[] | null = null;
+      if (custom) {
+        // Admin-chosen schedule (2-5 installments). The agreed total is the sum of the installments; installment 1 is the payment received now.
+        const np = normPlan(body.installments);
+        if (np.error) return json({ error: np.error }, 400);
+        plan = np.plan!; total = np.total!;
+      }
+      let first = custom ? plan![0].amount : two ? (Math.round(Number(body.first_amount)) > 0 ? Math.round(Number(body.first_amount)) : Math.ceil(total / 2)) : total;
       if (total && first > total) first = total;
-      patch.fee_total = total || null; patch.amount_paid = first; patch.payment_plan = two ? "two" : "full"; patch.reminder_stage = 0;
+      patch.fee_total = total || null; patch.amount_paid = first; patch.payment_plan = custom ? "custom" : two ? "two" : "full"; patch.installment_plan = plan; patch.reminder_stage = 0;
       const up = await db.from("enrollments").update(patch).eq("id", id).eq("status", "pending").select("*,courses(name)").maybeSingle();
       if (up.error) return json({ error: up.error.message }, 400);
       if (!up.data) return json({ error: "Not found or not pending" }, 404);
       let due: string | null = null;
-      if (first < total) { due = body.due_date && /^\d{4}-\d{2}-\d{2}$/.test(body.due_date) ? body.due_date : (up.data.start_date && up.data.end_date ? addD(up.data.start_date, Math.round(((Date.parse(up.data.end_date) - Date.parse(up.data.start_date)) / 864e5 - 15) / 2)) : null); }
+      if (plan) due = planDue(plan, first);
+      else if (first < total) { due = body.due_date && /^\d{4}-\d{2}-\d{2}$/.test(body.due_date) ? body.due_date : (up.data.start_date && up.data.end_date ? addD(up.data.start_date, Math.round(((Date.parse(up.data.end_date) - Date.parse(up.data.start_date)) / 864e5 - 15) / 2)) : null); }
       await db.from("enrollments").update({ activated_by: u.user.id, due_date: due }).eq("id", id);
       if (first > 0) {
         const existing = (await db.from("payments").select("id").eq("enrollment_id", id).eq("installment_no", 1).maybeSingle()).data;
         if (!existing) {
-          const ins = await db.from("payments").insert({ enrollment_id: id, amount: first, paid_on: todayPk(), proof_url: pre?.receipt_url || null, invoice_no: up.data.invoice_no, installment_no: 1, installments: two ? 2 : 1, is_final: first >= total, created_by: u.user.id });
+          const ins = await db.from("payments").insert({ enrollment_id: id, amount: first, paid_on: todayPk(), proof_url: pre?.receipt_url || null, invoice_no: up.data.invoice_no, installment_no: 1, installments: plan ? plan.length : two ? 2 : 1, is_final: first >= total, installment_label: plan ? payLabel(plan, 0, first) : null, method: payMethod(body.method), created_by: u.user.id });
           if (ins.error && !/duplicate|unique/i.test(ins.error.message || "")) return json({ error: ins.error.message }, 400);
         }
       }
@@ -624,7 +638,7 @@ Deno.serve(async (req) => {
       if (e.welcome_sent_at && !body.force) return json({ ok: true, email: "already sent" });
       if (!e.admission_file || !e.receipt_file) return json({ error: "Documents are not ready yet." }, 409);
       const d = docData(e, null, null);
-      const m = welcome(e.full_name, e.courses?.name || e.course_label || "your course", fmt(e.start_date), fmt(e.end_date), { fee: String(d.feeText).replace(/ \(.*$/, ""), studentId: e.student_id, invoiceNo: e.invoice_no, batch: e.batch_code, courseEnd: d.end, paid: pkr(e.amount_paid), balance: e.balance_due > 0 ? pkr(e.balance_due) : "", due: e.due_date ? fmt(e.due_date) : "the date we agreed" });
+      const m = welcome(e.full_name, e.courses?.name || e.course_label || "your course", fmt(e.start_date), fmt(e.end_date), { fee: String(d.feeText).replace(/ \(.*$/, ""), studentId: e.student_id, invoiceNo: e.invoice_no, batch: e.batch_code, courseEnd: d.end, paid: pkr(e.amount_paid), balance: e.balance_due > 0 ? pkr(e.balance_due) : "", due: e.due_date ? fmt(e.due_date) : "the date we agreed", next: nextText(e) });
       const att = [{ filename: `DFA Confirmation of Registration ${e.student_id}.pdf`, content: await fileBytes(db, "documents", e.admission_file), contentType: "application/pdf" }, { filename: `DFA Fee Receipt ${e.invoice_no}.pdf`, content: await fileBytes(db, "documents", e.receipt_file), contentType: "application/pdf" }];
       let r = "off"; try { r = await send(e.email, m.subject, m.text, att, { idempotencyKey: `welcome/${e.id}/${e.invoice_no || e.id}` }); } catch (x) { await logMail(db, e, "welcome", ["admission", "receipt"], "error", u.user.id, String((x as Error).message || x)); return json({ error: "Sending failed: " + String((x as Error).message || x) }, 500); }
       if (r === "sent") { await db.from("enrollments").update({ welcome_sent_at: new Date().toISOString() }).eq("id", id); await logMail(db, e, "welcome", ["admission", "receipt"], "sent", u.user.id); }
@@ -693,19 +707,72 @@ Deno.serve(async (req) => {
       const paidOn = body.paid_on && /^\d{4}-\d{2}-\d{2}$/.test(body.paid_on) ? body.paid_on : todayPk();
       const proof = /^https:\/\//.test(String(body.proof_url || "")) ? String(body.proof_url).slice(0, 400) : null;
       const n = ((await db.from("payments").select("id", { count: "exact", head: true }).eq("enrollment_id", id)).count || 0) + 1;
-      const before = Number(e.amount_paid) || 0, after = before + amount, fin = !e.fee_total || after >= e.fee_total;
-      const ins = await db.from("payments").insert({ enrollment_id: id, amount, paid_on: paidOn, proof_url: proof, installment_no: n, installments: Math.max(e.payment_plan === "two" ? 2 : 1, n), is_final: fin, created_by: u.user.id }).select("*").single();
-      if (ins.error) return json({ error: ins.error.message }, 400);
-      await db.from("enrollments").update({ amount_paid: after, reminder_stage: fin ? 3 : 0 }).eq("id", id);
+      let before = Number(e.amount_paid) || 0; const plan: Inst[] | null = Array.isArray(e.installment_plan) && e.installment_plan.length ? e.installment_plan : null;
+      let after = before + amount; const fin = !e.fee_total || after >= e.fee_total;
+      // installment_no is the payment's running number (unique per student, so two saves at the same moment can't both win);
+      // with a plan the receipt label says which installment(s) the money covers.
+      const ins = await db.from("payments").insert({ enrollment_id: id, amount, paid_on: paidOn, proof_url: proof, installment_no: n, installments: Math.max(planCount(e), n), is_final: fin, installment_label: plan ? payLabel(plan, before, after) : null, method: payMethod(body.method), created_by: u.user.id }).select("*").single();
+      if (ins.error) return json({ error: /duplicate|unique/i.test(ins.error.message || "") ? "Another payment was just saved for this student. Reload the page and check before adding it again." : ins.error.message }, ins.error && /duplicate|unique/i.test(ins.error.message || "") ? 409 : 400);
+      // The insert and the enrollment update are separate requests, so recompute everything from the sum of all payments now stored.
+      const rr = await db.from("payments").select("amount").eq("enrollment_id", id);
+      const st = settle({ plan, feeTotal: e.fee_total, amount, readOk: !rr.error && Array.isArray(rr.data), sumAfter: (rr.data || []).reduce((t: number, p: { amount: number }) => t + (Number(p.amount) || 0), 0) });
+      // Re-read failed or can't include this payment: don't write amount_paid or send a receipt from a wrong total.
+      if (st.bad) return json({ ok: true, payment: ins.data, email: "not sent", warning: "Payment saved; reload and check" + (rr.error ? " (" + rr.error.message + ")" : "") + "." });
+      if (st.over) {
+        // Another payment landed meanwhile and this one would take the total above the fee: undo it.
+        const del = await db.from("payments").delete().eq("id", ins.data.id);
+        if (del.error) return json({ error: "This payment would take the total above the fee, but it could not be removed: the payment row " + (ins.data.invoice_no || ins.data.id) + " still exists. Reload, check the payments and delete the extra one before doing anything else. (" + del.error.message + ")" }, 500);
+        return json({ error: "Another payment was just saved for this student, and this one would take the total above the fee. Reload the page and check the balance." }, 409);
+      }
+      before = st.before; after = st.after;
+      if (st.fin !== ins.data.is_final || (st.label || null) !== (ins.data.installment_label || null)) {
+        const fx = await db.from("payments").update({ is_final: st.fin, installment_label: st.label }).eq("id", ins.data.id).select("*").maybeSingle();
+        if (fx.data) ins.data = fx.data; else { ins.data.is_final = st.fin; ins.data.installment_label = st.label; }
+      }
+      // Custom plan: the next unpaid installment's date becomes the due date, so reminders follow the schedule.
+      // Reminders restart only when the due date moves; a part payment towards the same installment keeps the reminder stage.
+      const upd: Record<string, unknown> = { amount_paid: after, reminder_stage: st.fin ? 3 : 0 };
+      if (plan) { const nd = planDue(plan, after); upd.due_date = nd; if (!st.fin && nd === (e.due_date ? String(e.due_date).slice(0, 10) : null)) upd.reminder_stage = e.reminder_stage || 0; e.due_date = nd; }
+      // Conditional: a stale request (smaller total) must never overwrite a newer, higher amount_paid; then no row changes and the warning below fires.
+      const w = await db.from("enrollments").update(upd).eq("id", id).lte("amount_paid", after).select("id").maybeSingle();
+      const warnings: string[] = [];
+      if (w.error || !w.data) warnings.push("Payment saved, but the student's paid total could not be updated: " + (w.error?.message || "no row updated") + ". Reload and check before adding anything else.");
       e.amount_paid = after; e.balance_due = Math.max((e.fee_total || 0) - after, 0);
-      let rc: any = null; try { rc = await buildPaymentReceipt(db, e, ins.data, before); } catch (x) { return json({ ok: true, payment: ins.data, warning: "Payment saved, but the receipt could not be created: " + String((x as Error).message || x) }); }
+      let rc: any = null; try { rc = await buildPaymentReceipt(db, e, ins.data, before); } catch (x) { return json({ ok: true, payment: ins.data, warning: [...warnings, "Payment saved, but the receipt could not be created: " + String((x as Error).message || x)].join(" ") }); }
       let mail = "not sent";
       if (body.email !== false) {
-        const m = receiptMail(e.full_name, e.courses?.name || e.course_label || "course", pkr(amount), ins.data.invoice_no, e.balance_due > 0 ? pkr(e.balance_due) : "", e.due_date ? fmt(e.due_date) : "");
+        const m = receiptMail(e.full_name, e.courses?.name || e.course_label || "course", pkr(amount), ins.data.invoice_no, e.balance_due > 0 ? pkr(e.balance_due) : "", e.due_date ? fmt(e.due_date) : "", nextText(e));
         try { mail = await send(e.email, m.subject, m.text, [{ filename: `DFA Fee Receipt ${ins.data.invoice_no}.pdf`, content: rc.receipt, contentType: "application/pdf" }]); await logMail(db, e, "payment", ["receipt"], mail, u.user.id); }
         catch (x) { mail = "error"; await logMail(db, e, "payment", ["receipt"], "error", u.user.id, String((x as Error).message || x)); }
       }
-      return json({ ok: true, payment: ins.data, balance_due: e.balance_due, email: mail });
+      return json({ ok: true, payment: ins.data, balance_due: e.balance_due, email: mail, ...(warnings.length ? { warning: warnings.join(" ") } : {}) });
+    }
+    if (body.action === "set_plan") {
+      // Change the schedule of an active student. The total must stay the same (documents already show it),
+      // and installments that are already paid can't change (checked here, not only in the admin page).
+      const id = Number(body.id);
+      const e = (await db.from("enrollments").select("id,status,fee_total,amount_paid,invoice_no,installment_plan,start_date,end_date,due_date,reminder_stage").eq("id", id).maybeSingle()).data;
+      if (!e || !e.invoice_no || !["active", "expired"].includes(e.status)) return json({ error: "Activate the student first (Payment received)." }, 400);
+      const paid = Number(e.amount_paid) || 0, open = (e.fee_total || 0) > paid;
+      if (body.clear) {
+        // Back to the standard schedule: one open balance due around the middle of the course.
+        const due = open && e.start_date && e.end_date ? addD(e.start_date, Math.round(((Date.parse(e.end_date) - Date.parse(e.start_date)) / 864e5 - 15) / 2)) : null;
+        const up = await db.from("enrollments").update({ installment_plan: null, payment_plan: open ? "two" : "full", due_date: due, reminder_stage: open ? 0 : 3 }).eq("id", id).eq("amount_paid", paid).select("id").maybeSingle();
+        if (!up.data) return json({ error: "Reload, a payment was just recorded." }, 409);
+        return json({ ok: true, cleared: true, due_date: due });
+      }
+      const np = normPlan(body.installments);
+      if (np.error) return json({ error: np.error }, 400);
+      if (e.fee_total && np.total !== e.fee_total) return json({ error: `The installments add up to ${pkr(np.total!)}, but the fee is ${pkr(e.fee_total)}. Make them match.` }, 400);
+      const pays = Array.isArray(e.installment_plan) && e.installment_plan.length ? [] : ((await db.from("payments").select("amount,paid_on,installment_no").eq("enrollment_id", id).order("installment_no")).data || []);
+      const lockErr = checkLocked(lockedRows(e.installment_plan, paid, pays), np.plan!);
+      if (lockErr) return json({ error: lockErr }, 400);
+      const due = planDue(np.plan!, paid);
+      const same = due === (e.due_date ? String(e.due_date).slice(0, 10) : null);
+      const up = await db.from("enrollments").update({ installment_plan: np.plan, payment_plan: "custom", due_date: due, reminder_stage: !due ? 3 : same ? (e.reminder_stage || 0) : 0 }).eq("id", id).eq("amount_paid", paid).select("id").maybeSingle();
+      if (up.error) return json({ error: up.error.message }, 400);
+      if (!up.data) return json({ error: "Reload, a payment was just recorded." }, 409);
+      return json({ ok: true, due_date: due });
     }
     if (body.action === "set_due") {
       const d = String(body.due_date || ""); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "Pick a date." }, 400);
