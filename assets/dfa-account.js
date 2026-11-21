@@ -74,8 +74,7 @@ signup:async function(f){var b=f.querySelector('button.ac-full'),em=f.email.valu
  if(ck.data&&ck.data.ts==='used'){capReset();c=await freshCap()}
  var r=await sb.auth.signUp({email:em,password:f.pw.value,options:Object.assign({emailRedirectTo:DFA.SITE+'/account.html',data:{username:f.username.value.trim(),full_name:f.full_name.value.trim(),country:f.country.value}},c)});busy(b,false);capReset();
  if(r.error)return msg(/database error|permanent email|temporary/i.test(r.error.message)?'Please use a permanent email address. Temporary or disposable email services are not accepted.':/weak|pwned|leaked|compromised/i.test(r.error.message)?'This password has appeared in a data leak or is too weak. Please choose a different one.':/rate limit/i.test(r.error.message)?'Too many attempts. Please wait a little and try again.':r.error.message);
- if(window.gtag)gtag('event','sign_up',{method:'email'});
- if(window.fbq&&window.DFAConsent&&DFAConsent.granted())fbq('track','CompleteRegistration',{},{eventID:(crypto.randomUUID&&crypto.randomUUID())||String(Date.now())});
+ try{localStorage.setItem('dfa-pending-signup',JSON.stringify({m:'email',ts:Date.now()}))}catch(x){}   // no analytics on this page: dfa-track sends sign_up once on the next public page (no email, id or name stored)
  if(r.data.session)return done();
  app.innerHTML='<h2>Check your inbox</h2><p class="ac-lead">We sent a confirmation link to <b>'+E(f.email.value)+'</b>. Click it to finish creating your account. If it is not there in a few minutes, look in your spam folder.</p><button class="btn outline" type="button" data-go="login">Back to log in</button>';app.querySelector('[data-go]').onclick=function(){show('login')}},
 forgot:async function(f){var b=f.querySelector('button.ac-full');var c=cap();if(!c)return;busy(b,true);var r=await sb.auth.resetPasswordForEmail(f.email.value.trim(),Object.assign({redirectTo:DFA.SITE+'/account.html?mode=reset'},c));busy(b,false);capReset();

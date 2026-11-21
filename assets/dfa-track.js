@@ -88,6 +88,21 @@
       return eid; },
     suppressWa:function(){ suppressUntil=Date.now()+5000; }
   };
+  // Sign-up conversion handed over from the private account page (no analytics there): fire once on the next public page.
+  // The flag is {m:'email',ts} only. Expired (7 days) or malformed flags are dropped without firing; Meta only with consent.
+  (function(){
+    if(/^\/(admin|portal|reader|account|doc)(\.html)?(\/|\/index\.html)?$/.test(location.pathname))return;   // private pages: leave the flag for a public page
+    var K='dfa-pending-signup',raw=null,f=null;
+    try{raw=localStorage.getItem(K)}catch(e){return}
+    if(raw===null)return;
+    try{localStorage.removeItem(K)}catch(e){}
+    try{f=JSON.parse(raw)}catch(e){}
+    var age=f&&typeof f.ts==='number'?Date.now()-f.ts:-1;
+    if(!f||f.m!=='email'||!(age>=0&&age<7*864e5))return;
+    if(typeof window.gtag!=='function'){window.dataLayer=window.dataLayer||[];window.gtag=function(){dataLayer.push(arguments)}}   // queued for gtag.js if the head stub is missing
+    ga('sign_up',{method:'email'});
+    px('CompleteRegistration',{},uuid());
+  })();
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[href]'); if(!a)return; var h=a.href, loc=a.closest('footer')?'footer':a.closest('header,nav')?'header':'body';
     if(a.matches('a[href="/whatsapp"], a[href^="/whatsapp?"], a[href*="wa.me/"], a[href*="api.whatsapp.com/"]')){   // /whatsapp = redirect page → Supabase wa function (number in secret)
