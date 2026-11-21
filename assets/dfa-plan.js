@@ -1,0 +1,34 @@
+/* Fee installment plans (custom schedules). Shared by admin.html and portal.html.
+   Keep in sync with supabase/functions/admission/plan.ts (tests/installment-plan.test.mjs checks both). */
+(function(g){
+var ISO=/^\d{4}-\d{2}-\d{2}$/;
+function isDate(s){if(!ISO.test(String(s||'')))return false;var t=Date.parse(s+'T00:00:00Z');return !isNaN(t)&&new Date(t).toISOString().slice(0,10)===s}
+/** Same calendar day k months later; clamps to the month's last day (31 Jan + 1 month = 28/29 Feb). */
+function addMonths(d,k){var p=d.split('-').map(Number),y=p[0],m=p[1]-1+k,yy=y+Math.floor(m/12),mm=((m%12)+12)%12,last=new Date(Date.UTC(yy,mm+1,0)).getUTCDate();return new Date(Date.UTC(yy,mm,Math.min(p[2],last))).toISOString().slice(0,10)}
+function addDays(d,n){return new Date(Date.parse(d+'T00:00:00Z')+n*864e5).toISOString().slice(0,10)}
+/** Even split rounded down to 1,000 (or 500 for small shares); the remainder goes on the last installment. */
+function splitEven(total,n){total=Math.round(Number(total)||0);n=Math.round(Number(n)||0);if(n<1)return[];if(total<=0)return Array(n).fill(0);
+ var share=total/n,unit=share>=10000?1000:share>=1000?500:1,base=Math.floor(share/unit)*unit,out=[];if(base<=0)base=Math.floor(share)||0;
+ for(var i=0;i<n-1;i++)out.push(base);out.push(total-base*(n-1));return out}
+/** Suggested due dates: first on the start date, then one month apart. */
+function suggestDates(start,n){var out=[];for(var i=0;i<n;i++)out.push(addMonths(start,i));return out}
+function suggest(total,n,start){var a=splitEven(total,n),d=suggestDates(start,n);return a.map(function(x,i){return {no:i+1,amount:x,due:d[i]}})}
+/** Validates an admin-entered schedule. Returns {plan,total} or {error}. */
+function normalize(list){if(!Array.isArray(list))return {error:'Add the installments.'};if(list.length<2||list.length>5)return {error:'Pick 2 to 5 installments.'};
+ var out=[],total=0;for(var i=0;i<list.length;i++){var x=list[i]||{},a=Number(x.amount),d=String(x.due||'');
+  if(!(a>0)||Math.round(a)!==a)return {error:'Installment '+(i+1)+': enter an amount in whole rupees.'};
+  if(!isDate(d))return {error:'Installment '+(i+1)+': pick a due date.'};
+  if(i&&d<out[i-1].due)return {error:'Installment '+(i+1)+' is due before installment '+i+'. Put the dates in order.'};
+  out.push({no:i+1,amount:a,due:d});total+=a}
+ return {plan:out,total:total}}
+/** Status of each installment from the total paid so far (payments fill installments in order).
+    pays (optional): [{amount,paid_on,installment_no}] used to show the date an installment was completed. */
+function status(plan,paid,pays){paid=Math.max(Number(paid)||0,0);var ps=(pays||[]).slice().sort(function(a,b){return (a.installment_no||0)-(b.installment_no||0)}),cum=0,need=0;
+ return (plan||[]).map(function(x){need+=Number(x.amount)||0;var left=Math.max(Math.min(need-paid,Number(x.amount)||0),0),st=left<=0?'paid':left<x.amount?'partial':'due',on=null;
+  if(st==='paid'&&ps.length){cum=0;for(var j=0;j<ps.length;j++){cum+=Number(ps[j].amount)||0;if(cum>=need){on=ps[j].paid_on?String(ps[j].paid_on).slice(0,10):null;break}}}
+  return {no:x.no,amount:x.amount,due:x.due,status:st,left:left,paid_on:on}})}
+/** First installment that is not fully paid: {no,due,left,of} or null when everything is paid. */
+function next(plan,paid){var s=status(plan,paid);for(var i=0;i<s.length;i++)if(s[i].status!=='paid')return {no:s[i].no,due:s[i].due,left:s[i].left,of:s.length};return null}
+var API={isDate:isDate,addMonths:addMonths,addDays:addDays,splitEven:splitEven,suggestDates:suggestDates,suggest:suggest,normalize:normalize,status:status,next:next};
+g.DFA_PLAN=API;
+})(typeof window!=='undefined'?window:globalThis);
