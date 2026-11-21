@@ -12,9 +12,19 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = readFileSync(path.join(root, 'assets/dfa-track.js'), 'utf8');
-let OLD = null;
-try { OLD = execFileSync('git', ['show', 'origin/main:assets/dfa-track.js'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { }
-if (OLD && OLD.includes('function mediumFor')) OLD = null;   // after merge, main already has the change: skip the "before" check
+// "before" = assets/dfa-track.js on origin/main. Fails loudly if origin/main can't be read (run `git fetch origin` first).
+// Once this change is on main, "before" is the parent of the commit that introduced mediumFor, so the check keeps working.
+const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+let OLD, BEFORE_REF = 'origin/main';
+try { OLD = git('show', `${BEFORE_REF}:assets/dfa-track.js`); }
+catch (e) { throw new Error(`cannot read origin/main:assets/dfa-track.js for the "before" check; run \`git fetch origin\` first (${String(e.stderr || e.message).trim()})`); }
+if (OLD.includes('function mediumFor')) {
+  const intro = git('log', '--reverse', '--format=%H', '-S', 'function mediumFor', 'origin/main', '--', 'assets/dfa-track.js').trim().split('\n')[0];
+  if (!intro) throw new Error('origin/main has mediumFor but its introducing commit was not found');
+  BEFORE_REF = intro + '^'; OLD = git('show', `${BEFORE_REF}:assets/dfa-track.js`);
+}
+assert.ok(!OLD.includes('function mediumFor'), 'before script must be the pre-change version');
+console.log(`before = ${BEFORE_REF}:assets/dfa-track.js`);
 
 function run(src, { search = '', referrer = '', store = {} } = {}) {
   const ls = new Map(Object.entries(store));
@@ -30,6 +40,7 @@ function run(src, { search = '', referrer = '', store = {} } = {}) {
   return { ft: g('dfa-ft'), lt: g('dfa-lt'), attr: ctx.DFAAttr };
 }
 const pick = r => r && { utm_source: r.utm_source, utm_medium: r.utm_medium };
+const AA = pkg => `android-app://${pkg}/`;
 
 // [name, input, before {source, medium}, after {source, medium}]
 const CASES = [
@@ -63,6 +74,32 @@ const CASES = [
     { utm_source: 'ig', utm_medium: undefined }, { utm_source: 'ig', utm_medium: 'social' }],
   ['bare name utm_source=google -> organic', { search: '?utm_source=google' },
     { utm_source: 'google', utm_medium: undefined }, { utm_source: 'google', utm_medium: 'organic' }],
+  ['android-app Google search app referrer -> organic', { referrer: AA('com.google.android.googlequicksearchbox') },
+    { utm_source: 'google', utm_medium: 'organic' }, { utm_source: 'google', utm_medium: 'organic' }],
+  ['android-app Facebook (com.facebook.katana) referrer -> social', { referrer: AA('com.facebook.katana') },
+    { utm_source: 'facebook', utm_medium: 'social' }, { utm_source: 'facebook', utm_medium: 'social' }],
+  ['android-app Instagram (com.instagram.android) referrer -> social', { referrer: AA('com.instagram.android') },
+    { utm_source: 'instagram', utm_medium: 'social' }, { utm_source: 'instagram', utm_medium: 'social' }],
+  ['android-app LinkedIn (com.linkedin.android) referrer -> social', { referrer: AA('com.linkedin.android') },
+    { utm_source: 'linkedin', utm_medium: 'social' }, { utm_source: 'linkedin', utm_medium: 'social' }],
+  ['android-app Twitter/X (com.twitter.android) referrer -> social', { referrer: AA('com.twitter.android') },
+    { utm_source: 'com.twitter.android', utm_medium: 'referral' }, { utm_source: 'com.twitter.android', utm_medium: 'social' }],
+  ['android-app TikTok (com.zhiliaoapp.musically) referrer -> social', { referrer: AA('com.zhiliaoapp.musically') },
+    { utm_source: 'com.zhiliaoapp.musically', utm_medium: 'referral' }, { utm_source: 'com.zhiliaoapp.musically', utm_medium: 'social' }],
+  ['android-app YouTube (com.google.android.youtube) referrer -> social (source unchanged)', { referrer: AA('com.google.android.youtube') },
+    { utm_source: 'google', utm_medium: 'organic' }, { utm_source: 'google', utm_medium: 'social' }],
+  ['android-app Pinterest (com.pinterest) referrer -> social', { referrer: AA('com.pinterest') },
+    { utm_source: 'pinterest', utm_medium: 'social' }, { utm_source: 'pinterest', utm_medium: 'social' }],
+  ['android-app unknown package referrer -> referral', { referrer: AA('com.example.reader') },
+    { utm_source: 'com.example.reader', utm_medium: 'referral' }, { utm_source: 'com.example.reader', utm_medium: 'referral' }],
+  ['trailing-dot referrer www.google.com. -> organic', { referrer: 'https://www.google.com./' },
+    { utm_source: 'google', utm_medium: 'organic' }, { utm_source: 'google', utm_medium: 'organic' }],
+  ['trailing-dot referrer m.facebook.com. -> social', { referrer: 'https://m.facebook.com./' },
+    { utm_source: 'facebook', utm_medium: 'social' }, { utm_source: 'facebook', utm_medium: 'social' }],
+  ['trailing-dot utm_source=google.com. -> organic', { search: '?utm_source=google.com.' },
+    { utm_source: 'google.com.', utm_medium: undefined }, { utm_source: 'google.com.', utm_medium: 'organic' }],
+  ['medium-only ?utm_medium=email + Google referrer -> email kept', { search: '?utm_medium=email', referrer: 'https://www.google.com/' },
+    { utm_source: 'google', utm_medium: 'organic' }, { utm_source: 'google', utm_medium: 'email' }],
   ['self-referral ignored (www.deutschfuralle.com)', { referrer: 'https://www.deutschfuralle.com/courses' },
     { utm_source: 'direct', utm_medium: 'none' }, { utm_source: 'direct', utm_medium: 'none' }],
 ];
@@ -73,7 +110,7 @@ for (const [name, input, before, after] of CASES) {
     console.log(`  ${name}\n    before: ${JSON.stringify(before)}\n    after:  ${JSON.stringify(pick(now.lt || now.ft))}`);
     assert.deepEqual(pick(now.lt || now.ft), after);
     assert.deepEqual(pick(now.ft), after, 'first touch written on first visit');
-    if (OLD) { const was = run(OLD, input); assert.deepEqual(pick(was.lt || was.ft), before, 'before value matches origin/main'); }
+    const was = run(OLD, input); assert.deepEqual(pick(was.lt || was.ft), before, `before value matches ${BEFORE_REF}`);
   });
 }
 
@@ -82,7 +119,7 @@ test('direct visit (no referrer, no UTMs) unchanged: direct/none, no last touch'
   console.log(`  direct\n    before: {"utm_source":"direct","utm_medium":"none"} (no dfa-lt)\n    after:  ${JSON.stringify(pick(now.ft))} (dfa-lt ${now.lt ? 'set' : 'not set'})`);
   assert.deepEqual(pick(now.ft), { utm_source: 'direct', utm_medium: 'none' });
   assert.equal(now.lt, null);
-  if (OLD) { const was = run(OLD, {}); assert.deepEqual(was.ft && { s: was.ft.utm_source, m: was.ft.utm_medium, p: was.ft.landing_page }, { s: now.ft.utm_source, m: now.ft.utm_medium, p: now.ft.landing_page }); assert.equal(was.lt, null); }
+  const was = run(OLD, {}); assert.deepEqual(was.ft && { s: was.ft.utm_source, m: was.ft.utm_medium, p: was.ft.landing_page }, { s: now.ft.utm_source, m: now.ft.utm_medium, p: now.ft.landing_page }); assert.equal(was.lt, null);
 });
 
 test('first touch never overwritten; last touch updated; other fields untouched', () => {
@@ -96,7 +133,7 @@ test('first touch never overwritten; last touch updated; other fields untouched'
 });
 
 test('mediumFor helper: exact host or subdomain only, AI first, ccTLDs, bare names', () => {
-  const a = SRC.indexOf('  var TLD='), b = SRC.indexOf('  function clean(');
+  const a = SRC.indexOf('  var TLD='), b = SRC.indexOf('  // android-app://');
   assert.ok(a > 0 && b > a, 'helper block found');
   const ctx = {}; vm.runInNewContext(SRC.slice(a, b) + ';this.mediumFor=mediumFor;', ctx);
   const m = ctx.mediumFor;
@@ -113,7 +150,21 @@ test('mediumFor helper: exact host or subdomain only, AI first, ccTLDs, bare nam
     'pinterest.com': 'social', 'pinterest.co.uk': 'social', 'pk.pinterest.com': 'social', 'reddit.com': 'social', 'whatsapp.com': 'social',
     'wa.me': 'social', 'notfacebook.com': 'referral', 'facebook.com.evil.example': 'referral', 'xx.com': 'referral', 'tt.co': 'referral',
     'facebook': 'social', 'fb': 'social', 'ig': 'social', 'instagram': 'social', 'google': 'organic', 'chatgpt': 'ai_referral',
+    'www.google.com.': 'organic', 'm.facebook.com.': 'social', 'chatgpt.com.': 'ai_referral', 'notchatgpt.com.': 'referral',
     'newsletter': 'referral', 'example.org': 'referral', '': 'referral',
   };
   for (const [k, v] of Object.entries(expect)) assert.equal(m(k), v, k);
+});
+
+test('appHost helper: known packages, reversed leading domain otherwise', () => {
+  const a = SRC.indexOf('  var TLD='), b = SRC.indexOf('  function clean(');
+  const ctx = {}; vm.runInNewContext(SRC.slice(a, b) + ';this.appHost=appHost;this.mediumFor=mediumFor;', ctx);
+  const expect = {
+    'com.google.android.googlequicksearchbox': ['google.com', 'organic'], 'com.google.android.youtube': ['youtube.com', 'social'],
+    'com.google.android.apps.bard': ['gemini.google.com', 'ai_referral'], 'com.openai.chatgpt': ['chatgpt.com', 'ai_referral'],
+    'com.facebook.katana': ['facebook.com', 'social'], 'com.instagram.android': ['instagram.com', 'social'], 'com.linkedin.android': ['linkedin.com', 'social'],
+    'com.twitter.android': ['x.com', 'social'], 'com.zhiliaoapp.musically': ['tiktok.com', 'social'], 'com.pinterest': ['pinterest.com', 'social'],
+    'com.reddit.frontpage': ['reddit.com', 'social'], 'com.whatsapp': ['whatsapp.com', 'social'], 'com.example.reader': ['example.com', 'referral'],
+  };
+  for (const [pkg, [host, med]] of Object.entries(expect)) { assert.equal(ctx.appHost(pkg), host, pkg); assert.equal(ctx.mediumFor(ctx.appHost(pkg)), med, pkg); }
 });
