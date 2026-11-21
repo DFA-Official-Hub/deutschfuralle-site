@@ -68,7 +68,9 @@ ORG = {'@type': 'EducationalOrganization', '@id': ORG_ID, 'name': 'Deutsch Für 
                   'https://open.spotify.com/show/5xTb3cZ3NrMYcgXjouiiQA']}
 ORG_REF = {'@type': 'EducationalOrganization', '@id': ORG_ID, 'name': 'Deutsch Für Alle', 'url': SITE + '/'}
 
-def txt(s): return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', s))).strip()
+def txt(s):
+    s = re.sub(r'</(?:a|strong|em|b|i|span|code)>(?=[.,;:!?)])', '', s)  # no stray space before punctuation after an inline tag
+    return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', s))).strip()
 def clean_url(rel):  # 'books/farben.html' -> https://www.../books/farben ; index.html -> /
     rel = re.sub(r'(^|/)index\.html$', r'\1', rel)
     return SITE + '/' + re.sub(r'\.html$', '', rel)
