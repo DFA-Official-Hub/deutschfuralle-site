@@ -46,8 +46,10 @@
     if(!/deutschfuralle\.com$/.test(h)){var m=h.match(/instagram|facebook|threads|youtube|tiktok|linkedin|pinterest|google/);t.utm_source=m?m[0]:h;
       t.utm_medium=t.utm_medium||mediumFor(/^android-app:/i.test(document.referrer)?appHost(h):h);}}catch(e){}}
   var now=new Date().toISOString();
+  function land(u){if(typeof window.DFA_SCRUB==='function')return window.DFA_SCRUB(u);   // no auth params in the stored landing URL
+    var m=u.split('?'),q=(m[1]||'').split('&').filter(function(kv){return kv&&!/^(code|access_token|refresh_token|token_hash|type|provider_token|provider_refresh_token|expires_at|expires_in|token_type)$/i.test(kv.split('=')[0])});return m[0]+(q.length?'?'+q.join('&'):'')}
   if(t.utm_source||t.gclid||t.fbclid){
-    t.landing_page=location.pathname+location.search; t.ts=now;
+    t.landing_page=land(location.pathname+location.search); t.ts=now;
     put(LT,t);                       // last touch: overwritten on every tagged visit
     if(!get(FT))put(FT,t);           // first touch: written once, never overwritten
   } else if(!get(FT)){
