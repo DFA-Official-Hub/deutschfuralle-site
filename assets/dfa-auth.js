@@ -10,7 +10,9 @@ var remember=function(){try{return localStorage.getItem('dfa-remember')!=='0'}ca
 var store={getItem:function(k){try{return (remember()?localStorage:sessionStorage).getItem(k)}catch(e){return null}},
 setItem:function(k,v){try{(remember()?localStorage:sessionStorage).setItem(k,v)}catch(e){}},
 removeItem:function(k){try{localStorage.removeItem(k);sessionStorage.removeItem(k)}catch(e){}}};
-var sb=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:store,flowType:'pkce'}});
+/* /verify?code= is a certificate code, not an auth code: never treat it as a PKCE callback there. */
+var urlSession=!/^\/verify(\.html)?\/?$/.test(location.pathname);
+var sb=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:urlSession,storage:store,flowType:'pkce'}});
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function setRemember(on){try{localStorage.setItem('dfa-remember',on?'1':'0')}catch(e){}}
 async function profile(){var s=(await sb.auth.getSession()).data.session;if(!s)return null;
