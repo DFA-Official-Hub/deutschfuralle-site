@@ -4,12 +4,47 @@
   var NAMES={instagram:'Instagram',facebook:'Facebook',threads:'Threads',youtube:'YouTube',tiktok:'TikTok',linkedin:'LinkedIn',pinterest:'Pinterest',podcast:'our podcast',whatsapp:'WhatsApp',google:'Google',email:'email'};
   function get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
   function put(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  // utm_medium for a source host or bare source name. Exact host or subdomain match only (never a substring), checked in order:
+  // AI -> ai_referral, search -> organic, social -> social, anything else -> referral. AI goes first: gemini.google.com is ai_referral.
+  var TLD='(?:com|co\\.[a-z]{2}|com\\.[a-z]{2}|[a-z]{2})';             // google.com, google.co.uk, google.com.pk, google.de
+  var MED=[
+    ['ai_referral',['chatgpt.com','chat.openai.com','perplexity.ai','gemini.google.com','copilot.microsoft.com','claude.ai'],
+      ['chatgpt','openai','perplexity','gemini','copilot','claude']],
+    ['organic',['bing.com','duckduckgo.com','yahoo.com','baidu.com','ecosia.org','search.brave.com','startpage.com','qwant.com','ask.com','naver.com','seznam.cz'],
+      ['google','bing','duckduckgo','ddg','yahoo','yandex','baidu','ecosia','brave','startpage','qwant','naver','seznam'],
+      new RegExp('^(?:[a-z0-9-]+\\.)*(?:google|yandex|yahoo)\\.'+TLD+'$')],
+    ['social',['facebook.com','fb.com','fb.me','instagram.com','threads.net','threads.com','t.co','x.com','twitter.com','linkedin.com','lnkd.in',
+      'youtube.com','youtu.be','tiktok.com','pin.it','reddit.com','whatsapp.com','wa.me','t.me','telegram.org','snapchat.com','quora.com'],
+      ['facebook','fb','ig','instagram','threads','twitter','x','linkedin','youtube','yt','tiktok','pinterest','reddit','whatsapp','wa','telegram','snapchat','quora'],
+      new RegExp('^(?:[a-z0-9-]+\\.)*pinterest\\.'+TLD+'$')]
+  ];
+  function mediumFor(src){
+    var h=String(src||'').toLowerCase().trim().replace(/^[a-z]+:\/\//,'').split(/[\/?#:]/)[0].replace(/\.$/,'').replace(/^www\./,'');   // 'www.google.com.' -> 'google.com'
+    if(!h)return 'referral';
+    for(var i=0;i<MED.length;i++){var r=MED[i];
+      if(h.indexOf('.')<0){if(r[2].indexOf(h)>=0)return r[0];continue;}                       // bare name: 'facebook', 'google'
+      for(var j=0;j<r[1].length;j++){var d=r[1][j];if(h===d||h.slice(-d.length-1)==='.'+d)return r[0];}
+      if(r[3]&&r[3].test(h))return r[0];}
+    return 'referral';
+  }
+  // android-app://<package> referrers (Android apps): classify by the app's web host. Known packages first, otherwise the
+  // package's leading domain part reversed (com.facebook.katana -> facebook.com). Only used for the medium; the source is unchanged.
+  var APPS={'com.google.android.googlequicksearchbox':'google.com','com.google.android.gm':'mail.google.com','com.google.android.youtube':'youtube.com',
+    'com.google.android.apps.bard':'gemini.google.com','com.google.android.apps.gemini':'gemini.google.com','com.openai.chatgpt':'chatgpt.com',
+    'com.anthropic.claude':'claude.ai','ai.perplexity.app.android':'perplexity.ai','com.microsoft.copilot':'copilot.microsoft.com','com.microsoft.bing':'bing.com',
+    'com.duckduckgo.mobile.android':'duckduckgo.com','com.facebook.katana':'facebook.com','com.facebook.lite':'facebook.com','com.facebook.orca':'facebook.com',
+    'com.instagram.android':'instagram.com','com.instagram.barcelona':'threads.net','com.linkedin.android':'linkedin.com','com.twitter.android':'x.com',
+    'com.zhiliaoapp.musically':'tiktok.com','com.ss.android.ugc.trill':'tiktok.com','com.pinterest':'pinterest.com','com.reddit.frontpage':'reddit.com',
+    'com.whatsapp':'whatsapp.com','com.whatsapp.w4b':'whatsapp.com','org.telegram.messenger':'telegram.org'};
+  function appHost(pkg){var k=String(pkg||'').toLowerCase().replace(/\.$/,'');if(APPS[k])return APPS[k];var a=k.split('.');return a.length>1?a[1]+'.'+a[0]:k}
   function clean(v){return String(v||'').toLowerCase().trim().replace(/\s+/g,'-').replace(/[^a-z0-9._-]/g,'').slice(0,100)}
   var q=new URLSearchParams(location.search), t={};
   P.forEach(function(k){var v=clean(q.get(k));if(v)t[k]=v});
   ['gclid','fbclid'].forEach(function(k){var v=q.get(k);if(v)t[k]=v.slice(0,200)});
+  if(t.utm_source&&!t.utm_medium)t.utm_medium=mediumFor(t.utm_source);   // e.g. ?utm_source=chatgpt.com with no medium; an explicit medium is never touched
   if(!t.utm_source&&document.referrer){try{var h=new URL(document.referrer).hostname.replace(/^www\./,'');
-    if(!/deutschfuralle\.com$/.test(h)){var m=h.match(/instagram|facebook|threads|youtube|tiktok|linkedin|pinterest|google/);t.utm_source=m?m[0]:h;t.utm_medium=m?(m[0]==='google'?'organic':'social'):'referral';}}catch(e){}}
+    if(!/deutschfuralle\.com$/.test(h)){var m=h.match(/instagram|facebook|threads|youtube|tiktok|linkedin|pinterest|google/);t.utm_source=m?m[0]:h;
+      t.utm_medium=t.utm_medium||mediumFor(/^android-app:/i.test(document.referrer)?appHost(h):h);}}catch(e){}}
   var now=new Date().toISOString();
   if(t.utm_source||t.gclid||t.fbclid){
     t.landing_page=location.pathname+location.search; t.ts=now;
