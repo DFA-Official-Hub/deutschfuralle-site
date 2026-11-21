@@ -35,7 +35,7 @@ function checkLocked(locked,nx){if(locked.length>nx.length)return 'The plan need
  for(var i=0;i<locked.length;i++)if(nx[i].amount!==locked[i].amount||nx[i].due!==locked[i].due)return 'Installment '+(i+1)+' is already paid, so its amount and date can\'t change.';return null}
 function payLabel(plan,before,after){var n=(plan||[]).length;if(!n)return '';var cum=0,a=-1,b=-1,se=false,ee=false;
  for(var i=0;i<n;i++){var lo=cum;cum+=Number(plan[i].amount)||0;if(a<0&&before<cum){a=i;se=before===lo}if(a>=0&&b<0&&after<=cum){b=i;ee=after===cum}}
- if(a<0)return '';if(b<0){b=n-1;ee=true}var part=!(se&&ee);return a===b?'Installment '+(a+1)+' of '+n+(part?' (part payment)':''):'Installments '+(a+1)+'\u2013'+(b+1)+' of '+n+(part?' (part payment)':'')}
+ if(a<0)return '';if(b<0){b=n-1;ee=true}var tag=!ee?' (part payment)':!se?' (final part)':'';return a===b?'Installment '+(a+1)+' of '+n+tag:'Installments '+(a+1)+'\u2013'+(b+1)+' of '+n+tag}
 var METHODS={cash:'Cash',bank:'Bank transfer',jazzcash:'JazzCash',easypaisa:'Easypaisa',other:'Other'};
 var API={METHODS:METHODS,lockedRows:lockedRows,checkLocked:checkLocked,payLabel:payLabel,isDate:isDate,addMonths:addMonths,addDays:addDays,splitEven:splitEven,suggestDates:suggestDates,suggest:suggest,normalize:normalize,status:status,next:next};
 g.DFA_PLAN=API;

@@ -65,10 +65,15 @@ assert.match(P.checkLocked([{ amount: 1, due: '2026-11-01' }, { amount: 1, due: 
 // receipt labels follow the money, not the payment count (Head of Tech example)
 assert.equal(P.payLabel(t3, 0, 10000), 'Installment 1 of 3');
 assert.equal(P.payLabel(t3, 10000, 15000), 'Installment 2 of 3 (part payment)');
-assert.equal(P.payLabel(t3, 15000, 20000), 'Installment 2 of 3 (part payment)', '3rd payment finishing installment 2 is not "3 of 3"');
+assert.equal(P.payLabel(t3, 15000, 20000), 'Installment 2 of 3 (final part)', '3rd payment finishing installment 2 is not "3 of 3"');
+assert.equal(P.payLabel(t3, 25000, 30000), 'Installment 3 of 3 (final part)');
+assert.equal(P.payLabel(t3, 12000, 18000), 'Installment 2 of 3 (part payment)', 'starts and ends inside installment 2');
+const t4 = [{ amount: 10000 }, { amount: 10000 }, { amount: 10000 }, { amount: 10000 }];
+assert.equal(P.payLabel(t4, 15000, 20000), 'Installment 2 of 4 (final part)');
+assert.equal(P.payLabel(t4, 10000, 25000), 'Installments 2\u20133 of 4 (part payment)');
 assert.equal(P.payLabel(t3, 20000, 30000), 'Installment 3 of 3');
 assert.equal(P.payLabel(t3, 10000, 30000), 'Installments 2\u20133 of 3');
-assert.equal(P.payLabel(t3, 15000, 30000), 'Installments 2\u20133 of 3 (part payment)');
+assert.equal(P.payLabel(t3, 15000, 30000), 'Installments 2\u20133 of 3 (final part)');
 assert.equal(P.payLabel(null, 0, 100), '');
 assert.deepEqual(Object.keys(P.METHODS), ['cash', 'bank', 'jazzcash', 'easypaisa', 'other']);
 
@@ -88,7 +93,8 @@ const out = { a: S.splitEven(40000, 3), b: S.splitEven(25000, 4), c: S.suggest(5
  e: S.status(${JSON.stringify(ali.plan)}, 15000), f: S.next(${JSON.stringify(ali.plan)}, 20000), g: S.normalize([{amount:5,due:"2026-12-01"},{amount:5,due:"2026-11-01"}]),
  k: [S.normalize([{amount:1e15,due:"2026-11-21"},{amount:1,due:"2026-11-22"}]).error, S.normalize([{amount:"1e4",due:"2026-11-21"},{amount:1,due:"2026-11-22"}]).error],
  l: S.checkLocked(S.lockedRows(T3, 10000), S.normalize([{amount:5000,due:"2026-11-01"},{amount:12500,due:"2026-12-01"},{amount:12500,due:"2027-01-01"}]).plan),
- m: [S.payLabel(T3,0,10000), S.payLabel(T3,10000,15000), S.payLabel(T3,15000,20000), S.payLabel(T3,10000,30000), S.payLabel(T3,15000,30000)],
+ m: [S.payLabel(T3,0,10000), S.payLabel(T3,10000,15000), S.payLabel(T3,15000,20000), S.payLabel(T3,10000,30000), S.payLabel(T3,15000,30000), S.payLabel(T3,25000,30000), S.payLabel(T3,12000,18000)],
+ q: [S.settle({ plan: T3, feeTotal: 30000, amount: 10000, sumAfter: 25000 }), S.settle({ plan: T3, feeTotal: 30000, amount: 10000, sumAfter: 35000 }), S.settle({ plan: null, feeTotal: 40000, amount: 20000, sumAfter: 40000 }), S.settle({ plan: T3, feeTotal: 30000, amount: 5000, sumAfter: 20000 })],
  o: S.lockedRows(null, 20000, [{amount:20000,paid_on:"2026-11-12",installment_no:1}]), p: [S.method("JazzCash"), S.method("card"), S.method("")],
  h: S.planCount({ payment_plan: "two" }), i: S.planCount({ installment_plan: ${JSON.stringify(ali.plan)} }), j: S.planCount({ payment_plan: "full" }) };
 console.log(JSON.stringify(out));`;
@@ -103,7 +109,15 @@ assert.deepEqual(srv.g, plain(P.normalize([{ amount: 5, due: '2026-12-01' }, { a
 assert.deepEqual([srv.h, srv.i, srv.j], [2, 3, 1]);
 assert.deepEqual(srv.k, [P.normalize([{ amount: 1e15, due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error, P.normalize([{ amount: '1e4', due: '2026-11-21' }, { amount: 1, due: '2026-11-22' }]).error]);
 assert.equal(srv.l, P.checkLocked(P.lockedRows(t3, 10000), P.normalize([{ amount: 5000, due: '2026-11-01' }, { amount: 12500, due: '2026-12-01' }, { amount: 12500, due: '2027-01-01' }]).plan));
-assert.deepEqual(srv.m, [P.payLabel(t3, 0, 10000), P.payLabel(t3, 10000, 15000), P.payLabel(t3, 15000, 20000), P.payLabel(t3, 10000, 30000), P.payLabel(t3, 15000, 30000)]);
+assert.deepEqual(srv.m, [P.payLabel(t3, 0, 10000), P.payLabel(t3, 10000, 15000), P.payLabel(t3, 15000, 20000), P.payLabel(t3, 10000, 30000), P.payLabel(t3, 15000, 30000), P.payLabel(t3, 25000, 30000), P.payLabel(t3, 12000, 18000)]);
+assert.deepEqual(srv.m.slice(5), ['Installment 3 of 3 (final part)', 'Installment 2 of 3 (part payment)']);
+// stale read: the admin page/edge function read amount_paid = 10,000, but another 5,000 payment landed before this 10,000 insert.
+// settle() works from the sum of ALL payments after the insert (25,000), not the stale 10,000 + 10,000.
+assert.deepEqual(srv.q[0], { before: 15000, after: 25000, fin: false, label: 'Installments 2\u20133 of 3 (part payment)', over: false });
+// stale read pushing the total above the fee -> over = true (the function deletes the inserted payment and returns 409)
+assert.equal(srv.q[1].over, true); assert.equal(srv.q[1].before, 25000);
+assert.deepEqual(srv.q[2], { before: 20000, after: 40000, fin: true, label: null, over: false }, 'no plan: no label, is_final from the sum');
+assert.deepEqual(srv.q[3], { before: 15000, after: 20000, fin: false, label: 'Installment 2 of 3 (final part)', over: false });
 assert.deepEqual(srv.o, plain(P.lockedRows(null, 20000, [{ amount: 20000, paid_on: '2026-11-12', installment_no: 1 }])));
 assert.deepEqual(srv.p, ['jazzcash', null, null]);
 
@@ -142,7 +156,12 @@ assert.ok(sp.includes('.eq("amount_paid", paid)') && sp.includes('"Reload, a pay
 assert.ok(/body\.clear[\s\S]*due_date: due, reminder_stage: open \? 0 : 3/.test(sp), 'clear resets due date + reminders');
 const rp = idx.slice(idx.indexOf('body.action === "record_payment"'), idx.indexOf('body.action === "set_plan"'));
 assert.ok(rp.includes('installment_label: plan ? payLabel(plan, before, after) : null') && rp.includes('method: payMethod(body.method)'));
-assert.ok(rp.includes('.eq("amount_paid", before)'));
+assert.ok(rp.includes('const st = settle({ plan, feeTotal: e.fee_total, amount, sumAfter:'), 'record_payment settles from the sum of payments');
+assert.ok(/if \(st\.over\) \{[\s\S]*from\("payments"\)\.delete\(\)\.eq\("id", ins\.data\.id\)[\s\S]*409/.test(rp), 'overpayment after a race is undone with 409');
+assert.ok(rp.includes('update({ is_final: st.fin, installment_label: st.label })'), 'payment row fixed when label/is_final changed');
+assert.ok(rp.includes('before = st.before; after = st.after;') && rp.includes('buildPaymentReceipt(db, e, ins.data, before)'), 'receipt uses the fresh before');
+assert.ok(rp.includes('if (w.error || !w.data) warnings.push('), 'update error becomes a warning');
+assert.ok(sp.includes('reminder_stage: !due ? 3 : same ? (e.reminder_stage || 0) : 0'), 'set_plan keeps the reminder stage when the due date stays');
 assert.ok(idx.includes('installment_label: plan ? payLabel(plan, 0, first) : null, method: payMethod(body.method)'));
 assert.ok(read('supabase/functions/admission/docs.ts').includes('pay?.installment_label ?'));
 // escaping of stored plan values
@@ -166,6 +185,6 @@ assert.ok(!/\bdrop (table|column)\b|\bdelete from\b|\btruncate\b/i.test(mig), 'm
 const portal = read('assets/dfa-portal.js'), auth = read('assets/dfa-auth.js');
 assert.ok(portal.includes('installment_plan,courses(') && portal.includes('ptSched('));
 assert.ok(auth.includes('function receiptPills(id,pays,cls,inv,planN)') && auth.includes('planN||0'));
-for (const f of ['admin.html', 'portal.html']) assert.match(read(f), /<script src="assets\/dfa-plan\.js\?v=2" defer><\/script>/);
+for (const f of ['admin.html', 'portal.html']) assert.match(read(f), /<script src="assets\/dfa-plan\.js\?v=3" defer><\/script>/);
 assert.ok(auth.includes('paid_on,method,installment_label') && auth.includes("p.installment_label?'Receipt · '+p.installment_label"));
 console.log('installment-plan: all checks passed');

@@ -70,7 +70,8 @@ export function checkLocked(locked: { amount: number; due: string }[], next: Ins
   return null;
 }
 /** Receipt label for a payment that moves the paid total from `before` to `after` on a plan.
-    Exact match: "Installment 2 of 3". Part of one: "Installment 2 of 3 (part payment)". Several: "Installments 2–3 of 3". */
+    "Installment 2 of 3" (exactly one installment), "Installment 2 of 3 (part payment)" (installment still unfinished),
+    "Installment 2 of 3 (final part)" (finishes an installment that an earlier payment started), "Installments 2–3 of 3". */
 export function payLabel(plan: Inst[] | null | undefined, before: number, after: number): string {
   const n = (plan || []).length; if (!n) return "";
   let cum = 0, a = -1, b = -1, startExact = false, endExact = false;
@@ -81,8 +82,15 @@ export function payLabel(plan: Inst[] | null | undefined, before: number, after:
   }
   if (a < 0) return "";
   if (b < 0) { b = n - 1; endExact = true; }
-  const part = !(startExact && endExact);
-  return a === b ? `Installment ${a + 1} of ${n}${part ? " (part payment)" : ""}` : `Installments ${a + 1}–${b + 1} of ${n}${part ? " (part payment)" : ""}`;
+  const tag = !endExact ? " (part payment)" : !startExact ? " (final part)" : "";
+  return a === b ? `Installment ${a + 1} of ${n}${tag}` : `Installments ${a + 1}–${b + 1} of ${n}${tag}`;
+}
+/** After a payment row is inserted: work everything out from the sum of ALL payments (the record of truth),
+    never from the enrollment row read before the insert (it may be stale if another payment landed meanwhile). */
+export function settle(o: { plan: Inst[] | null | undefined; feeTotal: number | null | undefined; amount: number; sumAfter: number }): { before: number; after: number; fin: boolean; label: string | null; over: boolean } {
+  const fee = Number(o.feeTotal) || 0, after = Number(o.sumAfter) || 0, before = Math.max(after - (Number(o.amount) || 0), 0);
+  const plan = Array.isArray(o.plan) && o.plan.length ? o.plan : null;
+  return { before, after, fin: !fee || after >= fee, label: plan ? payLabel(plan, before, after) : null, over: !!fee && after > fee };
 }
 export const METHODS = ["cash", "bank", "jazzcash", "easypaisa", "other"] as const;
 export function method(v: unknown): string | null { const m = String(v || "").toLowerCase(); return (METHODS as readonly string[]).includes(m) ? m : null; }
