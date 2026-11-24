@@ -58,7 +58,8 @@ drop policy if exists pay_admin_select on public.payments; create policy pay_adm
 drop policy if exists elog_admin_select on public.email_log; create policy elog_admin_select on public.email_log for select to authenticated using ((select private.is_admin()));
 grant usage on schema public to anon, authenticated, service_role;
 grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
-alter default privileges in schema public grant select, insert, update, delete on tables to authenticated, service_role;
+-- like production: new tables get no automatic grants for anon/authenticated (migrations must grant what they need)
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
 create or replace function private.enrollment_dates() returns trigger language plpgsql set search_path to '' as $$
 declare d int;
 begin
