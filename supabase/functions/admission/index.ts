@@ -7,6 +7,9 @@ import { certificateUrls, certificatePdfUrls } from "./render.ts";
 import { buildOne, signed, buildPaymentReceipt, fileBytes, docData, warmDocAssets, loadDetails } from "./docs.ts";
 import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS as INFO_FIELDS, label as infoLabel } from "./student.ts";
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
+import { handlePro, logActivity } from "./pro.ts";
+import { withAudit } from "./audit.ts";
+import { allowed, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom } from "./prologic.ts";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
 async function imagesOn(db: any) { const { data } = await db.from("site_settings").select("value").eq("key", "certificate_images_public").maybeSingle(); return data?.value === "on"; }
@@ -54,8 +57,10 @@ async function loadPaymentQr(db: any) {
 async function qrAttachment(db: any) {
   return { filename: "DFA Raast QR.jpg", content: await loadPaymentQr(db), contentType: "image/jpeg" };
 }
+let LAST_ID: string | null = null; // Resend message id of the last email sent in this request (matched by the delivery webhook)
 async function logMail(db: any, e: any, kind: string, items: string[], status: string, by: string | null, error?: string) {
-  await db.from("email_log").insert({ enrollment_id: e.id, kind, items, to_email: e.email, status, error: error ? error.slice(0, 300) : null, sent_by: by });
+  const pid = status === "sent" ? LAST_ID : null; LAST_ID = null;
+  await db.from("email_log").insert({ enrollment_id: e.id, kind, items, to_email: e.email, status, error: error ? error.slice(0, 300) : null, sent_by: by, provider_id: pid });
   if (status === "sent") await db.from("enrollments").update({ last_docs_sent_at: new Date().toISOString(), last_docs_sent_items: items.join(", ") }).eq("id", e.id);
 }
 /** Signed URL for one installment receipt (builds it if missing). */
@@ -104,14 +109,18 @@ async function resendDocs(db: any, id: number, want: string[], by: string | null
   try { const r = await send(e.email, m.subject, m.text, att); await logMail(db, e, "resend", items, r, by); return { ok: true, email: r, items, sent_at: new Date().toISOString() }; }
   catch (x) { await logMail(db, e, "resend", items, "error", by, String((x as Error).message || x)); return { error: "Sending failed: " + String((x as Error).message || x), code: 500 }; }
 }
-/** Daily: reminders 3 days before, on, and 3 days after the due date (then stop). */
+/** Daily: reminders around the due date (default 3 days before, on the day, 3 days after; set in the admin portal), then stop. */
 async function runReminders(db: any) {
   if (!(await sendingOn())) return { off: true };
   const t = todayPk(), out: any[] = [];
   const rows = (await db.from("enrollments").select(ENR_SEL).in("status", ["active"]).gt("balance_due", 0).not("due_date", "is", null).lt("reminder_stage", 3)).data || [];
+  // Admin portal: schedule (days around the due date) and per-student pause; TEST records never get reminders.
+  const offs = parseOffsets((await db.from("site_settings").select("value").eq("key", "reminder_offsets").maybeSingle()).data?.value);
+  const metas = rows.length ? new Map((((await db.from("student_meta").select("enrollment_id,reminders_paused,reminders_paused_until,is_test").in("enrollment_id", rows.map((e: any) => e.id))).data) || []).map((m: any) => [m.enrollment_id, m])) : new Map();
   for (const e of rows) {
+    const mt: any = metas.get(e.id); if (mt?.is_test || isPaused(mt, t)) continue;
     const due = String(e.due_date).slice(0, 10);
-    const stage = t >= addD(due, 3) ? 3 : t >= due ? 2 : t >= addD(due, -3) ? 1 : 0;
+    const stage = stageFor(t, due, offs);
     if (!stage || stage <= e.reminder_stage) continue;
     const m = reminder(stage, feeInfo(e));
     try { const r = await send(e.email, m.subject, m.text, [await qrAttachment(db)], { listUnsubscribe: true, idempotencyKey: `reminder/${e.id}/${stage}/${t}` }); await logMail(db, e, "reminder-" + stage, ["reminder"], r, null); if (r === "sent") await db.from("enrollments").update({ reminder_stage: stage }).eq("id", e.id); out.push({ id: e.id, stage, r }); }
@@ -179,6 +188,7 @@ async function sendViaResend(to: string, subject: string, text: string, attachme
     const err = (await res.text()).replace(key, "[redacted]").slice(0, 400);
     throw new Error(`Resend ${res.status}: ${err}`);
   }
+  try { LAST_ID = String((await res.json())?.id || "") || null; } catch (_) { LAST_ID = null; }
   return "sent" as const;
 }
 async function send(to: string, subject: string, text: string, attachments: MailAtt[] = [], opts: SendOpts = {}) {
@@ -317,13 +327,21 @@ async function cleanupDocJobs(db: any, days = 30) {
   return { ok: !r.error, error: r.error?.message || null, older_than: cut };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withAudit(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } });
   CUR = db;
-  let body: any = {};
-  try { body = await req.json(); } catch { return json({ error: "bad json" }, 400); }
+  let body: any = {}, raw = "";
+  try { raw = await req.text(); body = JSON.parse(raw); } catch { return json({ error: "bad json" }, 400); }
   try {
+    if (req.headers.get("svix-id")) {
+      // Resend webhook: delivered / bounced / complained for emails we sent (RESEND_WEBHOOK_SECRET = the endpoint's signing secret).
+      const ok = await verifySvix(env("RESEND_WEBHOOK_SECRET"), req.headers.get("svix-id") || "", req.headers.get("svix-timestamp") || "", raw, req.headers.get("svix-signature") || "");
+      if (!ok) return json({ error: "forbidden" }, 403);
+      const st = deliveryFrom(String(body.type || "")), mid = String(body.data?.email_id || "");
+      if (st && mid) await db.from("email_log").update({ delivery: st, delivery_at: new Date().toISOString(), ...(st === "bounced" ? { error: String(body.data?.bounce?.message || "Bounced").slice(0, 300) } : {}) }).eq("provider_id", mid);
+      return json({ ok: true });
+    }
     if (body.action === "intake") {
       const tok = env("AUTOMATION_TOKEN");
       if (!tok || req.headers.get("x-intake-token") !== tok) return json({ error: "forbidden" }, 403);
@@ -589,7 +607,9 @@ Deno.serve(async (req) => {
       return json({ certificates: out });
     }
     const { data: p } = await db.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
-    if (p?.role !== "admin") return json({ error: "forbidden" }, 403);
+    const role = p?.role === "admin" || p?.role === "staff" ? p.role : null;
+    if (!role) return json({ error: "forbidden" }, 403);
+    if (!allowed(role, String(body.action || ""))) return json({ error: "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
     {
       // Security: admin actions need a confirmed sign-in (device/email check) and the 2FA code when an authenticator app is set up.
       const tk = (req.headers.get("Authorization") || "").replace("Bearer ", "");
@@ -599,6 +619,7 @@ Deno.serve(async (req) => {
       const vs = cl.session_id ? (await db.from("verified_sessions").select("session_id").eq("session_id", cl.session_id).maybeSingle()).data : null;
       if (!vs) return json({ error: "Please confirm this sign-in first: reload the page and enter the code we emailed you.", code: "verify_session" }, 403);
     }
+    { const pr = await handlePro(db, body, u.user, role, { json, today: todayPk, pingSheets }); if (pr) return pr; }
     if (body.action === "activate") {
       const id = Number(body.id);
       const patch: Record<string, unknown> = { status: "active", activated_by: u.user.id };
@@ -628,7 +649,7 @@ Deno.serve(async (req) => {
       if (first > 0) {
         const existing = (await db.from("payments").select("id").eq("enrollment_id", id).eq("installment_no", 1).maybeSingle()).data;
         if (!existing) {
-          const ins = await db.from("payments").insert({ enrollment_id: id, amount: first, paid_on: todayPk(), proof_url: pre?.receipt_url || null, invoice_no: up.data.invoice_no, installment_no: 1, installments: plan ? plan.length : two ? 2 : 1, is_final: first >= total, installment_label: plan ? payLabel(plan, 0, first) : null, method: payMethod(body.method), created_by: u.user.id });
+          const ins = await db.from("payments").insert({ enrollment_id: id, amount: first, paid_on: todayPk(), proof_url: pre?.receipt_url || null, invoice_no: up.data.invoice_no, installment_no: 1, installments: plan ? plan.length : two ? 2 : 1, is_final: first >= total, installment_label: plan ? payLabel(plan, 0, first) : null, method: payMethod(body.method), reference: cleanRef(body.reference), created_by: u.user.id });
           if (ins.error && !/duplicate|unique/i.test(ins.error.message || "")) return json({ error: ins.error.message }, 400);
         }
       }
@@ -729,7 +750,7 @@ Deno.serve(async (req) => {
       let after = before + amount; const fin = !e.fee_total || after >= e.fee_total;
       // installment_no is the payment's running number (unique per student, so two saves at the same moment can't both win);
       // with a plan the receipt label says which installment(s) the money covers.
-      const ins = await db.from("payments").insert({ enrollment_id: id, amount, paid_on: paidOn, proof_url: proof, installment_no: n, installments: Math.max(planCount(e), n), is_final: fin, installment_label: plan ? payLabel(plan, before, after) : null, method: payMethod(body.method), created_by: u.user.id }).select("*").single();
+      const ins = await db.from("payments").insert({ enrollment_id: id, amount, paid_on: paidOn, proof_url: proof, installment_no: n, installments: Math.max(planCount(e), n), is_final: fin, installment_label: plan ? payLabel(plan, before, after) : null, method: payMethod(body.method), reference: cleanRef(body.reference), created_by: u.user.id }).select("*").single();
       if (ins.error) return json({ error: /duplicate|unique/i.test(ins.error.message || "") ? "Another payment was just saved for this student. Reload the page and check before adding it again." : ins.error.message }, ins.error && /duplicate|unique/i.test(ins.error.message || "") ? 409 : 400);
       // The database keeps amount_paid = sum of live payments (trigger payments_sync_amount_paid), so read the total it just set.
       const rr = await db.from("enrollments").select("amount_paid").eq("id", id).maybeSingle();
@@ -952,4 +973,4 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json({ error: "Server error: " + String((e as Error)?.message || e).slice(0, 200) }, 500);
   }
-});
+}));

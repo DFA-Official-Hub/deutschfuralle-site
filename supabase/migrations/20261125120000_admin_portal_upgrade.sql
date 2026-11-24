@@ -122,6 +122,7 @@ create or replace function private.student_meta_activity() returns trigger
 language plpgsql security definer set search_path to '' as $$
 declare o_tags text[] := '{}'; o_paused boolean := false; o_until date; o_test boolean := false;
 begin
+  if (select auth.uid()) is null then return new; end if;  -- the admission function logs its own changes with the admin's name
   if tg_op = 'UPDATE' then o_tags := old.tags; o_paused := old.reminders_paused; o_until := old.reminders_paused_until; o_test := old.is_test; end if;
   if new.tags is distinct from o_tags then perform private.log_activity(new.enrollment_id, 'tags', 'Tags: ' || coalesce(nullif(array_to_string(new.tags, ', '), ''), '(none)')); end if;
   if new.reminders_paused is distinct from o_paused or new.reminders_paused_until is distinct from o_until then
