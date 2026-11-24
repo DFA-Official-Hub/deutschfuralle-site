@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
+import { savedRow } from "./student.ts";
 import { confirmation, welcome, reminder, docsMail, receiptMail, type FeeInfo } from "./templates.ts";
 import { decodeBase64, encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { certificateUrls, certificatePdfUrls } from "./render.ts";
@@ -616,7 +617,7 @@ Deno.serve(async (req) => {
       }
       let first = custom ? plan![0].amount : two ? (Math.round(Number(body.first_amount)) > 0 ? Math.round(Number(body.first_amount)) : Math.ceil(total / 2)) : total;
       if (total && first > total) first = total;
-      patch.fee_total = total || null; patch.amount_paid = first; patch.payment_plan = custom ? "custom" : two ? "two" : "full"; patch.installment_plan = plan; patch.reminder_stage = 0;
+      patch.fee_total = total || null; patch.payment_plan = custom ? "custom" : two ? "two" : "full"; patch.installment_plan = plan; patch.reminder_stage = 0;
       const up = await db.from("enrollments").update(patch).eq("id", id).eq("status", "pending").select("*,courses(name)").maybeSingle();
       if (up.error) return json({ error: up.error.message }, 400);
       if (!up.data) return json({ error: "Not found or not pending" }, 404);
@@ -752,8 +753,9 @@ Deno.serve(async (req) => {
       // total is still the one this request saw. If it changed, a newer request (or a correction) already set them.
       const upd: Record<string, unknown> = { reminder_stage: st.fin ? 3 : 0 };
       if (plan) { const nd = planDue(plan, after); upd.due_date = nd; if (!st.fin && nd === (e.due_date ? String(e.due_date).slice(0, 10) : null)) upd.reminder_stage = e.reminder_stage || 0; e.due_date = nd; }
-      await db.from("enrollments").update(upd).eq("id", id).eq("amount_paid", after);
       const warnings: string[] = [];
+      const du = await db.from("enrollments").update(upd).eq("id", id).eq("amount_paid", after);
+      if (du.error) warnings.push("Payment saved, but the due date and reminders were not saved: " + du.error.message + ". Reload and check the due date.");
       e.amount_paid = after; e.balance_due = Math.max((e.fee_total || 0) - after, 0);
       let rc: any = null; try { rc = await buildPaymentReceipt(db, e, ins.data, before); } catch (x) { return json({ ok: true, payment: ins.data, warning: [...warnings, "Payment saved, but the receipt could not be created: " + String((x as Error).message || x)].join(" ") }); }
       let mail = "not sent";
@@ -808,9 +810,8 @@ Deno.serve(async (req) => {
       const reg = fromRegistration(await loadDetails(db, e));
       const c = cleanOverrides(body.info && typeof body.info === "object" ? body.info : {}, reg, e);
       if (c.error) return json({ error: c.error }, 400);
-      const before = effective(reg, e.student_info, e), after = effective(reg, c.info, { ...e, full_name: c.info?.full_name || e.full_name });
-      const ch = infoDiff(before, after);
-      if (!Object.keys(ch.new).length && JSON.stringify(e.student_info || null) === JSON.stringify(c.info)) return json({ ok: true, unchanged: true });
+      const before = effective(reg, e.student_info, e);
+      if (JSON.stringify(e.student_info || null) === JSON.stringify(c.info) && !Object.keys(infoDiff(before, effective(reg, c.info, savedRow(e, c.info, {}))).new).length) return json({ ok: true, unchanged: true });
       const patch: Record<string, unknown> = { student_info: c.info };
       // Name and mobile also live on the enrollment (certificates, emails, WhatsApp button). The login email never changes here.
       // Clearing an override puts back the registration form value (or, without one, the value from before the first edit).
@@ -823,6 +824,9 @@ Deno.serve(async (req) => {
       else if (prevOver.full_name) { const back = reg.full_name || await before1("full_name"); if (back && back !== e.full_name) patch.full_name = back; }
       if (c.info?.phone) { if (c.info.phone !== e.phone) patch.phone = c.info.phone; }
       else if (prevOver.phone) { const back = reg.phone || await before1("phone"); if ((back || null) !== (e.phone || null)) patch.phone = back || null; }
+      // What the documents show now, including a name or mobile put back when its override was cleared (audit + response).
+      const after = effective(reg, c.info, savedRow(e, c.info, patch));
+      const ch = infoDiff(before, after);
       // The certificate shows the name: drop the cached image so the image and PDF are made again with the new name.
       const certRedo = !!(patch.full_name && e.certificate_no && !e.certificate_revoked_at);
       if (certRedo) patch.certificate_file = null;

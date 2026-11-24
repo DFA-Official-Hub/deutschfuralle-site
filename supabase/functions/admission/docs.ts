@@ -62,6 +62,11 @@ export async function loadDetails(db: any, e: any) {
   if (e.email) rows.push(...((await db.from("registration_details").select("sheet_row,email,data,updated_at").ilike("email", String(e.email).trim()).limit(5)).data || []));
   return pickDetails(rows, e)?.data || null;
 }
+/** Note on a VOID receipt: this payment is cancelled, and the balance is the fee minus what is still counted as paid. */
+export function voidNote(fee: number, paidNow: number, due?: string | null) {
+  const bal = Math.max((Number(fee) || 0) - (Number(paidNow) || 0), 0);
+  return "Void, not counted" + (bal > 0 ? ` · Balance due PKR ${pkr(bal)}${due ? " by " + long(due) : ""}` : " · Fee paid in full");
+}
 export function docData(e: any, details: any, pay?: any) {
   const c = e.courses || {}, dd = details || {};
   const fee = Number(e.fee_total) || Number(c.fee_pkr) || 0, reg = Math.max(Number(c.old_fee_pkr) || 0, fee);
@@ -79,7 +84,8 @@ export function docData(e: any, details: any, pay?: any) {
     date: long(paid), paidDate: paid.split("-").reverse().join("-"),
     regular: reg ? `${pkr(reg)}/- PKR` : "–", discount: reg > fee ? `${pkr(reg - fee)}/- PKR` : "", total: amt ? `${pkr(amt)}/- PKR` : "–",
     invoiceNo2: pay?.invoice_no || e.invoice_no, before: before ? `${pkr(before)}/- PKR` : "",
-    payNote: pay?.installment_label ? `${pay.installment_label}${bal > 0 ? ` · Balance due PKR ${pkr(bal)}${e.due_date ? " by " + long(e.due_date) : ""}` : " · Fee paid in full"}` : !pay || (pay.installments || 1) <= 1 && bal === 0 ? "" : bal > 0 ? `Installment ${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)} · Balance due PKR ${pkr(bal)}${e.due_date ? " by " + long(e.due_date) : ""}` : `Final installment (${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)}) · Fee paid in full`,
+    // A void receipt shows where the student stands now: the balance after this payment was cancelled (the paid total no longer counts it).
+    payNote: pay?.voided_at ? voidNote(fee, Number(e.amount_paid) || 0, e.due_date) : pay?.installment_label ? `${pay.installment_label}${bal > 0 ? ` · Balance due PKR ${pkr(bal)}${e.due_date ? " by " + long(e.due_date) : ""}` : " · Fee paid in full"}` : !pay || (pay.installments || 1) <= 1 && bal === 0 ? "" : bal > 0 ? `Installment ${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)} · Balance due PKR ${pkr(bal)}${e.due_date ? " by " + long(e.due_date) : ""}` : `Final installment (${pay.installment_no} of ${Math.max(pay.installments || 2, pay.installment_no)}) · Fee paid in full`,
   };
 }
 async function pdfFromSvg(svg: string, fonts: Uint8Array[]) {
@@ -234,19 +240,19 @@ ${d.revised ? `<text x="146" y="120" font-family="Poppins" font-weight="600" fon
 <line x1="160" y1="${ty - 28}" x2="555" y2="${ty - 28}" stroke="${BL}" stroke-width="0.9"/>
 ${items.map(([k, v], i) => `<text x="160" y="${ty + i * 30}" font-family="Poppins" font-size="10.4" fill="${BL}">${esc2(k)}</text><text x="555" y="${ty + i * 30}" font-family="${TY}" font-size="11" fill="${INK}" text-anchor="end">${esc2(v)}</text>`).join("")}
 <line x1="160" y1="${ty + 80}" x2="555" y2="${ty + 80}" stroke="${BL}" stroke-width="0.9"/>
-<text x="160" y="${ty + 104}" font-family="Poppins" font-weight="700" font-size="11" fill="${BL}">TOTAL PAID</text>
+<text x="160" y="${ty + 104}" font-family="Poppins" font-weight="700" font-size="11" fill="${BL}">${d.voided ? "TOTAL (VOID, NOT PAID)" : "TOTAL PAID"}</text>
 <text x="555" y="${ty + 104}" font-family="${TY}" font-weight="700" font-size="12.5" fill="${INK}" text-anchor="end">${esc2(d.total)} only</text>
 <g font-family="Poppins" font-size="9" fill="${MUT}">
 <text x="160" y="${ty + 140}">Course dates: <tspan fill="${INK}">${esc2(d.start)} – ${esc2(d.end)}</tspan></text>
 <text x="160" y="${ty + 155}">Portal access until: <tspan fill="${INK}">${esc2(d.accessUntil)}</tspan></text>
-${d.payNote ? `<text x="160" y="${ty + 176}" font-weight="600" fill="${G}">${esc2(d.payNote)}</text>` : ""}
+${d.payNote ? `<text x="160" y="${ty + 176}" font-weight="600" fill="${d.voided ? "#c62828" : G}">${esc2(d.payNote)}</text>` : ""}
 </g>
 <text x="146" y="575" font-family="Poppins" font-size="9.4" fill="${BL}" text-decoration="underline">PAYMENT RECEIVED IN (DFA)</text>
 <g font-family="${TY}" font-size="10.5" fill="${INK}"><text x="146" y="592">DEUTSCH FUR ALLE</text><text x="146" y="607">AL BARAKA</text><text x="146" y="622">****3012</text></g>
 <text x="146" y="660" font-family="Poppins" font-size="9.4" fill="#c4621a" text-decoration="underline">QUESTIONS?</text>
 <text x="146" y="678" font-family="Poppins" font-size="9.4" fill="#c4621a">Email us at</text>
 <text x="146" y="691" font-family="Poppins" font-size="9.4" fill="#c4621a">admission@mail.deutschfuralle.com</text>
-<image href="${img.stamp}" x="447" y="545" width="104" height="104"/>
+${d.voided ? "" : `<image href="${img.stamp}" x="447" y="545" width="104" height="104"/>`}
 <image href="${img.sign}" x="440" y="668" width="118" height="28"/>
 <text x="499" y="712" font-family="Poppins" font-size="8" fill="${MUT}" text-anchor="middle">Deutsch Für Alle, Accounts</text>
 <text x="0" y="0" font-family="Archivo Black" font-size="66" fill="#2f5c0c" transform="translate(98 812) rotate(-90)">Receipt</text>

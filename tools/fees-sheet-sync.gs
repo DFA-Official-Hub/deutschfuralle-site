@@ -91,7 +91,7 @@ function freeRow_(vals, head) {
 }
 
 function syncRegistration_(ss, rows, log) {
-  var tz = ss.getSpreadsheetTimeZone(), sh = ss.getSheetByName('Form Responses 1');
+  var tz = ss.getSpreadsheetTimeZone() || 'Asia/Karachi', sh = ss.getSheetByName('Form Responses 1');
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   REG_FEE_COLS.forEach(function (h) { if (head.indexOf(h) < 0) { if (!FEES_DRY_RUN) sh.getRange(1, head.length + 1).setValue(h); log.push('Form Responses 1: new heading ' + h); head.push(h); } });
   var data = sh.getRange(1, 1, sh.getLastRow(), head.length).getValues();
@@ -112,7 +112,7 @@ function syncRegistration_(ss, rows, log) {
 }
 
 function syncFinanceStudents_(ss, rows, log) {
-  var tz = ss.getSpreadsheetTimeZone(), sh = ss.getSheetByName('Students & Fees');
+  var tz = ss.getSpreadsheetTimeZone() || 'Asia/Karachi', sh = ss.getSheetByName('Students & Fees');
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   var c = { id: col_(head, /^Enrollment ID$/i), name: col_(head, /^Student$/i), course: col_(head, /^Course$/i), reg: col_(head, /^Registered$/i), status: col_(head, /^Status$/i), fee: col_(head, /^Total Fee$/i), due: col_(head, /^Next Due Date$/i) };
   if (Object.keys(c).some(function (k) { return c[k] < 0; })) throw new Error('Students & Fees: a heading was renamed; not writing.');
@@ -156,7 +156,7 @@ function reconcile_(ss, rows) {
 }
 
 function syncFinancePayments_(ss, rows, log) {
-  var tz = ss.getSpreadsheetTimeZone(), sh = ss.getSheetByName('Payments');
+  var tz = ss.getSpreadsheetTimeZone() || 'Asia/Karachi', sh = ss.getSheetByName('Payments');
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   var c = { date: col_(head, /^Date$/i), id: col_(head, /^Enrollment ID$/i), no: col_(head, /^Installment/i), amt: col_(head, /^Amount$/i), meth: col_(head, /^Method$/i), inv: col_(head, /^Invoice No/i), proof: col_(head, /^Proof$/i), notes: col_(head, /^Notes$/i) };
   if (Object.keys(c).some(function (k) { return c[k] < 0; })) throw new Error('Payments: a heading was renamed; not writing.');
