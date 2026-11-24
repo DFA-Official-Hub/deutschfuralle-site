@@ -63,5 +63,9 @@ assert.ok(/CNIC, date of birth and address stay with admins/.test(pro));
 assert.equal(/"view_fees"/.test(logic) || /view_fees\s*:/.test(logic), false, 'no view_fees permission key; dashboard uses view_students');
 assert.ok(/pro_dashboard: "view_students"/.test(logic));
 
+// 8. B20-3: the staff form does not post contact fields when contacts were not shown
+assert.ok(/D\.contacts_shown===false&&\(F\.key==='email'\|\|F\.key==='phone'\)\)return/.test(adm));
+
 console.log('staff-permissions-ui: all checks passed');
+
 

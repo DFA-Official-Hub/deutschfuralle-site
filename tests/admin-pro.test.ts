@@ -1,6 +1,6 @@
 // deno test tests/admin-pro.test.ts — admin portal upgrade (WD-3): roles, reminders, discounts, proof paths, webhook signature, dashboard, activity summaries.
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
-import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, staffInfoSaveError, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
+import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, staffInfoSaveError, mergeStaffStudentInfo, redactInfoRecord, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
 import { summarize } from "../supabase/functions/admission/audit.ts";
 
 const on = (...ks: PermKey[]) => { const p = emptyPerms(); for (const k of ks) p[k] = true; return p; };
@@ -78,14 +78,53 @@ Deno.test("B20-1: staff student_info_get masks contacts without see_contacts, hi
   assertEquals(admin.effective.cnic, "35202-9999999-1");
   assertEquals(admin.history![0].old_values.cnic, "35202-1");
 
-  assertEquals(staffInfoSaveError({ login_email: "x@y.com", info: { full_name: "A" } }, "staff", on("edit_student_info", "see_contacts")), "You cannot change the login email.");
-  assertEquals(staffInfoSaveError({ info: { cnic: "35202-1" } }, "staff", on("edit_student_info", "see_contacts")), "You cannot change the CNIC, date of birth or address. Ask an admin.");
-  assertEquals(staffInfoSaveError({ info: { dob: "1995-02-11" } }, "staff", on("edit_student_info")), "You cannot change the CNIC, date of birth or address. Ask an admin.");
-  assertEquals(staffInfoSaveError({ info: { address: "x" } }, "staff", on("edit_student_info")), "You cannot change the CNIC, date of birth or address. Ask an admin.");
-  assertEquals(staffInfoSaveError({ info: { email: "a@b.com" } }, "staff", on("edit_student_info")), "You cannot change contact details. Ask an admin.");
-  assertEquals(staffInfoSaveError({ info: { email: "a@b.com", full_name: "A" } }, "staff", on("edit_student_info", "see_contacts")), null);
-  assertEquals(staffInfoSaveError({ info: { full_name: "A" } }, "staff", on("edit_student_info")), null);
-  assertEquals(staffInfoSaveError({ login_email: "x@y.com" }, "admin", null), null, "admins are not blocked by this guard");
+  assertEquals(staffInfoSaveError({ login_email: "x@y.com", info: { full_name: "A" } }, "staff", "ali.khan@gmail.com"), "You cannot change the login email.");
+  assertEquals(staffInfoSaveError({ login_email: "a•••@g•••.com" }, "staff", "ali.khan@gmail.com"), null, "a masked login email is not a change");
+  assertEquals(staffInfoSaveError({ login_email: "ali.khan@gmail.com" }, "staff", "ali.khan@gmail.com"), null);
+  assertEquals(staffInfoSaveError({ login_email: "x@y.com" }, "admin", "ali.khan@gmail.com"), null, "admins are not blocked by this guard");
+});
+Deno.test("B20-3: a staff name-only save keeps CNIC/DOB/address; masked contacts are unchanged; a real contact change is 403", () => {
+  const reg = { full_name: "Ali Khan", dob: "1995-02-11", cnic: "35202-1234567-1", email: "ali.khan@gmail.com", phone: "03001234567", address: "Street 1, Lahore" };
+  const current = { cnic: "35202-9999999-1", dob: "1994-01-01", address: "Staff must not wipe this", email: "ali.new@gmail.com", full_name: "Ali Khan" };
+  const e = { full_name: "Ali Khan", email: "ali.khan@gmail.com", phone: "03001234567" };
+
+  const nameOnly = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan" }, { seeContacts: false }, reg, e);
+  assertEquals(nameOnly.error, undefined);
+  assertEquals(nameOnly.info?.full_name, "Ayesha Khan");
+  assertEquals(nameOnly.info?.cnic, "35202-9999999-1");
+  assertEquals(nameOnly.info?.dob, "1994-01-01");
+  assertEquals(nameOnly.info?.address, "Staff must not wipe this");
+  assertEquals(nameOnly.info?.email, "ali.new@gmail.com");
+
+  const masked = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan", email: maskEmail("ali.new@gmail.com"), phone: maskPhone("03001234567") }, { seeContacts: false }, reg, e);
+  assertEquals(masked.error, undefined);
+  assertEquals(masked.info?.full_name, "Ayesha Khan");
+  assertEquals(masked.info?.cnic, "35202-9999999-1");
+  assertEquals(masked.info?.email, "ali.new@gmail.com", "masked contacts posted without see_contacts stay as they are");
+
+  const real = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan", email: "hacker@x.com" }, { seeContacts: false }, reg, e);
+  assertEquals(real.error, "You cannot change contact details. Ask an admin.");
+  assertEquals(real.info, null);
+
+  const cnicTry = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan", cnic: "35202-0000000-1" }, { seeContacts: true }, reg, e);
+  assertEquals(cnicTry.error, "You cannot change the CNIC, date of birth or address. Ask an admin.");
+
+  const keepSame = mergeStaffStudentInfo(current, { cnic: "35202-9999999-1", full_name: "Ayesha Khan" }, { seeContacts: true }, reg, e);
+  assertEquals(keepSame.error, undefined);
+  assertEquals(keepSame.info?.cnic, "35202-9999999-1");
+
+  const withContacts = mergeStaffStudentInfo(current, { email: "desk@x.com" }, { seeContacts: true }, reg, e);
+  assertEquals(withContacts.error, undefined);
+  assertEquals(withContacts.info?.email, "desk@x.com");
+  assertEquals(withContacts.info?.cnic, "35202-9999999-1");
+
+  const stray = redactInfoRecord({ CNIC: "35202-1234567-1", Email: "ali.khan@gmail.com", full_name: "Ali Khan", DOB: "1995-02-11", Address: "Street 1" }, false);
+  assertFalse(JSON.stringify(stray).includes("35202"), "allowlist drops overrides.CNIC");
+  assertFalse(JSON.stringify(stray).includes("1995-02-11"));
+  assertFalse(JSON.stringify(stray).includes("Street 1"));
+  assertEquals(stray.full_name, "Ali Khan");
+  assertEquals(stray.email, maskEmail("ali.khan@gmail.com"));
+  assertFalse("cnic" in stray || "CNIC" in stray || "dob" in stray || "DOB" in stray);
 });
 Deno.test("reminder schedule parsing and stages", () => {
   assertEquals(parseOffsets("-3,0,3"), [-3, 0, 3]); assertEquals(parseOffsets(" -5, -1 ,2"), [-5, -1, 2]);

@@ -9,7 +9,7 @@ import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS a
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { handlePro, logActivity } from "./pro.ts";
 import { withAudit } from "./audit.ts";
-import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, shapeStudentInfoGet, staffInfoSaveError, type StaffPerms } from "./prologic.ts";
+import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, shapeStudentInfoGet, staffInfoSaveError, mergeStaffStudentInfo, type StaffPerms } from "./prologic.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
@@ -850,13 +850,17 @@ const serveReq = withAudit(async (req) => {
       return json(shapeStudentInfoGet(raw, role, perms));
     }
     if (body.action === "student_info_save") {
-      const blocked = staffInfoSaveError(body, role, perms);
-      if (blocked) return json({ error: blocked }, 403);
       const e = (await db.from("enrollments").select("id,full_name,email,phone,sheet_row,student_info,student_id,invoice_no,certificate_no,certificate_revoked_at").eq("id", Number(body.id)).maybeSingle()).data;
       if (!e) return json({ error: "Student not found." }, 404);
+      const blocked = staffInfoSaveError(body, role, e.email);
+      if (blocked) return json({ error: blocked }, 403);
       const reg = fromRegistration(await loadDetails(db, e));
-      const c = cleanOverrides(body.info && typeof body.info === "object" ? body.info : {}, reg, e);
-      if (c.error) return json({ error: c.error }, 400);
+      // Staff: merge only allowed keys into the current overrides so a name fix cannot wipe CNIC/DOB/address.
+      // Admin: the form posts every field, so cleanOverrides still replaces the whole object.
+      const c = role === "staff"
+        ? mergeStaffStudentInfo(e.student_info, body.info && typeof body.info === "object" ? body.info : {}, { seeContacts: !!(perms && perms.see_contacts) }, reg, e)
+        : cleanOverrides(body.info && typeof body.info === "object" ? body.info : {}, reg, e);
+      if (c.error) return json({ error: c.error }, c.error.startsWith("You cannot change") ? 403 : 400);
       const before = effective(reg, e.student_info, e);
       if (JSON.stringify(e.student_info || null) === JSON.stringify(c.info) && !Object.keys(infoDiff(before, effective(reg, c.info, savedRow(e, c.info, {}))).new).length) return json({ ok: true, unchanged: true });
       const patch: Record<string, unknown> = { student_info: c.info };
