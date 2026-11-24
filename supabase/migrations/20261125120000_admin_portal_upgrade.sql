@@ -4,9 +4,10 @@
 --
 -- Who can do what (enforced here with RLS and again in the admission function):
 --   admin: everything.
---   staff: read students/payments/batches/attendance/notes, add a pending student, mark attendance,
---          write notes/tags, pause reminders. No revoke/remove, no refunds/discounts, no settings,
---          no security log, no accounts, no exports, no test-data deletion.
+--   staff: batches/attendance/notes/tags/reminder pauses here; student and payment lists only through the
+--          admission function (masked contacts, see 20261125130000). No direct read of enrollments, payments,
+--          email_log or audit rows, no inserts into enrollments. No revoke/remove, no refunds/discounts, no
+--          settings, no security log, no accounts, no exports, no test-data deletion.
 -- Nothing here is readable by students: notes, tags and test flags live in staff-only tables, never on
 -- public.enrollments (students can read their own enrollment row).
 
@@ -25,15 +26,12 @@ $$;
 revoke all on function private.is_staff() from public;
 grant execute on function private.is_staff() to authenticated, service_role;
 
--- Staff read access to the existing admin tables (admins keep their own policies).
+-- No staff policies on enrollments/payments/email_log (review B1/B2): staff read them only through the
+-- admission function, which masks contacts and logs reveals. Admins keep their own policies.
 drop policy if exists enr_staff_select on public.enrollments;
-create policy enr_staff_select on public.enrollments for select to authenticated using ((select private.is_staff()));
 drop policy if exists enr_staff_ins on public.enrollments;
-create policy enr_staff_ins on public.enrollments for insert to authenticated with check ((select private.is_staff()) and status = 'pending');
 drop policy if exists pay_staff_select on public.payments;
-create policy pay_staff_select on public.payments for select to authenticated using ((select private.is_staff()));
 drop policy if exists elog_staff_select on public.email_log;
-create policy elog_staff_select on public.email_log for select to authenticated using ((select private.is_staff()));
 drop policy if exists courses_staff_read on public.courses;  -- courses are already public; kept for clarity
 create policy courses_staff_read on public.courses for select to authenticated using (true);
 
@@ -53,8 +51,7 @@ create index if not exists admin_activity_time_idx on public.admin_activity (cre
 alter table public.admin_activity enable row level security;
 drop policy if exists act_admin_select on public.admin_activity;
 create policy act_admin_select on public.admin_activity for select to authenticated using ((select private.is_admin()));
-drop policy if exists act_staff_select on public.admin_activity;
-create policy act_staff_select on public.admin_activity for select to authenticated using (enrollment_id is not null and (select private.is_staff()));
+drop policy if exists act_staff_select on public.admin_activity;  -- staff read the log through pro_activity
 revoke insert, update, delete on public.admin_activity from anon, authenticated;
 comment on table public.admin_activity is 'Admin portal activity: payments, documents, revokes, certificates, notes, batches, attendance, refunds. Written by triggers and the admission function only.';
 
@@ -366,11 +363,10 @@ revoke insert, update, delete on public.account_meta from anon, authenticated;
 -- 11) Reminder schedule (days relative to the due date; first, second, third reminder) -------------
 insert into public.site_settings (key, value) values ('reminder_offsets', '-3,0,3') on conflict (key) do nothing;
 
--- 12) Staff can see the student-details/payment-correction history from 20261125090000 ------------
+-- 12) Staff see the student-details/payment-correction history only through pro_activity (values hidden) ---
 do $$ begin
   if to_regclass('public.enrollment_audit') is not null then
     execute 'drop policy if exists audit_staff_select on public.enrollment_audit';
-    execute 'create policy audit_staff_select on public.enrollment_audit for select to authenticated using ((select private.is_staff()))';
   end if;
 end $$;
 

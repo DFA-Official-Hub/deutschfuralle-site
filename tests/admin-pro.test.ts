@@ -3,8 +3,10 @@ import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
 import { allowed, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard } from "../supabase/functions/admission/prologic.ts";
 import { summarize } from "../supabase/functions/admission/audit.ts";
 
-Deno.test("staff may record payments and resend, but not revoke, refund, activate or change settings", () => {
-  for (const a of ["record_payment", "resend", "docs_status", "pro_assign_batch", "pro_activity", "pro_dashboard", "wa_links"]) assert(allowed("staff", a), a);
+Deno.test("staff may resend and use their lists, but not revoke, refund, activate or change settings; payments only behind the flag", () => {
+  for (const a of ["resend", "docs_status", "pro_assign_batch", "pro_activity", "pro_dashboard", "pro_students", "pro_reveal", "pro_add_student"]) assert(allowed("staff", a), a);
+  for (const a of ["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref"]) { assertFalse(allowed("staff", a), a + " off by default"); assert(allowed("staff", a, true), a + " when switched on"); }
+  for (const a of ["student_info_get", "doc_file_admin", "wa_links"]) assertFalse(allowed("staff", a), a + " (student details / documents with CNIC)");
   for (const a of ["activate", "cert_revoke", "cert_hold", "certify", "set_plan", "payment_correct", "set_emails", "cert_images", "settings_get", "pro_revoke", "pro_adjust", "pro_delete_test", "pro_role_set", "pro_accounts", "student_info_save"]) assertFalse(allowed("staff", a), a);
   assert(allowed("admin", "pro_delete_test")); assertFalse(allowed("user", "record_payment")); assertFalse(allowed(null, "status"));
 });

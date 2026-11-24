@@ -1,6 +1,6 @@
 // Admin portal upgrade (WD-3): actions behind the "pro_" prefix, plus the activity log writer used by index.ts.
 // Every caller is already signed in, confirmed and admin/staff (index.ts checks that and allowed() before calling).
-import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, type Role } from "./prologic.ts";
+import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, STAFF_PAY_COLS, type Role } from "./prologic.ts";
 import { method as payMethod, type Inst } from "./plan.ts";
 
 type Ctx = { json: (b: unknown, s?: number) => Response; today: () => string; pingSheets?: () => void };
@@ -15,6 +15,15 @@ export async function actorName(db: any, uid: string | null): Promise<string | n
 /** Writes one activity row. Never throws (the action itself already succeeded). */
 export async function logActivity(db: any, uid: string | null, enrollmentId: number | null, action: string, summary: string, details: Record<string, unknown> = {}) {
   try { await db.from("admin_activity").insert({ enrollment_id: enrollmentId || null, actor: uid, actor_name: await actorName(db, uid), action, summary: summary.slice(0, 500), details }); } catch (_) { /* best effort */ }
+}
+/** Maps errors from fee_adjust_apply / fee_adjust_void to plain messages (no SQL text). */
+function adjErr(json: Ctx["json"], e: { code?: string; message?: string }): Response {
+  const m = String(e?.message || "");
+  if (e?.code === "40001" || /changed meanwhile/.test(m)) return json({ error: "A payment or fee change was just saved. Reload and try again." }, 409);
+  if (/already void/.test(m)) return json({ error: "Already void." }, 409);
+  if (e?.code === "23514" && /^DFA: /.test(m)) return json({ error: m.replace(/^DFA: /, "") }, 400);
+  if (e?.code === "P0002") return json({ error: "Not found." }, 404);
+  return json({ error: "Could not save. Try again." }, 400);
 }
 async function metaOf(db: any, ids: number[]): Promise<Map<number, any>> {
   if (!ids.length) return new Map();
@@ -67,7 +76,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
         const ids = [...new Set((au.data || []).map((h: any) => h.changed_by).filter(Boolean))];
         const names = new Map(((ids.length ? (await db.from("profiles").select("id,full_name,username").in("id", ids)).data : []) || []).map((p: any) => [p.id, p.full_name || p.username]));
         const lbl: Record<string, string> = { student_info: "Student details changed", payment_correct: "Payment corrected", payment_void: "Payment voided" };
-        rows = rows.concat((au.data || []).map((h: any) => ({ id: "a" + h.id, enrollment_id: h.enrollment_id, actor_name: names.get(h.changed_by) || null, action: h.kind, summary: (lbl[h.kind] || h.kind) + ": " + Object.keys(h.new_values || {}).map((k) => `${k} ${JSON.stringify((h.old_values || {})[k] ?? "")} → ${JSON.stringify(h.new_values[k])}`).join(", ").slice(0, 300) + (h.reason ? ` (${h.reason})` : ""), details: {}, created_at: h.changed_at, source: "audit" })));
+        rows = rows.concat((au.data || []).map((h: any) => ({ id: "a" + h.id, enrollment_id: h.enrollment_id, actor_name: names.get(h.changed_by) || null, action: h.kind, summary: (lbl[h.kind] || h.kind) + ": " + (role === "admin" ? Object.keys(h.new_values || {}).map((k) => `${k} ${JSON.stringify((h.old_values || {})[k] ?? "")} → ${JSON.stringify(h.new_values[k])}`).join(", ") : Object.keys(h.new_values || {}).join(", ")).slice(0, 300) + (h.reason ? ` (${h.reason})` : ""), details: {}, created_at: h.changed_at, source: "audit" })));
       }
     }
     rows.sort((x: any, y: any) => String(y.created_at).localeCompare(String(x.created_at)));
@@ -75,6 +84,65 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const eids = [...new Set(rows.map((x: any) => x.enrollment_id).filter(Boolean))];
     const en = new Map(((eids.length ? (await db.from("enrollments").select("id,full_name,student_id").in("id", eids)).data : []) || []).map((e: any) => [e.id, e]));
     return json({ ok: true, rows: rows.map((x: any) => ({ ...x, student: en.get(x.enrollment_id) || null })), more: rows.length === lim });
+  }
+
+  // ---- staff lists (B2): masked contacts, no student details, no files -----------------------------
+  if (a === "pro_students") {
+    const t = ctx.today();
+    const flt = (q: any, f: string) => f === "fee pending" ? q.gt("balance_due", 0).in("status", ["active", "expired"]) : f === "overdue" ? q.gt("balance_due", 0).in("status", ["active", "expired"]).lt("due_date", t) : (f === "all" || f === "test" || !f) ? q : q.eq("status", f);
+    const flag = (await db.from("site_settings").select("value").eq("key", "staff_payments").maybeSingle()).data?.value === "on";
+    if (body.mode === "counts") {
+      const c = async (f: string) => (await flt(db.from("enrollments").select("id", { count: "exact", head: true }), f)).count || 0;
+      const [all, pending, active, fee, overdue, expired, revoked] = await Promise.all(["all", "pending", "active", "fee pending", "overdue", "expired", "revoked"].map(c));
+      const test = (await db.from("student_meta").select("enrollment_id", { count: "exact", head: true }).eq("is_test", true)).count || 0;
+      return json({ ok: true, counts: { all, pending, active, "fee pending": fee, overdue, expired, revoked, test } });
+    }
+    if (body.mode === "batch_counts") {
+      const r = (await db.from("enrollments").select("batch_id").not("batch_id", "is", null).neq("status", "revoked").limit(10000)).data || [];
+      const by: Record<string, number> = {}; for (const e of r) by[e.batch_id] = (by[e.batch_id] || 0) + 1;
+      const un = (await db.from("enrollments").select("id", { count: "exact", head: true }).is("batch_id", null).in("status", ["active", "expired"])).count || 0;
+      return json({ ok: true, by, unassigned: un });
+    }
+    const size = Math.min(Math.max(Number(body.size) || 25, 1), 500), page = Math.max(Number(body.page) || 0, 0);
+    let ids: number[] | null = null;
+    if (body.filter === "test" || body.tag) {
+      let mq = db.from("student_meta").select("enrollment_id"); if (body.filter === "test") mq = mq.eq("is_test", true); if (body.tag) mq = mq.contains("tags", [String(body.tag).slice(0, 40)]);
+      ids = ((await mq).data || []).map((m: any) => m.enrollment_id); if (!ids!.length) return json({ ok: true, rows: [], count: 0, pays: [], flags: { staff_payments: flag } });
+    }
+    let q = db.from("enrollments").select(STAFF_ENR_COLS, { count: "exact" }); q = flt(q, String(body.filter || "all")); if (ids) q = q.in("id", ids);
+    if (Array.isArray(body.ids)) q = q.in("id", body.ids.map(Number).filter((x: number) => x > 0).slice(0, 500));
+    const v = String(body.q || "").replace(/[,()*%\\]/g, " ").trim().slice(0, 60);
+    if (v) q = q.or(["full_name", "email", "phone", "student_id", "batch_code", "invoice_no", "certificate_no"].map((k) => `${k}.ilike.*${v}*`).join(","));
+    if (body.batch === "none") q = q.is("batch_id", null); else if (Number(body.batch) > 0) q = q.eq("batch_id", Number(body.batch));
+    if (Array.isArray(body.status) && body.status.length) q = q.in("status", body.status.map(String).slice(0, 5));
+    const SORT = ["created_at.desc", "created_at.asc", "full_name.asc", "due_date.asc", "balance_due.desc"];
+    const [col, dir] = (SORT.includes(String(body.sort)) ? String(body.sort) : "created_at.desc").split(".");
+    q = q.order(col, { ascending: dir === "asc", nullsFirst: false }); if (col !== "created_at") q = q.order("created_at", { ascending: false });
+    const r = await q.range(page * size, page * size + size - 1); if (r.error) return json({ error: r.error.message }, 500);
+    const rows = (r.data || []).map(staffRow), eids = rows.map((e: any) => e.id);
+    const pays = body.pays === false || !eids.length ? [] : ((await db.from("payments").select(STAFF_PAY_COLS).in("enrollment_id", eids).order("installment_no")).data || []).map(staffPay);
+    return json({ ok: true, rows, count: r.count || 0, pays, flags: { staff_payments: flag } });
+  }
+  if (a === "pro_reveal") {
+    // one contact of one student, on click; always logged with who looked
+    const field = body.field === "email" ? "email" : body.field === "phone" ? "phone" : null; if (!field) return json({ error: "Pick email or phone." }, 400);
+    const e = (await db.from("enrollments").select("id,full_name,student_id,email,phone").eq("id", id).maybeSingle()).data;
+    if (!e) return json({ error: "Student not found." }, 404);
+    const why = String(body.why || "").replace(/[^a-z_ ]/gi, "").slice(0, 40);
+    await logActivity(db, uid, e.id, "contact_shown", `${field === "email" ? "Email" : "Phone"} shown${why ? " (" + why + ")" : ""}`, { field });
+    return json({ ok: true, value: e[field] || "" });
+  }
+  if (a === "pro_add_student") {
+    // the only way staff add a student: whitelisted columns, always pending, nothing issued or paid (B1)
+    const v = addStudentRow(body); if (v.error) return json({ error: v.error }, 400);
+    const c = (await db.from("courses").select("code,name").eq("code", v.row!.course_code).maybeSingle()).data; if (!c) return json({ error: "Pick a course." }, 400);
+    const dup = (await db.from("enrollments").select("id,status").eq("email", v.row!.email).eq("course_code", c.code).neq("status", "revoked").limit(1)).data || [];
+    if (dup.length && !body.force) return json({ error: "This email is already registered for this course.", code: "duplicate" }, 409);
+    const ins = await db.from("enrollments").insert({ ...v.row, course_label: c.name, status: "pending" }).select("id,student_id,full_name").single();
+    if (ins.error) return json({ error: ins.error.message }, 400);
+    await logActivity(db, uid, ins.data.id, "student_added", `Added ${ins.data.full_name} as pending (${c.code}, ${v.row!.source})`);
+    ctx.pingSheets?.();
+    return json({ ok: true, id: ins.data.id, student_id: ins.data.student_id });
   }
 
   // ---- batches -----------------------------------------------------------------------------------
@@ -159,7 +227,14 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
       if (!proofPathOk(path, p.enrollment_id, pid)) return json({ error: "Upload the file again." }, 400);
       const dir = path.slice(0, path.lastIndexOf("/")), name = path.slice(path.lastIndexOf("/") + 1);
       const ls = await db.storage.from("documents").list(dir, { search: name });
-      if (ls.error || !(ls.data || []).some((f: any) => f.name === name)) return json({ error: "The upload did not arrive. Try again." }, 400);
+      const f = (ls.data || []).find((x: any) => x.name === name);
+      if (ls.error || !f) return json({ error: "The upload did not arrive. Try again." }, 400);
+      // the browser's claimed size/type are not trusted: check what storage actually holds
+      const sz = Number(f.metadata?.size), mt = String(f.metadata?.mimetype || "");
+      if (!(sz > 0 && sz <= PROOF_MAX) || !PROOF_TYPES[mt] || PROOF_TYPES[mt] !== path.slice(path.lastIndexOf(".") + 1)) {
+        await db.storage.from("documents").remove([path]);
+        return json({ error: !(sz > 0 && sz <= PROOF_MAX) ? "The file must be smaller than 5 MB." : "Upload a photo (JPG, PNG, WebP) or a PDF." }, 400);
+      }
       const ref = body.reference === undefined ? p.reference : cleanRef(body.reference);
       const r = await db.from("payments").update({ proof_file: path, reference: ref }).eq("id", pid); if (r.error) return json({ error: r.error.message }, 400);
       await logActivity(db, uid, p.enrollment_id, "payment_proof", `Payment ${p.invoice_no}: proof ${p.proof_file ? "replaced" : "uploaded"}${ref ? ", reference " + ref : ""}`);
@@ -179,6 +254,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     if (!e) return json({ error: "Student not found." }, 404);
     const reason = String(body.reason || "").trim().slice(0, 300);
     if (reason.length < 3) return json({ error: "Write a short reason (it is kept in the activity log)." }, 400);
+    if (!confirmOk(a, body)) return json({ error: `Type ${a === "pro_revoke" ? "REVOKE" : "DELETE"} to confirm.`, code: "confirm" }, 400);
     if (a === "pro_remove") {
       if (e.status !== "pending") return json({ error: "Only a pending registration can be removed. Revoke an active student instead." }, 400);
       await logActivity(db, uid, null, "student_removed", `Removed pending registration ${e.full_name || e.email}${e.student_id ? " (" + e.student_id + ")" : ""}: ${reason}`, { enrollment_id: e.id });
@@ -204,45 +280,46 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const dt = ISO.test(String(body.date || "")) ? body.date : ctx.today();
     const e = (await db.from("enrollments").select("*").eq("id", id).maybeSingle()).data;
     if (!e || !e.invoice_no) return json({ error: "Use Payment received first; adjustments need an active student." }, 400);
-    const row: Record<string, unknown> = { enrollment_id: id, kind, amount, reason: reason.slice(0, 500), approved_by: appr.slice(0, 80), adj_date: dt, created_by: uid, fee_before: e.fee_total, fee_after: e.fee_total };
+    const row: Record<string, unknown> = { enrollment_id: id, kind, amount, reason: reason.slice(0, 500), approved_by: appr.slice(0, 80), adj_date: dt, created_by: uid };
+    const plan: Inst[] | null = Array.isArray(e.installment_plan) && e.installment_plan.length ? e.installment_plan : null;
+    let patch: Record<string, unknown> | null = null;
     if (kind === "refund") {
-      const prior = ((await db.from("fee_adjustments").select("amount").eq("enrollment_id", id).eq("kind", "refund").is("voided_at", null)).data || []).reduce((s: number, x: any) => s + x.amount, 0);
-      const net = (Number(e.amount_paid) || 0) - prior;
-      if (amount > net) return json({ error: `Refunds can't be more than what the student has paid (net ${pkr(net)}).` }, 400);
       row.method = payMethod(body.method); row.reference = cleanRef(body.reference);
     } else {
-      const plan: Inst[] | null = Array.isArray(e.installment_plan) && e.installment_plan.length ? e.installment_plan : null;
       const d = applyDiscount({ fee: e.fee_total, paid: e.amount_paid, plan, cut: amount });
       if (d.error) return json({ error: d.error }, 400);
       const bal = d.fee - (Number(e.amount_paid) || 0);
       const due = bal <= 0 ? null : d.plan ? planDue(d.plan, e.amount_paid) : (e.due_date ? String(e.due_date).slice(0, 10) : null);
-      const patch: Record<string, unknown> = { fee_total: d.fee, installment_plan: d.plan, due_date: due, reminder_stage: bal <= 0 ? 3 : (due === (e.due_date ? String(e.due_date).slice(0, 10) : null) ? e.reminder_stage : 0) };
+      patch = { fee_total: d.fee, installment_plan: d.plan, due_date: due, reminder_stage: bal <= 0 ? 3 : (due === (e.due_date ? String(e.due_date).slice(0, 10) : null) ? e.reminder_stage : 0) };
       if (plan && !d.plan) patch.payment_plan = bal > 0 ? "two" : "full";
-      const up = await db.from("enrollments").update(patch).eq("id", id).eq("fee_total", e.fee_total).eq("amount_paid", e.amount_paid).select("id").maybeSingle();
-      if (up.error || !up.data) return json({ error: up.error?.message || "A payment was just saved. Reload and try again." }, 409);
-      row.fee_after = d.fee;
     }
-    const ins = await db.from("fee_adjustments").insert(row).select("*").single();
-    if (ins.error) return json({ error: ins.error.message }, 400);
-    await logActivity(db, uid, id, "adjust_" + kind, `${kind[0].toUpperCase() + kind.slice(1)} ${pkr(amount)} (${ins.data.receipt_no}), approved by ${appr}: ${reason}` + (kind === "refund" ? "" : `. Total fee ${pkr(e.fee_total)} → ${pkr(row.fee_after as number)}`));
+    // one transaction: the record and the fee change land together; refunds are checked under a row lock (refund_guard)
+    const ins = await db.rpc("fee_adjust_apply", { p_row: row, p_expect_fee: e.fee_total, p_expect_paid: e.amount_paid, p_expect_plan: e.installment_plan ?? null, p_patch: patch });
+    if (ins.error) return adjErr(json, ins.error);
+    const adj: any = ins.data;
+    await logActivity(db, uid, id, "adjust_" + kind, `${kind[0].toUpperCase() + kind.slice(1)} ${pkr(amount)} (${adj.receipt_no}), approved by ${appr}: ${reason}` + (kind === "refund" ? "" : `. Total fee ${pkr(e.fee_total)} → ${pkr(adj.fee_after)}`));
     ctx.pingSheets?.();
-    return json({ ok: true, adjustment: ins.data });
+    return json({ ok: true, adjustment: adj });
   }
   if (a === "pro_adjust_void") {
     const adj = (await db.from("fee_adjustments").select("*").eq("id", Number(body.adjustment_id)).maybeSingle()).data;
     if (!adj || adj.voided_at) return json({ error: "Not found or already void." }, 404);
     const reason = String(body.reason || "").trim(); if (reason.length < 3) return json({ error: "Write the reason." }, 400);
+    let expFee: number | null = null, expPlan: unknown = null, patch: Record<string, unknown> | null = null;
     if (adj.kind !== "refund") {
       const e = (await db.from("enrollments").select("*").eq("id", adj.enrollment_id).maybeSingle()).data;
+      if (!e) return json({ error: "Student not found." }, 404);
       const plan: Inst[] | null = Array.isArray(e.installment_plan) && e.installment_plan.length ? e.installment_plan : null;
-      const u = undoDiscount({ fee: e.fee_total, plan, add: adj.amount });
-      const due = u.plan ? planDue(u.plan, e.amount_paid) : (u.fee > e.amount_paid ? (e.due_date ? String(e.due_date).slice(0, 10) : null) : null);
-      const up = await db.from("enrollments").update({ fee_total: u.fee, installment_plan: u.plan, due_date: due, reminder_stage: u.fee > e.amount_paid ? 0 : 3 }).eq("id", e.id).eq("fee_total", e.fee_total).select("id").maybeSingle();
-      if (up.error || !up.data) return json({ error: up.error?.message || "Changed meanwhile. Reload." }, 409);
+      // plan untouched since the discount: put back the exact plan it replaced; otherwise add the amount back to the open installments
+      const back = sameJson(plan, adj.plan_after) && (adj.plan_before || adj.plan_after) ? { fee: (Number(e.fee_total) || 0) + adj.amount, plan: (adj.plan_before as Inst[] | null) } : undoDiscount({ fee: e.fee_total, plan, add: adj.amount });
+      const owes = back.fee > (Number(e.amount_paid) || 0);
+      const due = back.plan ? planDue(back.plan, e.amount_paid) : (owes ? (e.due_date ? String(e.due_date).slice(0, 10) : null) : null);
+      patch = { fee_total: back.fee, installment_plan: back.plan, due_date: due, reminder_stage: owes ? 0 : 3, ...(back.plan && !plan ? { payment_plan: "custom" } : {}) };
+      expFee = e.fee_total; expPlan = e.installment_plan ?? null;
     }
-    const r = await db.from("fee_adjustments").update({ voided_at: new Date().toISOString(), void_reason: reason.slice(0, 300) }).eq("id", adj.id).is("voided_at", null);
-    if (r.error) return json({ error: r.error.message }, 400);
-    await logActivity(db, uid, adj.enrollment_id, "adjust_void", `${adj.kind} ${adj.receipt_no} (${pkr(adj.amount)}) voided: ${reason}`);
+    const r = await db.rpc("fee_adjust_void", { p_id: adj.id, p_reason: reason.slice(0, 300), p_expect_fee: expFee, p_expect_plan: expPlan, p_patch: patch });
+    if (r.error) return adjErr(json, r.error);
+    await logActivity(db, uid, adj.enrollment_id, "adjust_void", `${adj.kind} ${adj.receipt_no} (${pkr(adj.amount)}) voided: ${reason}` + (adj.kind !== "refund" && patch ? `. Total fee back to ${pkr(patch.fee_total as number)}${patch.installment_plan && adj.plan_before ? ", installment plan restored" : ""}` : ""));
     ctx.pingSheets?.();
     return json({ ok: true });
   }
@@ -252,8 +329,10 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     if (!["user", "staff", "admin"].includes(r0)) return json({ error: "Pick user, staff or admin." }, 400);
     if (target === uid) return json({ error: "You can't change your own role. Ask another admin." }, 400);
     const cur = (await db.from("profiles").select("role,username").eq("id", target).maybeSingle()).data; if (!cur) return json({ error: "Account not found." }, 404);
-    if (cur.role === "admin" && r0 !== "admin") { const n = (await db.from("profiles").select("id", { count: "exact", head: true }).eq("role", "admin")).count || 0; if (n <= 1) return json({ error: "At least one admin must remain." }, 400); }
-    const up = await db.from("profiles").update({ role: r0 }).eq("id", target); if (up.error) return json({ error: up.error.message }, 400);
+    // the last-admin rule is enforced in the DB (profiles_keep_one_admin, serialised), so two demotions can't race
+    const up = await db.from("profiles").update({ role: r0 }).eq("id", target).eq("role", cur.role).select("id").maybeSingle();
+    if (up.error) return json({ error: /at least one admin/i.test(up.error.message) ? "At least one admin must remain." : up.error.message }, 400);
+    if (!up.data) return json({ error: "The role changed meanwhile. Reload." }, 409);
     await logActivity(db, uid, null, "role_changed", `${cur.username}: role ${cur.role} → ${r0}`, { user_id: target });
     return json({ ok: true, role: r0 });
   }

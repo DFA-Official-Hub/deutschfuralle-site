@@ -6,14 +6,57 @@ export type Role = "admin" | "staff";
 /** Existing admission actions staff may call. Everything else (activate, plans, corrections, certificates,
  *  settings, revoke, refunds, exports, test-data deletion…) is admin only. */
 export const STAFF_ACTIONS = new Set([
-  "status", "docs_status", "doc_file_admin", "cert_file_admin", "cert_images_status", "email_log", "resend", "record_payment",
-  "student_info_get", "wa_links",
+  "status", "docs_status", "cert_file_admin", "cert_images_status", "email_log", "resend", "record_payment",
   "pro_activity", "pro_assign_batch", "pro_reminders", "pro_email_log", "pro_proof_upload", "pro_proof_attach", "pro_proof_url", "pro_payment_ref", "pro_dashboard",
+  "pro_students", "pro_reveal", "pro_add_student",
 ]);
-export function allowed(role: string | null | undefined, action: string): boolean {
+/** Money writes staff may only do when an admin switches site_settings.staff_payments to "on" (default off). */
+export const STAFF_PAYMENT_ACTIONS = new Set(["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref"]);
+export function allowed(role: string | null | undefined, action: string, staffPayments = false): boolean {
   if (role === "admin") return true;
-  if (role === "staff") return STAFF_ACTIONS.has(action);
+  if (role === "staff") return STAFF_ACTIONS.has(action) && (staffPayments || !STAFF_PAYMENT_ACTIONS.has(action));
   return false;
+}
+
+// ---- staff privacy (B2): staff never get raw contacts or student details from the server ------------
+export function maskEmail(v: unknown): string {
+  const s = String(v || ""); const i = s.indexOf("@"); if (i < 1) return s ? "•••" : "";
+  const dom = s.slice(i + 1), dot = dom.lastIndexOf(".");
+  return s[0] + "•••@" + (dot > 0 ? dom[0] + "•••" + dom.slice(dot) : "•••");
+}
+export function maskPhone(v: unknown): string { const s = String(v || "").replace(/\s+/g, ""); if (!s) return ""; return s.length < 5 ? "•••" : s.slice(0, 3) + "•••" + s.slice(-2); }
+/** Columns of enrollments a staff list may carry. No student_info (CNIC, DOB, address), notes, raw email/phone or files. */
+export const STAFF_ENR_COLS = "id,full_name,student_id,course_code,course_label,batch_id,batch_code,status,payment_plan,fee_total,amount_paid,balance_due,due_date,created_at,start_date,end_date,activated_at,invoice_no,installment_plan,reminder_stage,source,last_docs_sent_at,last_docs_sent_items,certificate_no,certificate_issued_at,certificate_revoked_at,certificate_hold,docs_error,email,phone";
+export const STAFF_PAY_COLS = "id,enrollment_id,invoice_no,installment_no,installments,is_final,amount,paid_on,method,installment_label,voided_at,revision,reference,proof_file,proof_url,created_at";
+export function staffRow(e: any) {
+  const o: any = {}; for (const k of STAFF_ENR_COLS.split(",")) if (k !== "email" && k !== "phone") o[k] = e[k] ?? null;
+  o.email = maskEmail(e.email); o.phone = maskPhone(e.phone); o.has_email = !!e.email; o.has_phone = !!e.phone; o.masked = true;
+  return o;
+}
+export function staffPay(p: any) {
+  const o: any = {}; for (const k of STAFF_PAY_COLS.split(",")) o[k] = p[k] ?? null;
+  if (o.proof_url && !/^https:\/\/drive\.google\.com\//.test(String(o.proof_url))) o.proof_url = null;
+  return o;
+}
+/** Whitelist for pro_add_student: email, name, course, phone, source. Returns the row or an error. */
+export function addStudentRow(b: any): { row?: Record<string, unknown>; error?: string } {
+  const email = String(b?.email || "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) return { error: "Enter a valid email address." };
+  const name = String(b?.full_name ?? b?.name ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 120);
+  if (name.length < 2) return { error: "Enter the student's name." };
+  const course = String(b?.course_code ?? b?.course ?? "").trim();
+  if (!/^[a-z0-9-]{1,40}$/.test(course)) return { error: "Pick a course." };
+  const ph = String(b?.phone || "").replace(/[^\d+]/g, "").slice(0, 20);
+  if (ph && ph.replace(/\D/g, "").length < 10) return { error: "The phone number looks too short." };
+  const src = ["manual", "walk-in", "whatsapp", "phone", "referral", "other"].includes(String(b?.source || "")) ? String(b.source) : "manual";
+  return { row: { email, full_name: name, course_code: course, phone: ph || null, source: src } };
+}
+/** Typed confirmation words the server requires (UI asks for the same word). */
+export const CONFIRM_WORDS: Record<string, string> = { pro_revoke: "REVOKE", pro_remove: "DELETE", cert_revoke: "REVOKE" };
+export function confirmOk(action: string, body: any): boolean {
+  const w = CONFIRM_WORDS[action]; if (!w) return true;
+  if (action === "cert_revoke" && body?.undo) return true;
+  return String(body?.confirm || "").trim().toUpperCase() === w;
 }
 
 // ---- reminders ---------------------------------------------------------------------------------
@@ -86,14 +129,30 @@ export function cleanRef(v: unknown): string | null { const s = String(v ?? "").
 
 // ---- Resend webhook (Svix signature) -------------------------------------------------------------
 function b64(s: string): Uint8Array<ArrayBuffer> { const bin = atob(s); const u = new Uint8Array(new ArrayBuffer(bin.length)); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
-function toB64(u: Uint8Array): string { let s = ""; for (const x of u) s += String.fromCharCode(x); return btoa(s); }
 /** Verifies a Svix-signed webhook (Resend). secret = "whsec_…". Rejects messages older/newer than 5 minutes. */
+/** Constant-time compare of two byte arrays (length is not secret: Svix signatures are always 32 bytes). */
+export function safeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0; for (let i = 0; i < a.length; i++) d |= a[i] ^ b[i];
+  return d === 0;
+}
+/** Verifies a Svix-signed webhook (Resend). secret = "whsec_…". Rejects messages older/newer than 5 minutes.
+ *  Never throws: a malformed secret or signature just fails verification (the caller answers a plain 403). */
 export async function verifySvix(secret: string, id: string, ts: string, body: string, sigHeader: string, nowSec = Math.floor(Date.now() / 1000)): Promise<boolean> {
   if (!secret || !id || !ts || !sigHeader) return false;
   const t = Number(ts); if (!Number.isFinite(t) || Math.abs(nowSec - t) > 300) return false;
-  const key = await crypto.subtle.importKey("raw", b64(secret.replace(/^whsec_/, "")), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const mac = toB64(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${ts}.${body}`))));
-  return sigHeader.split(" ").some((p) => { const [v, s] = p.split(","); return v === "v1" && s === mac; });
+  let mac: Uint8Array;
+  try {
+    const key = await crypto.subtle.importKey("raw", b64(secret.replace(/^whsec_/, "")), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${ts}.${body}`)));
+  } catch (_) { return false; }
+  let ok = false;
+  for (const p of sigHeader.split(" ")) {
+    const [v, s] = p.split(","); if (v !== "v1" || !s) continue;
+    let got: Uint8Array; try { got = b64(s); } catch (_) { continue; }
+    if (safeEqual(got, mac)) ok = true; // no early exit
+  }
+  return ok;
 }
 export function deliveryFrom(type: string): "delivered" | "bounced" | "complained" | "delayed" | null {
   return ({ "email.delivered": "delivered", "email.bounced": "bounced", "email.complained": "complained", "email.delivery_delayed": "delayed" } as Record<string, any>)[type] || null;
@@ -126,4 +185,10 @@ export function dashboard(o: { today: string; enr: Enr[]; pays: Pay[]; adjs: Adj
     pending: real.filter((e) => e.status === "pending").length, active: real.filter((e) => e.status === "active").length,
     new_month: real.filter((e) => new Date(Date.parse(e.created_at) + 5 * 3600e3).toISOString().slice(0, 7) === month).length,
   };
+}
+
+/** Same JSON value (key order of objects ignored; null, undefined and [] count as "no plan"). */
+export function sameJson(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown): unknown => v == null || (Array.isArray(v) && !v.length) ? null : Array.isArray(v) ? v.map(norm) : typeof v === "object" ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, norm((v as any)[k])])) : v;
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
 }

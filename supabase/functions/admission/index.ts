@@ -9,7 +9,8 @@ import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS a
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { handlePro, logActivity } from "./pro.ts";
 import { withAudit } from "./audit.ts";
-import { allowed, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom } from "./prologic.ts";
+import { allowed, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, STAFF_PAYMENT_ACTIONS } from "./prologic.ts";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
 async function imagesOn(db: any) { const { data } = await db.from("site_settings").select("value").eq("key", "certificate_images_public").maybeSingle(); return data?.value === "on"; }
@@ -57,9 +58,11 @@ async function loadPaymentQr(db: any) {
 async function qrAttachment(db: any) {
   return { filename: "DFA Raast QR.jpg", content: await loadPaymentQr(db), contentType: "image/jpeg" };
 }
-let LAST_ID: string | null = null; // Resend message id of the last email sent in this request (matched by the delivery webhook)
+// Per-request state (requests run concurrently in one isolate, so no module-level "last id"):
+// lastId = Resend message id of the last email this request sent, stored on email_log for the delivery webhook.
+const MAIL_CTX = new AsyncLocalStorage<{ lastId: string | null }>();
 async function logMail(db: any, e: any, kind: string, items: string[], status: string, by: string | null, error?: string) {
-  const pid = status === "sent" ? LAST_ID : null; LAST_ID = null;
+  const st = MAIL_CTX.getStore(); const pid = status === "sent" ? (st?.lastId ?? null) : null; if (st) st.lastId = null;
   await db.from("email_log").insert({ enrollment_id: e.id, kind, items, to_email: e.email, status, error: error ? error.slice(0, 300) : null, sent_by: by, provider_id: pid });
   if (status === "sent") await db.from("enrollments").update({ last_docs_sent_at: new Date().toISOString(), last_docs_sent_items: items.join(", ") }).eq("id", e.id);
 }
@@ -188,7 +191,8 @@ async function sendViaResend(to: string, subject: string, text: string, attachme
     const err = (await res.text()).replace(key, "[redacted]").slice(0, 400);
     throw new Error(`Resend ${res.status}: ${err}`);
   }
-  try { LAST_ID = String((await res.json())?.id || "") || null; } catch (_) { LAST_ID = null; }
+  let mid: string | null = null; try { mid = String((await res.json())?.id || "") || null; } catch (_) { mid = null; }
+  const st = MAIL_CTX.getStore(); if (st) st.lastId = mid;
   return "sent" as const;
 }
 async function send(to: string, subject: string, text: string, attachments: MailAtt[] = [], opts: SendOpts = {}) {
@@ -327,7 +331,8 @@ async function cleanupDocJobs(db: any, days = 30) {
   return { ok: !r.error, error: r.error?.message || null, older_than: cut };
 }
 
-Deno.serve(withAudit(async (req) => {
+Deno.serve((req) => MAIL_CTX.run({ lastId: null }, () => serveReq(req)));
+const serveReq = withAudit(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } });
   CUR = db;
@@ -336,11 +341,14 @@ Deno.serve(withAudit(async (req) => {
   try {
     if (req.headers.get("svix-id")) {
       // Resend webhook: delivered / bounced / complained for emails we sent (RESEND_WEBHOOK_SECRET = the endpoint's signing secret).
-      const ok = await verifySvix(env("RESEND_WEBHOOK_SECRET"), req.headers.get("svix-id") || "", req.headers.get("svix-timestamp") || "", raw, req.headers.get("svix-signature") || "");
-      if (!ok) return json({ error: "forbidden" }, 403);
-      const st = deliveryFrom(String(body.type || "")), mid = String(body.data?.email_id || "");
-      if (st && mid) await db.from("email_log").update({ delivery: st, delivery_at: new Date().toISOString(), ...(st === "bounced" ? { error: String(body.data?.bounce?.message || "Bounced").slice(0, 300) } : {}) }).eq("provider_id", mid);
-      return json({ ok: true });
+      // Any failure here (bad/malformed secret or signature, odd payload) is a plain 4xx with no error text.
+      try {
+        const ok = await verifySvix(env("RESEND_WEBHOOK_SECRET"), req.headers.get("svix-id") || "", req.headers.get("svix-timestamp") || "", raw, req.headers.get("svix-signature") || "");
+        if (!ok) return json({ error: "forbidden" }, 403);
+        const st = deliveryFrom(String(body?.type || "")), mid = String(body?.data?.email_id || "");
+        if (st && mid) await db.from("email_log").update({ delivery: st, delivery_at: new Date().toISOString(), ...(st === "bounced" ? { error: String(body.data?.bounce?.message || "Bounced").slice(0, 300) } : {}) }).eq("provider_id", mid);
+        return json({ ok: true });
+      } catch (_) { return json({ error: "bad request" }, 400); }
     }
     if (body.action === "intake") {
       const tok = env("AUTOMATION_TOKEN");
@@ -373,6 +381,8 @@ Deno.serve(withAudit(async (req) => {
       const { data: e } = await db.from("enrollments").select("full_name,course_label,start_date,end_date,certificate_no,certificate_issued_at,certificate_revoked_at,status,courses(name,level,duration_days)").eq("certificate_code", code).maybeSingle();
       if (!e || !e.certificate_no) return json({ found: false });
       if (e.certificate_revoked_at || e.status === "revoked") return json({ found: false, revoked: true });
+      // only a real (active or finished) enrollment can verify: pending/forged rows never do
+      if (e.status !== "active" && e.status !== "expired") return json({ found: false });
       const tk = (req.headers.get("Authorization") || "").replace("Bearer ", "");
       const au = tk && tk.split(".").length === 3 ? (await db.auth.getUser(tk)).data?.user : null;
       const adm = au ? (await db.from("profiles").select("role").eq("id", au.id).maybeSingle()).data?.role === "admin" : false;
@@ -609,7 +619,9 @@ Deno.serve(withAudit(async (req) => {
     const { data: p } = await db.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
     const role = p?.role === "admin" || p?.role === "staff" ? p.role : null;
     if (!role) return json({ error: "forbidden" }, 403);
-    if (!allowed(role, String(body.action || ""))) return json({ error: "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
+    const staffPay = role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? (await db.from("site_settings").select("value").eq("key", "staff_payments").maybeSingle()).data?.value === "on" : false;
+    if (!allowed(role, String(body.action || ""), staffPay)) return json({ error: role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? "Recording payments is switched off for staff. Ask an admin." : "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
+    if (!confirmOk(String(body.action || ""), body)) return json({ error: `Type ${CONFIRM_WORDS[String(body.action)]} to confirm.`, code: "confirm" }, 400);
     {
       // Security: admin actions need a confirmed sign-in (device/email check) and the 2FA code when an authenticator app is set up.
       const tk = (req.headers.get("Authorization") || "").replace("Bearer ", "");
@@ -973,4 +985,4 @@ Deno.serve(withAudit(async (req) => {
   } catch (e) {
     return json({ error: "Server error: " + String((e as Error)?.message || e).slice(0, 200) }, 500);
   }
-}));
+});
