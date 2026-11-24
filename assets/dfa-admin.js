@@ -139,12 +139,23 @@ async function loadCourses(){try{var c=JSON.parse(sessionStorage.getItem('dfa-ad
 function openTab(t){var b=app.querySelector('.adm-tabs [data-t="'+t+'"]');if(b)b.click()}
 async function init(){var p=await DFA.profile();
  if(!p||(p.role!=='admin'&&p.role!=='staff')){app.innerHTML='<div class="ac-card"><h2>Not available</h2><p>This page is for site staff only. <a href="account.html">Go to your account</a>.</p></div>';return}
- ROLE=p.role;await loadCourses();
- if(window.ADMPRO)PRO=window.ADMPRO({sb:sb,E:E,T:T,lab:lab,dlg:dlg,toast:toast,pk:pk,d:d,today:today,H:H,P:P,role:ROLE,me:p.id,courses:function(){return COURSES},copts:copts,mopts:mopts,waDigits:waDigits,
+ ROLE=p.role;var PERMS=null;
+ if(ROLE==='staff'){var sp=await sb.from('staff_permissions').select('*').eq('user_id',p.id).maybeSingle();PERMS=sp.data||{disabled:false};
+  if(PERMS.disabled){app.innerHTML='<div class="ac-card"><h2>Staff access is off</h2><p>An admin has switched off your staff access. If you think this is a mistake, please ask an admin. <a href="account.html">Go to your account</a>.</p></div>';return}}
+ await loadCourses();
+ if(window.ADMPRO)PRO=window.ADMPRO({sb:sb,E:E,T:T,lab:lab,dlg:dlg,toast:toast,pk:pk,d:d,today:today,H:H,P:P,role:ROLE,perms:PERMS,me:p.id,courses:function(){return COURSES},copts:copts,mopts:mopts,waDigits:waDigits,
   openStudent:function(q){ST.q=String(q||'');ST.filter='all';ST.page=0;ST.batch='';ST.tag='';if(location.hash==='#students')enr();else openTab('en')},
   openFilter:function(f){ST.filter=f||'all';ST.q='';ST.page=0;if(location.hash==='#students')enr();else openTab('en')}});
- var tabs=TABS.filter(function(t){return !t[3]||ROLE==='admin'}).filter(function(t){return PRO||['en','rv','us','sc','st'].indexOf(t[0])>=0});
- app.innerHTML='<div class="adm-top">'+(ROLE==='staff'?'<span class="adm-tag adm-role" title="Staff can work with students, batches, attendance, notes and reminders. Contacts stay hidden until you click them (logged). Recording payments only when an admin allows it. Revokes, refunds, exports, Accounts, Security and Settings are for admins.">Staff</span>':'')+'<label class="adm-tabsel-w"><span class="sr-only">Section</span><select class="adm-tabsel" aria-label="Section" title="Go to another section of the admin portal.">'+tabs.map(function(t){return '<option value="'+t[0]+'">'+t[1]+'</option>'}).join('')+'</select></label></div><div class="ac-tabs adm-tabs" role="tablist">'+tabs.map(function(t,i){return '<button type="button" role="tab" aria-selected="'+(i===0)+'" data-t="'+t[0]+'"'+T(H.tabs[t[0]]||t[1])+'>'+t[1]+'</button>'}).join('')+'</div><div id="adm-body"></div>';
+ var tabs=TABS.filter(function(t){return !t[3]||ROLE==='admin'}).filter(function(t){return PRO||['en','rv','us','sc','st'].indexOf(t[0])>=0}).filter(function(t){
+  if(ROLE!=='staff')return true;
+  if(t[0]==='db'||t[0]==='rv')return true;
+  if(t[0]==='en')return !!(PERMS&&PERMS.view_students);
+  if(t[0]==='bt')return !!(PERMS&&(PERMS.batches||PERMS.attendance));
+  if(t[0]==='rm')return !!(PERMS&&PERMS.reminders);
+  if(t[0]==='ac')return !!(PERMS&&PERMS.view_activity);
+  return false;
+ });
+ app.innerHTML='<div class="adm-top">'+(ROLE==='staff'?'<span class="adm-tag adm-role" title="You can use the sections an admin has switched on for you. Contacts stay hidden until you click them (logged). Accounts, Security and Settings are for admins.">Staff</span>':'')+'<label class="adm-tabsel-w"><span class="sr-only">Section</span><select class="adm-tabsel" aria-label="Section" title="Go to another section of the admin portal.">'+tabs.map(function(t){return '<option value="'+t[0]+'">'+t[1]+'</option>'}).join('')+'</select></label></div><div class="ac-tabs adm-tabs" role="tablist">'+tabs.map(function(t,i){return '<button type="button" role="tab" aria-selected="'+(i===0)+'" data-t="'+t[0]+'"'+T(H.tabs[t[0]]||t[1])+'>'+t[1]+'</button>'}).join('')+'</div><div id="adm-body"></div>';
  var RUN={en:function(){enr()},st:settings,sc:security};if(!PRO){RUN.rv=reviews;RUN.us=users}else Object.keys(PRO.tabs).forEach(function(k){RUN[k]=PRO.tabs[k]});
  var NAME={};tabs.forEach(function(t){NAME[t[0]]=t[2]});var sel=app.querySelector('.adm-tabsel');
  app.querySelectorAll('.adm-tabs [data-t]').forEach(function(b){b.onclick=function(){app.querySelectorAll('.adm-tabs [data-t]').forEach(function(x){x.setAttribute('aria-selected',x===b)});sel.value=b.dataset.t;try{var tb2=b.parentNode,l=b.offsetLeft-tb2.offsetLeft;if(l<tb2.scrollLeft||l+b.offsetWidth>tb2.scrollLeft+tb2.clientWidth)tb2.scrollLeft=l-24}catch(e){}RUN[b.dataset.t]();try{history.replaceState(null,'','#'+NAME[b.dataset.t])}catch(e){}}});

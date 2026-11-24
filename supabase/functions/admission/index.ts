@@ -9,7 +9,7 @@ import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS a
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { handlePro, logActivity } from "./pro.ts";
 import { withAudit } from "./audit.ts";
-import { allowed, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, STAFF_PAYMENT_ACTIONS, redactDocs, redactMailRows, isRefundGuard } from "./prologic.ts";
+import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, type StaffPerms } from "./prologic.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
@@ -621,8 +621,12 @@ const serveReq = withAudit(async (req) => {
     const { data: p } = await db.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
     const role = p?.role === "admin" || p?.role === "staff" ? p.role : null;
     if (!role) return json({ error: "forbidden" }, 403);
-    const staffPay = role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? (await db.from("site_settings").select("value").eq("key", "staff_payments").maybeSingle()).data?.value === "on" : false;
-    if (!allowed(role, String(body.action || ""), staffPay)) return json({ error: role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? (body.action === "pro_proof_url" ? "Opening payment slips is switched off for staff. Ask an admin." : "Recording payments is switched off for staff. Ask an admin.") : "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
+    let perms: StaffPerms | null = null;
+    if (role === "staff") {
+      const row = (await db.from("staff_permissions").select("*").eq("user_id", u.user.id).maybeSingle()).data;
+      perms = parsePerms(row);
+    }
+    if (!allowed(role, String(body.action || ""), perms)) return json({ error: role === "staff" ? denyMessage(String(body.action || ""), perms) : "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
     if (!confirmOk(String(body.action || ""), body)) return json({ error: `Type ${CONFIRM_WORDS[String(body.action)]} to confirm.`, code: "confirm" }, 400);
     {
       // Security: admin actions need a confirmed sign-in (device/email check) and the 2FA code when an authenticator app is set up.
@@ -633,7 +637,7 @@ const serveReq = withAudit(async (req) => {
       const vs = cl.session_id ? (await db.from("verified_sessions").select("session_id").eq("session_id", cl.session_id).maybeSingle()).data : null;
       if (!vs) return json({ error: "Please confirm this sign-in first: reload the page and enter the code we emailed you.", code: "verify_session" }, 403);
     }
-    { const pr = await handlePro(db, body, u.user, role, { json, today: todayPk, pingSheets }); if (pr) return pr; }
+    { const pr = await handlePro(db, body, u.user, role, { json, today: todayPk, pingSheets, perms }); if (pr) return pr; }
     if (body.action === "activate") {
       const id = Number(body.id);
       const patch: Record<string, unknown> = { status: "active", activated_by: u.user.id };

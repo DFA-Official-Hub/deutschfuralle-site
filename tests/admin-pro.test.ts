@@ -1,14 +1,41 @@
 // deno test tests/admin-pro.test.ts — admin portal upgrade (WD-3): roles, reminders, discounts, proof paths, webhook signature, dashboard, activity summaries.
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
-import { allowed, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard } from "../supabase/functions/admission/prologic.ts";
+import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, type PermKey } from "../supabase/functions/admission/prologic.ts";
 import { summarize } from "../supabase/functions/admission/audit.ts";
 
-Deno.test("staff may resend and use their lists, but not revoke, refund, activate or change settings; payments only behind the flag", () => {
-  for (const a of ["resend", "docs_status", "pro_assign_batch", "pro_activity", "pro_dashboard", "pro_students", "pro_reveal", "pro_add_student"]) assert(allowed("staff", a), a);
-  for (const a of ["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref"]) { assertFalse(allowed("staff", a), a + " off by default"); assert(allowed("staff", a, true), a + " when switched on"); }
-  for (const a of ["student_info_get", "doc_file_admin", "wa_links"]) assertFalse(allowed("staff", a), a + " (student details / documents with CNIC)");
-  for (const a of ["activate", "cert_revoke", "cert_hold", "certify", "set_plan", "payment_correct", "set_emails", "cert_images", "settings_get", "pro_revoke", "pro_adjust", "pro_delete_test", "pro_role_set", "pro_accounts", "student_info_save"]) assertFalse(allowed("staff", a), a);
-  assert(allowed("admin", "pro_delete_test")); assertFalse(allowed("user", "record_payment")); assertFalse(allowed(null, "status"));
+const on = (...ks: PermKey[]) => { const p = emptyPerms(); for (const k of ks) p[k] = true; return p; };
+Deno.test("staff actions are off by default and follow per-staff permissions; admin-only stays admin-only", () => {
+  assert(allowed("staff", "pro_dashboard")); assert(allowed("staff", "status", emptyPerms()));
+  assertFalse(allowed("staff", "pro_dashboard", { ...emptyPerms(), disabled: true }), "disabled staff are blocked");
+  const map: [string, PermKey][] = [
+    ["pro_students", "view_students"], ["pro_reveal", "see_contacts"],
+    ["student_info_get", "edit_student_info"], ["student_info_save", "edit_student_info"],
+    ["pro_add_student", "add_students"], ["record_payment", "record_payments"],
+    ["pro_proof_upload", "record_payments"], ["pro_proof_attach", "record_payments"], ["pro_payment_ref", "record_payments"],
+    ["pro_proof_url", "open_payment_slips"], ["pro_adjust", "discounts_refunds"], ["pro_adjust_void", "discounts_refunds"],
+    ["pro_assign_batch", "batches"], ["pro_reminders", "reminders"],
+    ["docs_status", "documents_emails"], ["resend", "documents_emails"], ["email_log", "documents_emails"], ["pro_email_log", "documents_emails"], ["cert_file_admin", "documents_emails"],
+    ["pro_export_log", "export"], ["pro_activity", "view_activity"],
+  ];
+  for (const [a, k] of map) {
+    assertFalse(allowed("staff", a), a + " off by default");
+    assertFalse(allowed("staff", a, emptyPerms()), a + " empty perms");
+    assert(allowed("staff", a, on(k)), a + " when " + k + " is on");
+    const other = PERM_KEYS.find((x) => x !== k)!;
+    assertFalse(allowed("staff", a, on(other)), a + " not granted by " + other);
+  }
+  for (const a of ["activate", "cert_revoke", "cert_hold", "certify", "set_plan", "payment_correct", "set_emails", "cert_images", "settings_get", "pro_revoke", "pro_delete_test", "pro_role_set", "pro_accounts", "pro_staff_invite", "pro_staff_perms", "pro_staff_disable", "doc_file_admin", "wa_links"]) {
+    assertFalse(allowed("staff", a, on(...PERM_KEYS)), a + " stays admin-only even with every flag on");
+  }
+  assert(allowed("admin", "pro_delete_test")); assert(allowed("admin", "pro_staff_invite", emptyPerms()));
+  assertFalse(allowed("user", "record_payment", on("record_payments"))); assertFalse(allowed(null, "status"));
+  assertEquals(denyMessage("record_payment", emptyPerms()), "Recording payments is switched off for you. Ask an admin.");
+  assertEquals(denyMessage("pro_proof_url", emptyPerms()), "Opening payment slips is switched off for you. Ask an admin.");
+  assertEquals(denyMessage("pro_students", { ...emptyPerms(), disabled: true }), "Your staff access is switched off. Please contact an admin.");
+  const t = applyPreset("teacher"), d = applyPreset("front_desk");
+  assert(t.view_students && t.batches && t.attendance && t.notes_tags && !t.record_payments && !t.see_contacts);
+  assert(d.see_contacts && d.record_payments && d.open_payment_slips && d.add_students && !d.discounts_refunds && !d.export && !d.view_activity);
+  assertFalse(parsePerms(null).view_students); assert(parsePerms({ view_students: true, disabled: 1 }).disabled);
 });
 Deno.test("reminder schedule parsing and stages", () => {
   assertEquals(parseOffsets("-3,0,3"), [-3, 0, 3]); assertEquals(parseOffsets(" -5, -1 ,2"), [-5, -1, 2]);

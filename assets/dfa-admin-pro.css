@@ -126,3 +126,25 @@ tr.is-hidden td{opacity:.65}
 @media (max-width:420px){#adm-body .adm-bar2x label{flex:1 1 45%}#adm-body .adm-bar2x label select{flex:1 1 auto;width:100%}}
 /* 360px: the site header with the Admin pill was ~100px wider than the screen */
 @media (max-width:480px){header a.acct:not(.acct-adm) span{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}header a.acct{padding-left:8px;padding-right:8px}header .bar .brand b{font-size:.8rem!important}header .bar .brand{gap:6px}header .bar .brand img{width:34px;height:34px}header .bar{padding-left:12px!important;padding-right:12px!important;gap:6px!important}header .bar a.acct-adm{padding:6px 10px}header .bar a.acct-adm+a.acct{margin-left:0}header .bar .menu-toggle{margin-left:0}}
+
+/* Per-staff permissions (Accounts tab), including 360px */
+.adm-staff-add{margin:8px 0 4px}
+.adm-presets{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.adm-perms{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin:0 0 12px}
+.adm-perm{display:flex;align-items:flex-start;gap:10px;margin:0;padding:8px 10px;border:1px solid var(--g,#d5ddd7);border-radius:10px;background:#fff}
+.adm-perm input[type=checkbox]{width:auto;min-width:18px;min-height:18px;height:18px;padding:0;margin-top:3px;flex:0 0 auto;accent-color:var(--g,#0b4a2c)}
+.adm-perm span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.adm-perm b{font-size:.88rem}
+.adm-perm-off{grid-column:1/-1;border-color:#ecd3c8;background:#fff8f6}
+@media (max-width:700px){
+  .adm-perms{grid-template-columns:1fr}
+  .adm-staff-add .btn{width:100%}
+  .adm-a .btn{margin:4px 4px 0 0}
+}
+@media (max-width:360px){
+  .adm-perms,.adm-presets{gap:6px}
+  .adm-perm{padding:8px}
+  .adm-a{display:flex;flex-wrap:wrap;gap:6px}
+  .adm-a .btn{margin:0;flex:1 1 auto;justify-content:center}
+  .adm-dlg.adm-wide{width:calc(100vw - 16px);margin:8px}
+}

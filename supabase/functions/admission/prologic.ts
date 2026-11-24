@@ -3,13 +3,74 @@ import { next as nextInst, status as instStatus, type Inst } from "./plan.ts";
 
 /** Roles that may use the admin portal. */
 export type Role = "admin" | "staff";
-/** Existing admission actions staff may call. Everything else (activate, plans, corrections, certificates,
- *  settings, revoke, refunds, exports, test-data deletion…) is admin only. */
-export const STAFF_ACTIONS = new Set([
-  "status", "docs_status", "cert_file_admin", "cert_images_status", "email_log", "resend", "record_payment",
-  "pro_activity", "pro_assign_batch", "pro_reminders", "pro_email_log", "pro_proof_upload", "pro_proof_attach", "pro_proof_url", "pro_payment_ref", "pro_dashboard",
-  "pro_students", "pro_reveal", "pro_add_student",
-]);
+/** Permission keys stored on public.staff_permissions. Every one defaults to off for a new staff member. */
+export const PERM_KEYS = [
+  "view_students", "see_contacts", "edit_student_info", "add_students",
+  "record_payments", "open_payment_slips", "discounts_refunds", "batches",
+  "attendance", "notes_tags", "reminders", "documents_emails", "export", "view_activity",
+] as const;
+export type PermKey = typeof PERM_KEYS[number];
+export type StaffPerms = { [K in PermKey]: boolean } & { disabled: boolean };
+
+export function emptyPerms(): StaffPerms {
+  const o = { disabled: false } as StaffPerms;
+  for (const k of PERM_KEYS) o[k] = false;
+  return o;
+}
+export function parsePerms(row: any): StaffPerms {
+  const o = emptyPerms();
+  if (!row || typeof row !== "object") return o;
+  for (const k of PERM_KEYS) o[k] = !!row[k];
+  o.disabled = !!row.disabled;
+  return o;
+}
+/** Teacher: students, batches, attendance, notes. Front desk: contacts, adds, payments, slips, docs, reminders, notes. */
+export const STAFF_PRESETS: Record<string, Partial<StaffPerms>> = {
+  teacher: { view_students: true, batches: true, attendance: true, notes_tags: true },
+  front_desk: {
+    view_students: true, see_contacts: true, edit_student_info: true, add_students: true,
+    record_payments: true, open_payment_slips: true, notes_tags: true, reminders: true, documents_emails: true,
+  },
+};
+export function applyPreset(name: string): StaffPerms {
+  const o = emptyPerms();
+  const p = STAFF_PRESETS[name];
+  if (p) for (const k of PERM_KEYS) if (p[k]) o[k] = true;
+  return o;
+}
+
+/** Existing admission actions a staff member may call *if* they have the matching permission.
+ *  "any" means a signed-in, not-disabled staff member may call it (portal shell). Everything
+ *  else (activate, plans, corrections, certificates, settings, revoke, test delete, role changes,
+ *  staff management…) stays admin only. */
+export const ACTION_PERM: Record<string, PermKey | "any"> = {
+  status: "any",
+  cert_images_status: "any",
+  pro_dashboard: "any",
+  pro_students: "view_students",
+  pro_reveal: "see_contacts",
+  student_info_get: "edit_student_info",
+  student_info_save: "edit_student_info",
+  pro_add_student: "add_students",
+  record_payment: "record_payments",
+  pro_proof_upload: "record_payments",
+  pro_proof_attach: "record_payments",
+  pro_payment_ref: "record_payments",
+  pro_proof_url: "open_payment_slips",
+  pro_adjust: "discounts_refunds",
+  pro_adjust_void: "discounts_refunds",
+  pro_assign_batch: "batches",
+  pro_reminders: "reminders",
+  docs_status: "documents_emails",
+  cert_file_admin: "documents_emails",
+  email_log: "documents_emails",
+  resend: "documents_emails",
+  pro_email_log: "documents_emails",
+  pro_export_log: "export",
+  pro_activity: "view_activity",
+};
+/** @deprecated Kept so older tests/comments still compile. Prefer ACTION_PERM + allowed(). */
+export const STAFF_ACTIONS = new Set(Object.keys(ACTION_PERM));
 /** What staff see instead of raw provider / document errors (bounce texts usually contain the student's email). */
 export const STAFF_MAIL_ERR = "Not delivered (an admin can see the details)";
 export const STAFF_DOC_ERR = "Failed (an admin can see the details)";
@@ -30,12 +91,23 @@ export function redactDocs<T extends Record<string, any>>(r: T, role: string): T
 export function isRefundGuard(err: { code?: unknown; hint?: unknown } | null | undefined): boolean {
   return !!err && err.code === "23514" && err.hint === "DFA_REFUND_GUARD";
 }
-/** Money writes staff may only do when an admin switches site_settings.staff_payments to "on" (default off). */
+/** Payment-related actions, for deny messages. The global staff_payments flag is no longer used. */
 export const STAFF_PAYMENT_ACTIONS = new Set(["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref", "pro_proof_url"]);
-export function allowed(role: string | null | undefined, action: string, staffPayments = false): boolean {
+export function allowed(role: string | null | undefined, action: string, perms?: StaffPerms | null): boolean {
   if (role === "admin") return true;
-  if (role === "staff") return STAFF_ACTIONS.has(action) && (staffPayments || !STAFF_PAYMENT_ACTIONS.has(action));
-  return false;
+  if (role !== "staff") return false;
+  if (perms?.disabled) return false;
+  const need = ACTION_PERM[action];
+  if (!need) return false;
+  if (need === "any") return true;
+  return !!(perms && perms[need]);
+}
+export function denyMessage(action: string, perms?: StaffPerms | null): string {
+  if (perms?.disabled) return "Your staff access is switched off. Please contact an admin.";
+  const need = ACTION_PERM[action];
+  if (need === "record_payments") return "Recording payments is switched off for you. Ask an admin.";
+  if (need === "open_payment_slips") return "Opening payment slips is switched off for you. Ask an admin.";
+  return "You do not have permission to do this. Ask an admin.";
 }
 
 // ---- staff privacy (B2): staff never get raw contacts or student details from the server ------------

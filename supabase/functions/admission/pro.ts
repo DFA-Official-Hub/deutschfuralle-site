@@ -1,9 +1,9 @@
 // Admin portal upgrade (WD-3): actions behind the "pro_" prefix, plus the activity log writer used by index.ts.
 // Every caller is already signed in, confirmed and admin/staff (index.ts checks that and allowed() before calling).
-import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, searchOr, confirmOk, sameJson, STAFF_MAIL_ERR, STAFF_ENR_COLS, STAFF_PAY_COLS, type Role } from "./prologic.ts";
+import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, searchOr, confirmOk, sameJson, STAFF_MAIL_ERR, STAFF_ENR_COLS, STAFF_PAY_COLS, allowed, denyMessage, PERM_KEYS, parsePerms, emptyPerms, type Role, type StaffPerms } from "./prologic.ts";
 import { method as payMethod, type Inst } from "./plan.ts";
 
-type Ctx = { json: (b: unknown, s?: number) => Response; today: () => string; pingSheets?: () => void };
+type Ctx = { json: (b: unknown, s?: number) => Response; today: () => string; pingSheets?: () => void; perms?: StaffPerms | null };
 const pkr = (n: number) => "PKR " + Number(n || 0).toLocaleString("en-US");
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -90,7 +90,8 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
   if (a === "pro_students") {
     const t = ctx.today();
     const flt = (q: any, f: string) => f === "fee pending" ? q.gt("balance_due", 0).in("status", ["active", "expired"]) : f === "overdue" ? q.gt("balance_due", 0).in("status", ["active", "expired"]).lt("due_date", t) : (f === "all" || f === "test" || !f) ? q : q.eq("status", f);
-    const flag = (await db.from("site_settings").select("value").eq("key", "staff_payments").maybeSingle()).data?.value === "on";
+    const perms = role === "staff" ? (ctx.perms || emptyPerms()) : null;
+    const flag = !!(perms && perms.record_payments);
     if (body.mode === "counts") {
       const c = async (f: string) => (await flt(db.from("enrollments").select("id", { count: "exact", head: true }), f)).count || 0;
       const [all, pending, active, fee, overdue, expired, revoked] = await Promise.all(["all", "pending", "active", "fee pending", "overdue", "expired", "revoked"].map(c));
@@ -107,7 +108,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     let ids: number[] | null = null;
     if (body.filter === "test" || body.tag) {
       let mq = db.from("student_meta").select("enrollment_id"); if (body.filter === "test") mq = mq.eq("is_test", true); if (body.tag) mq = mq.contains("tags", [String(body.tag).slice(0, 40)]);
-      ids = ((await mq).data || []).map((m: any) => m.enrollment_id); if (!ids!.length) return json({ ok: true, rows: [], count: 0, pays: [], flags: { staff_payments: flag } });
+      ids = ((await mq).data || []).map((m: any) => m.enrollment_id); if (!ids!.length) return json({ ok: true, rows: [], count: 0, pays: [], flags: { staff_payments: flag, perms } });
     }
     let q = db.from("enrollments").select(STAFF_ENR_COLS, { count: "exact" }); q = flt(q, String(body.filter || "all")); if (ids) q = q.in("id", ids);
     if (Array.isArray(body.ids)) q = q.in("id", body.ids.map(Number).filter((x: number) => x > 0).slice(0, 500));
@@ -121,7 +122,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const r = await q.range(page * size, page * size + size - 1); if (r.error) return json({ error: r.error.message }, 500);
     const rows = (r.data || []).map(staffRow), eids = rows.map((e: any) => e.id);
     const pays = body.pays === false || !eids.length ? [] : ((await db.from("payments").select(STAFF_PAY_COLS).in("enrollment_id", eids).order("installment_no")).data || []).map(staffPay);
-    return json({ ok: true, rows, count: r.count || 0, pays, flags: { staff_payments: flag } });
+    return json({ ok: true, rows, count: r.count || 0, pays, flags: { staff_payments: flag, perms } });
   }
   if (a === "pro_reveal") {
     // one contact of one student, on click; always logged with who looked
@@ -240,39 +241,15 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
       await logActivity(db, uid, p.enrollment_id, "payment_proof", `Payment ${p.invoice_no}: proof ${p.proof_file ? "replaced" : "uploaded"}${ref ? ", reference " + ref : ""}`);
       return json({ ok: true });
     }
-    // pro_proof_url (staff only while staff_payments is on, checked in index.ts); every open is logged
+    // pro_proof_url (staff only with open_payment_slips, checked in index.ts); every open is logged
     await logActivity(db, uid, p.enrollment_id, "payment_proof_opened", `Payment ${p.invoice_no}: slip opened`, { payment_id: pid });
     if (p.proof_file) { const s = await db.storage.from("documents").createSignedUrl(p.proof_file, 300); if (s.error) return json({ error: s.error.message }, 500); return json({ ok: true, url: s.data.signedUrl }); }
     if (/^https:\/\/drive\.google\.com\/(open\?id=|file\/d\/)[\w-]{15,}/.test(String(p.proof_url || ""))) return json({ ok: true, url: p.proof_url });
     return json({ error: "No proof file for this payment." }, 404);
   }
 
-  // ---------------------------------------------- admin only below ---------------------------------
-  if (role !== "admin") return json({ error: "Only an admin can do this." }, 403);
-
-  if (a === "pro_revoke" || a === "pro_restore" || a === "pro_remove") {
-    const e = (await db.from("enrollments").select("id,full_name,email,student_id,status").eq("id", id).maybeSingle()).data;
-    if (!e) return json({ error: "Student not found." }, 404);
-    const reason = String(body.reason || "").trim().slice(0, 300);
-    if (reason.length < 3) return json({ error: "Write a short reason (it is kept in the activity log)." }, 400);
-    if (!confirmOk(a, body)) return json({ error: `Type ${a === "pro_revoke" ? "REVOKE" : "DELETE"} to confirm.`, code: "confirm" }, 400);
-    if (a === "pro_remove") {
-      if (e.status !== "pending") return json({ error: "Only a pending registration can be removed. Revoke an active student instead." }, 400);
-      await logActivity(db, uid, null, "student_removed", `Removed pending registration ${e.full_name || e.email}${e.student_id ? " (" + e.student_id + ")" : ""}: ${reason}`, { enrollment_id: e.id });
-      const r = await db.from("enrollments").delete().eq("id", id).eq("status", "pending"); if (r.error) return json({ error: r.error.message }, 400);
-      return json({ ok: true });
-    }
-    const to = a === "pro_revoke" ? "revoked" : "active";
-    if (a === "pro_revoke" && e.status !== "active" && e.status !== "expired") return json({ error: "Only an active student can be revoked." }, 400);
-    if (a === "pro_restore" && e.status !== "revoked") return json({ error: "This student is not revoked." }, 400);
-    const r = await db.from("enrollments").update({ status: to }).eq("id", id).eq("status", e.status).select("id,end_date").maybeSingle();
-    if (r.error || !r.data) return json({ error: r.error?.message || "It changed meanwhile. Reload." }, 409);
-    await logActivity(db, uid, id, a === "pro_revoke" ? "revoked" : "restored", (a === "pro_revoke" ? "Access revoked: " : "Access restored: ") + reason);
-    ctx.pingSheets?.();
-    return json({ ok: true, status: to, end_date: r.data.end_date });
-  }
-
   if (a === "pro_adjust") {
+    if (role === "staff" && !allowed("staff", "pro_adjust", ctx.perms)) return json({ error: denyMessage("pro_adjust", ctx.perms) }, 403);
     const kind = String(body.kind || ""); if (!["discount", "scholarship", "refund"].includes(kind)) return json({ error: "Pick discount, scholarship or refund." }, 400);
     const amount = Math.round(Number(body.amount)), reason = String(body.reason || "").trim(), appr = String(body.approved_by || "").trim();
     if (!(amount > 0 && amount <= 1000000)) return json({ error: "Enter the amount in whole rupees." }, 400);
@@ -303,6 +280,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     return json({ ok: true, adjustment: adj });
   }
   if (a === "pro_adjust_void") {
+    if (role === "staff" && !allowed("staff", "pro_adjust_void", ctx.perms)) return json({ error: denyMessage("pro_adjust_void", ctx.perms) }, 403);
     const adj = (await db.from("fee_adjustments").select("*").eq("id", Number(body.adjustment_id)).maybeSingle()).data;
     if (!adj || adj.voided_at) return json({ error: "Not found or already void." }, 404);
     const reason = String(body.reason || "").trim(); if (reason.length < 3) return json({ error: "Write the reason." }, 400);
@@ -325,6 +303,37 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     return json({ ok: true });
   }
 
+  if (a === "pro_export_log") {
+    if (role === "staff" && !allowed("staff", "pro_export_log", ctx.perms)) return json({ error: denyMessage("pro_export_log", ctx.perms) }, 403);
+    // exports are built in the browser from data this person can already see; this only records who exported what
+    await logActivity(db, uid, null, "export", `Exported ${String(body.what || "data").slice(0, 40)}${body.from || body.to ? ` (${body.from || "…"} to ${body.to || "…"})` : ""}`);
+    return json({ ok: true });
+  }
+  // ---------------------------------------------- admin only below ---------------------------------
+  if (role !== "admin") return json({ error: "Only an admin can do this." }, 403);
+
+  if (a === "pro_revoke" || a === "pro_restore" || a === "pro_remove") {
+    const e = (await db.from("enrollments").select("id,full_name,email,student_id,status").eq("id", id).maybeSingle()).data;
+    if (!e) return json({ error: "Student not found." }, 404);
+    const reason = String(body.reason || "").trim().slice(0, 300);
+    if (reason.length < 3) return json({ error: "Write a short reason (it is kept in the activity log)." }, 400);
+    if (!confirmOk(a, body)) return json({ error: `Type ${a === "pro_revoke" ? "REVOKE" : "DELETE"} to confirm.`, code: "confirm" }, 400);
+    if (a === "pro_remove") {
+      if (e.status !== "pending") return json({ error: "Only a pending registration can be removed. Revoke an active student instead." }, 400);
+      await logActivity(db, uid, null, "student_removed", `Removed pending registration ${e.full_name || e.email}${e.student_id ? " (" + e.student_id + ")" : ""}: ${reason}`, { enrollment_id: e.id });
+      const r = await db.from("enrollments").delete().eq("id", id).eq("status", "pending"); if (r.error) return json({ error: r.error.message }, 400);
+      return json({ ok: true });
+    }
+    const to = a === "pro_revoke" ? "revoked" : "active";
+    if (a === "pro_revoke" && e.status !== "active" && e.status !== "expired") return json({ error: "Only an active student can be revoked." }, 400);
+    if (a === "pro_restore" && e.status !== "revoked") return json({ error: "This student is not revoked." }, 400);
+    const r = await db.from("enrollments").update({ status: to }).eq("id", id).eq("status", e.status).select("id,end_date").maybeSingle();
+    if (r.error || !r.data) return json({ error: r.error?.message || "It changed meanwhile. Reload." }, 409);
+    await logActivity(db, uid, id, a === "pro_revoke" ? "revoked" : "restored", (a === "pro_revoke" ? "Access revoked: " : "Access restored: ") + reason);
+    ctx.pingSheets?.();
+    return json({ ok: true, status: to, end_date: r.data.end_date });
+  }
+
   if (a === "pro_role_set") {
     const target = String(body.user_id || ""), r0 = String(body.role || "");
     if (!["user", "staff", "admin"].includes(r0)) return json({ error: "Pick user, staff or admin." }, 400);
@@ -340,9 +349,10 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
   if (a === "pro_accounts") {
     const prof = (await db.from("profiles").select("*").order("created_at", { ascending: false }).limit(2000)).data || [];
     const meta = new Map<string, any>(((await db.from("account_meta").select("*")).data || []).map((m: any) => [m.user_id, m]));
+    const staffP = new Map<string, any>(((await db.from("staff_permissions").select("*")).data || []).map((m: any) => [m.user_id, m]));
     const users = new Map<string, any>(); for (let page = 1; page <= 20; page++) { const r = await db.auth.admin.listUsers({ page, perPage: 200 }); const l = r.data?.users || []; for (const u of l) users.set(u.id, u); if (l.length < 200) break; }
     const enr = (await db.from("enrollments").select("email,status").limit(5000)).data || [];
-    return json({ ok: true, me: uid, rows: prof.map((p: any) => { const u = users.get(p.id) || {}; const em = String(u.email || "").toLowerCase(); return { id: p.id, username: p.username, full_name: p.full_name, country: p.country, phone: p.phone, role: p.role, created_at: p.created_at, email: em, confirmed: !!u.email_confirmed_at, last_sign_in_at: u.last_sign_in_at || null, is_test: !!meta.get(p.id)?.is_test, enrolled: enr.filter((x: any) => x.email === em).map((x: any) => x.status) }; }) });
+    return json({ ok: true, me: uid, rows: prof.map((p: any) => { const u = users.get(p.id) || {}; const em = String(u.email || "").toLowerCase(); const sp = p.role === "staff" ? parsePerms(staffP.get(p.id)) : null; return { id: p.id, username: p.username, full_name: p.full_name, country: p.country, phone: p.phone, role: p.role, created_at: p.created_at, email: em, confirmed: !!u.email_confirmed_at, last_sign_in_at: u.last_sign_in_at || null, is_test: !!meta.get(p.id)?.is_test, enrolled: enr.filter((x: any) => x.email === em).map((x: any) => x.status), perms: sp, disabled: !!(sp && sp.disabled) }; }) });
   }
   if (a === "pro_account_test") {
     const target = String(body.user_id || ""); if (target === uid) return json({ error: "That's your own account." }, 400);
@@ -387,10 +397,67 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     ctx.pingSheets?.();
     return json({ ok: true, deleted: es.length, files: removed });
   }
-  if (a === "pro_export_log") {
-    // exports are built in the browser from data the admin can already read; this only records who exported what
-    await logActivity(db, uid, null, "export", `Exported ${String(body.what || "data").slice(0, 40)}${body.from || body.to ? ` (${body.from || "…"} to ${body.to || "…"})` : ""}`);
-    return json({ ok: true });
+  if (a === "pro_staff_invite") {
+    const email = String(body.email || "").trim().toLowerCase();
+    const name = String(body.full_name || "").trim().slice(0, 100);
+    if (!name || name.length < 2) return json({ error: "Enter the staff member's name." }, 400);
+    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email) || email.length > 120) return json({ error: "Enter a valid email address." }, 400);
+    // already has a login? don't invite again — the admin can change the role on the list
+    for (let page = 1; page <= 20; page++) {
+      const r = await db.auth.admin.listUsers({ page, perPage: 200 });
+      const hit = (r.data?.users || []).find((u: any) => String(u.email || "").toLowerCase() === email);
+      if (hit) return json({ error: "This email already has a login. Change their role to staff in the list below." }, 409);
+      if ((r.data?.users || []).length < 200) break;
+    }
+    const inv = await db.auth.admin.inviteUserByEmail(email, { data: { full_name: name } });
+    if (inv.error) return json({ error: "Could not send the invite. Try again." }, 400);
+    const id = inv.data?.user?.id;
+    if (!id) return json({ error: "Could not create the account. Try again." }, 400);
+    // invite creates the auth user (and handle_new_user creates the profile). Promote to staff (all perms off).
+    const up = await db.from("profiles").update({ role: "staff", full_name: name }).eq("id", id);
+    if (up.error) return json({ error: up.error.message }, 400);
+    await logActivity(db, uid, null, "staff_invited", `Invited ${name} as staff (all permissions off)`, { user_id: id });
+    return json({ ok: true, id, invited: true });
   }
+  if (a === "pro_staff_perms") {
+    const target = String(body.user_id || "");
+    if (!target) return json({ error: "Pick a staff member." }, 400);
+    const pr = (await db.from("profiles").select("role,username,full_name").eq("id", target).maybeSingle()).data;
+    if (!pr) return json({ error: "Account not found." }, 404);
+    if (pr.role !== "staff") return json({ error: "Permissions can only be set on a staff account." }, 400);
+    const cur = parsePerms((await db.from("staff_permissions").select("*").eq("user_id", target).maybeSingle()).data);
+    const next = emptyPerms();
+    next.disabled = typeof body.disabled === "boolean" ? !!body.disabled : cur.disabled;
+    const src = body.perms && typeof body.perms === "object" ? body.perms : body;
+    for (const k of PERM_KEYS) next[k] = typeof src[k] === "boolean" ? !!src[k] : cur[k];
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: uid, disabled: next.disabled };
+    for (const k of PERM_KEYS) patch[k] = next[k];
+    const up = await db.from("staff_permissions").upsert({ user_id: target, ...patch });
+    if (up.error) return json({ error: up.error.message }, 400);
+    const changed: string[] = [];
+    for (const k of PERM_KEYS) if (cur[k] !== next[k]) changed.push(`${k} ${cur[k] ? "on" : "off"} → ${next[k] ? "on" : "off"}`);
+    if (cur.disabled !== next.disabled) changed.push(`disabled ${cur.disabled ? "on" : "off"} → ${next.disabled ? "on" : "off"}`);
+    const who = pr.full_name || pr.username;
+    await logActivity(db, uid, null, "staff_permissions", changed.length ? `Permissions for ${who}: ${changed.join(", ")}`.slice(0, 500) : `Permissions for ${who} saved (no change)`, { user_id: target, before: cur, after: next });
+    return json({ ok: true, perms: next, disabled: next.disabled });
+  }
+  if (a === "pro_staff_disable") {
+    const target = String(body.user_id || "");
+    if (!target) return json({ error: "Pick a staff member." }, 400);
+    if (target === uid) return json({ error: "You can't disable your own access here." }, 400);
+    const pr = (await db.from("profiles").select("role,username,full_name").eq("id", target).maybeSingle()).data;
+    if (!pr || pr.role !== "staff") return json({ error: "That account is not a staff member." }, 400);
+    const on = !!body.on;
+    const now = new Date().toISOString();
+    const exist = (await db.from("staff_permissions").select("user_id").eq("user_id", target).maybeSingle()).data;
+    const up = exist
+      ? await db.from("staff_permissions").update({ disabled: on, updated_at: now, updated_by: uid }).eq("user_id", target)
+      : await db.from("staff_permissions").insert({ user_id: target, disabled: on, updated_at: now, updated_by: uid });
+    if (up.error) return json({ error: up.error.message }, 400);
+    const who = pr.full_name || pr.username;
+    await logActivity(db, uid, null, on ? "staff_disabled" : "staff_enabled", `${who} ${on ? "disabled" : "enabled"}`, { user_id: target });
+    return json({ ok: true, disabled: on });
+  }
+
   return json({ error: "unknown action" }, 400);
 }
