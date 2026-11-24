@@ -1,14 +1,16 @@
 // deno test tests/admin-pro.test.ts — admin portal upgrade (WD-3): roles, reminders, discounts, proof paths, webhook signature, dashboard, activity summaries.
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
-import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, type PermKey } from "../supabase/functions/admission/prologic.ts";
+import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, staffInfoSaveError, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
 import { summarize } from "../supabase/functions/admission/audit.ts";
 
 const on = (...ks: PermKey[]) => { const p = emptyPerms(); for (const k of ks) p[k] = true; return p; };
 Deno.test("staff actions are off by default and follow per-staff permissions; admin-only stays admin-only", () => {
-  assert(allowed("staff", "pro_dashboard")); assert(allowed("staff", "status", emptyPerms()));
+  assert(allowed("staff", "status", emptyPerms()), "portal shell stays available");
+  assertFalse(allowed("staff", "pro_dashboard"), "all-off staff cannot open the dashboard");
+  assertFalse(allowed("staff", "pro_dashboard", emptyPerms()));
   assertFalse(allowed("staff", "pro_dashboard", { ...emptyPerms(), disabled: true }), "disabled staff are blocked");
   const map: [string, PermKey][] = [
-    ["pro_students", "view_students"], ["pro_reveal", "see_contacts"],
+    ["pro_dashboard", "view_students"], ["pro_students", "view_students"], ["pro_reveal", "see_contacts"],
     ["student_info_get", "edit_student_info"], ["student_info_save", "edit_student_info"],
     ["pro_add_student", "add_students"], ["record_payment", "record_payments"],
     ["pro_proof_upload", "record_payments"], ["pro_proof_attach", "record_payments"], ["pro_payment_ref", "record_payments"],
@@ -36,6 +38,54 @@ Deno.test("staff actions are off by default and follow per-staff permissions; ad
   assert(t.view_students && t.batches && t.attendance && t.notes_tags && !t.record_payments && !t.see_contacts);
   assert(d.see_contacts && d.record_payments && d.open_payment_slips && d.add_students && !d.discounts_refunds && !d.export && !d.view_activity);
   assertFalse(parsePerms(null).view_students); assert(parsePerms({ view_students: true, disabled: 1 }).disabled);
+});
+Deno.test("B20-1: staff student_info_get masks contacts without see_contacts, hides CNIC/DOB/address, redacts history; save rejects login_email", () => {
+  const raw = {
+    ok: true,
+    fields: [
+      { key: "full_name", label: "Full name" }, { key: "dob", label: "Date of birth" }, { key: "cnic", label: "CNIC / ID" },
+      { key: "email", label: "Email" }, { key: "phone", label: "Mobile" }, { key: "address", label: "Address" },
+      { key: "gender", label: "Gender" },
+    ],
+    registration: { full_name: "Ali Khan", dob: "1995-02-11", cnic: "35202-1234567-1", email: "ali.khan@gmail.com", phone: "03001234567", address: "Street 1, Lahore" },
+    overrides: { email: "ali.new@gmail.com", cnic: "35202-9999999-1" },
+    effective: { full_name: "Ali Khan", dob: "1995-02-11", cnic: "35202-9999999-1", email: "ali.new@gmail.com", phone: "03001234567", address: "Street 1, Lahore", gender: "Male" },
+    login_email: "ali.khan@gmail.com",
+    history: [{ kind: "student_info", reason: "typo", old_values: { cnic: "35202-1", email: "old@x.com" }, new_values: { cnic: "35202-2", email: "new@x.com" }, changed_by: "Admin" }],
+  };
+  const masked = shapeStudentInfoGet(raw, "staff", on("edit_student_info"));
+  assertFalse(JSON.stringify(masked).includes("35202"), "CNIC never leaves for staff");
+  assertFalse(JSON.stringify(masked).includes("1995-02-11"), "DOB stays admin-only");
+  assertFalse(JSON.stringify(masked).includes("Street 1"), "address stays admin-only");
+  assertFalse((masked.fields || []).some((f: any) => ["dob", "cnic", "address"].includes(f.key)));
+  assertEquals(masked.effective.full_name, "Ali Khan");
+  assertEquals(masked.effective.email, maskEmail("ali.new@gmail.com"));
+  assertEquals(masked.effective.phone, maskPhone("03001234567"));
+  assertEquals(masked.login_email, maskEmail("ali.khan@gmail.com"));
+  assertFalse(masked.contacts_shown);
+  const mh = masked.history!; assertEquals(mh[0].old_values.email, "•••");
+  assertFalse("cnic" in (mh[0].old_values || {}));
+  assertFalse(JSON.stringify(mh).includes("old@x.com"));
+
+  const shown = shapeStudentInfoGet(raw, "staff", on("edit_student_info", "see_contacts"));
+  assertEquals(shown.effective.email, "ali.new@gmail.com");
+  assertEquals(shown.login_email, "ali.khan@gmail.com");
+  assert(shown.contacts_shown);
+  assertFalse(JSON.stringify(shown).includes("35202"), "CNIC stays hidden even with see_contacts");
+  assertEquals(shown.history![0].new_values.email, "•••", "history values stay redacted, like pro_activity");
+
+  const admin = shapeStudentInfoGet(raw, "admin", null);
+  assertEquals(admin.effective.cnic, "35202-9999999-1");
+  assertEquals(admin.history![0].old_values.cnic, "35202-1");
+
+  assertEquals(staffInfoSaveError({ login_email: "x@y.com", info: { full_name: "A" } }, "staff", on("edit_student_info", "see_contacts")), "You cannot change the login email.");
+  assertEquals(staffInfoSaveError({ info: { cnic: "35202-1" } }, "staff", on("edit_student_info", "see_contacts")), "You cannot change the CNIC, date of birth or address. Ask an admin.");
+  assertEquals(staffInfoSaveError({ info: { dob: "1995-02-11" } }, "staff", on("edit_student_info")), "You cannot change the CNIC, date of birth or address. Ask an admin.");
+  assertEquals(staffInfoSaveError({ info: { address: "x" } }, "staff", on("edit_student_info")), "You cannot change the CNIC, date of birth or address. Ask an admin.");
+  assertEquals(staffInfoSaveError({ info: { email: "a@b.com" } }, "staff", on("edit_student_info")), "You cannot change contact details. Ask an admin.");
+  assertEquals(staffInfoSaveError({ info: { email: "a@b.com", full_name: "A" } }, "staff", on("edit_student_info", "see_contacts")), null);
+  assertEquals(staffInfoSaveError({ info: { full_name: "A" } }, "staff", on("edit_student_info")), null);
+  assertEquals(staffInfoSaveError({ login_email: "x@y.com" }, "admin", null), null, "admins are not blocked by this guard");
 });
 Deno.test("reminder schedule parsing and stages", () => {
   assertEquals(parseOffsets("-3,0,3"), [-3, 0, 3]); assertEquals(parseOffsets(" -5, -1 ,2"), [-5, -1, 2]);

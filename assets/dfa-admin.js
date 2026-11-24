@@ -148,13 +148,13 @@ async function init(){var p=await DFA.profile();
   openFilter:function(f){ST.filter=f||'all';ST.q='';ST.page=0;if(location.hash==='#students')enr();else openTab('en')}});
  var tabs=TABS.filter(function(t){return !t[3]||ROLE==='admin'}).filter(function(t){return PRO||['en','rv','us','sc','st'].indexOf(t[0])>=0}).filter(function(t){
   if(ROLE!=='staff')return true;
-  if(t[0]==='db'||t[0]==='rv')return true;
-  if(t[0]==='en')return !!(PERMS&&PERMS.view_students);
+  if(t[0]==='db'||t[0]==='rv'||t[0]==='en')return !!(PERMS&&PERMS.view_students);
   if(t[0]==='bt')return !!(PERMS&&(PERMS.batches||PERMS.attendance));
   if(t[0]==='rm')return !!(PERMS&&PERMS.reminders);
   if(t[0]==='ac')return !!(PERMS&&PERMS.view_activity);
   return false;
  });
+ if(ROLE==='staff'&&!tabs.length){app.innerHTML='<div class="ac-card"><h2>No access yet</h2><p>An admin has not switched on any sections for you yet. If you think this is a mistake, please ask an admin. <a href="account.html">Go to your account</a>.</p></div>';return}
  app.innerHTML='<div class="adm-top">'+(ROLE==='staff'?'<span class="adm-tag adm-role" title="You can use the sections an admin has switched on for you. Contacts stay hidden until you click them (logged). Accounts, Security and Settings are for admins.">Staff</span>':'')+'<label class="adm-tabsel-w"><span class="sr-only">Section</span><select class="adm-tabsel" aria-label="Section" title="Go to another section of the admin portal.">'+tabs.map(function(t){return '<option value="'+t[0]+'">'+t[1]+'</option>'}).join('')+'</select></label></div><div class="ac-tabs adm-tabs" role="tablist">'+tabs.map(function(t,i){return '<button type="button" role="tab" aria-selected="'+(i===0)+'" data-t="'+t[0]+'"'+T(H.tabs[t[0]]||t[1])+'>'+t[1]+'</button>'}).join('')+'</div><div id="adm-body"></div>';
  var RUN={en:function(){enr()},st:settings,sc:security};if(!PRO){RUN.rv=reviews;RUN.us=users}else Object.keys(PRO.tabs).forEach(function(k){RUN[k]=PRO.tabs[k]});
  var NAME={};tabs.forEach(function(t){NAME[t[0]]=t[2]});var sel=app.querySelector('.adm-tabsel');

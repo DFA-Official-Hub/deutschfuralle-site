@@ -9,7 +9,7 @@ import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS a
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { handlePro, logActivity } from "./pro.ts";
 import { withAudit } from "./audit.ts";
-import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, type StaffPerms } from "./prologic.ts";
+import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, shapeStudentInfoGet, staffInfoSaveError, type StaffPerms } from "./prologic.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
@@ -834,16 +834,24 @@ const serveReq = withAudit(async (req) => {
       pingSheets(); return json({ ok: true, due_date: due });
     }
     if (body.action === "student_info_get") {
-      // Admin: what the documents will show, where each value comes from (registration form or staff edit), and the change history.
+      // What the documents will show, where each value comes from (registration form or staff edit), and the change history.
+      // Staff: contacts only with see_contacts (masked otherwise); CNIC, DOB and address stay admin-only; history values redacted; every view is logged.
       const e = (await db.from("enrollments").select("id,full_name,email,phone,sheet_row,student_info,student_id,certificate_no,certificate_revoked_at").eq("id", Number(body.id)).maybeSingle()).data;
       if (!e) return json({ error: "Student not found." }, 404);
       const reg = fromRegistration(await loadDetails(db, e));
       const hist = (await db.from("enrollment_audit").select("kind,reason,old_values,new_values,changed_at,changed_by,payment_id").eq("enrollment_id", e.id).order("changed_at", { ascending: false }).limit(30)).data || [];
       const ids = [...new Set(hist.map((h: any) => h.changed_by).filter(Boolean))];
       const names = new Map(((ids.length ? (await db.from("profiles").select("id,username,full_name").in("id", ids)).data : []) || []).map((p: any) => [p.id, p.full_name || p.username || "Admin"]));
-      return json({ ok: true, fields: INFO_FIELDS.map((f) => ({ key: f, label: infoLabel(f) })), registration: reg, has_registration: Object.values(reg).some(Boolean), overrides: e.student_info || {}, effective: effective(reg, e.student_info, e), login_email: e.email, has_certificate: !!(e.certificate_no && !e.certificate_revoked_at), history: hist.map((h: any) => ({ ...h, changed_by: names.get(h.changed_by) || "Admin" })) });
+      const raw = { ok: true, fields: INFO_FIELDS.map((f) => ({ key: f, label: infoLabel(f) })), registration: reg, has_registration: Object.values(reg).some(Boolean), overrides: e.student_info || {}, effective: effective(reg, e.student_info, e), login_email: e.email, has_certificate: !!(e.certificate_no && !e.certificate_revoked_at), history: hist.map((h: any) => ({ ...h, changed_by: names.get(h.changed_by) || "Admin" })) };
+      if (role === "staff") {
+        const see = !!(perms && perms.see_contacts);
+        await logActivity(db, u.user.id, e.id, "info_viewed", see ? "Student details viewed (contacts shown)" : "Student details viewed", { see_contacts: see });
+      }
+      return json(shapeStudentInfoGet(raw, role, perms));
     }
     if (body.action === "student_info_save") {
+      const blocked = staffInfoSaveError(body, role, perms);
+      if (blocked) return json({ error: blocked }, 403);
       const e = (await db.from("enrollments").select("id,full_name,email,phone,sheet_row,student_info,student_id,invoice_no,certificate_no,certificate_revoked_at").eq("id", Number(body.id)).maybeSingle()).data;
       if (!e) return json({ error: "Student not found." }, 404);
       const reg = fromRegistration(await loadDetails(db, e));

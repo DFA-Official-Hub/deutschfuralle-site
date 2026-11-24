@@ -44,7 +44,7 @@ Object.assign(H,{
  staffEmail:'The email they will use to sign in. An invite is sent to this address.',
  staffPerms:'Choose what this staff member may do. Everything is off until you switch it on. Changes are saved in the activity log.',
  presetTeacher:'Switch on student list, batches, attendance, notes and tags. Everything else stays off.',
- presetDesk:'Switch on student list, contacts, student details, adding students, payments, slips, notes, reminders and documents. Discounts, refunds, export and the activity log stay off.',
+ presetDesk:'Switch on student list, contacts, name and contact edits, adding students, payments, slips, notes, reminders and documents. CNIC, date of birth and address stay with admins. Discounts, refunds, export and the activity log stay off.',
  presetClear:'Turn every permission off for this person.',
  staffDisable:'A disabled staff member can still sign in to their account, but cannot use the admin portal until you enable them again.',
  staffSave:'Save these permissions. The change is written to the activity log.',
@@ -526,7 +526,7 @@ async function accountsTab(){var B=body();B.innerHTML='<h3>Accounts</h3>'+skel(5
 var PERM_UI=[
   ['view_students','View students','See the student list and cards. Contacts stay hidden until they are revealed (and each reveal is logged).'],
   ['see_contacts','See contact details','Click to reveal a student\'s email or phone. Each reveal is logged.'],
-  ['edit_student_info','Edit student details','Change the details printed on the admission form and receipts (name, date of birth, CNIC, address).'],
+  ['edit_student_info','Edit student details','Change the name (and, if they can see contacts, email and phone) printed on the admission form and receipts. CNIC, date of birth and address stay with admins.'],
   ['add_students','Add students','Add a new pending registration by name, email, course and phone.'],
   ['record_payments','Record payments','Record a payment and attach a payment slip.'],
   ['open_payment_slips','Open payment slips','Open a saved payment slip. Each open is logged.'],

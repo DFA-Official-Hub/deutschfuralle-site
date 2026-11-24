@@ -41,6 +41,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
 
   // ---- dashboard -------------------------------------------------------------------------------
   if (a === "pro_dashboard") {
+    if (role === "staff" && !allowed("staff", "pro_dashboard", ctx.perms)) return json({ error: denyMessage("pro_dashboard", ctx.perms) }, 403);
     const t = ctx.today(), [y, m] = t.split("-").map(Number), from = new Date(Date.UTC(y, m - 7, 1)).toISOString().slice(0, 10);
     const [enr, pays, adjs, tests] = await Promise.all([
       db.from("enrollments").select("id,full_name,student_id,batch_code,phone,email,status,fee_total,amount_paid,balance_due,due_date,created_at,installment_plan").limit(5000),

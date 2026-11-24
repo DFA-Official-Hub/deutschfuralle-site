@@ -56,4 +56,12 @@ assert.ok(/grid-template-columns:1fr/.test(css));
 assert.ok(/staff_invited/.test(fn) && /action, `Permissions for/.test(fn) || /"staff_perms"/.test(fn) || /permissions_changed|staff_perms|Permissions for \$\{who\}/.test(fn));
 assert.ok(/staff_disabled|staff_enabled/.test(fn));
 
+// 7. B20-2: Dashboard and Reviews need view_students; zero permissions show a no-access screen
+assert.ok(/t\[0\]==='db'\|\|t\[0\]==='rv'\|\|t\[0\]==='en'\)return !!\(PERMS&&PERMS\.view_students\)/.test(adm));
+assert.ok(/No access yet/.test(adm));
+assert.ok(/CNIC, date of birth and address stay with admins/.test(pro));
+assert.equal(/"view_fees"/.test(logic) || /view_fees\s*:/.test(logic), false, 'no view_fees permission key; dashboard uses view_students');
+assert.ok(/pro_dashboard: "view_students"/.test(logic));
+
 console.log('staff-permissions-ui: all checks passed');
+

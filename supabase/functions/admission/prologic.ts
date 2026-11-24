@@ -24,7 +24,8 @@ export function parsePerms(row: any): StaffPerms {
   o.disabled = !!row.disabled;
   return o;
 }
-/** Teacher: students, batches, attendance, notes. Front desk: contacts, adds, payments, slips, docs, reminders, notes. */
+/** Teacher: students, batches, attendance, notes. Front desk: contacts, name/contact edits, adds, payments, slips, docs, reminders, notes.
+ *  CNIC, date of birth and address stay admin-only (no separate flag). */
 export const STAFF_PRESETS: Record<string, Partial<StaffPerms>> = {
   teacher: { view_students: true, batches: true, attendance: true, notes_tags: true },
   front_desk: {
@@ -40,13 +41,15 @@ export function applyPreset(name: string): StaffPerms {
 }
 
 /** Existing admission actions a staff member may call *if* they have the matching permission.
- *  "any" means a signed-in, not-disabled staff member may call it (portal shell). Everything
- *  else (activate, plans, corrections, certificates, settings, revoke, test delete, role changes,
- *  staff management…) stays admin only. */
+ *  "any" means a signed-in, not-disabled staff member may call it (portal shell: status).
+ *  pro_dashboard uses view_students (not a separate view_fees flag): the dashboard shows fee
+ *  totals and named overdue/soon lists, so it is the same student-list permission.
+ *  Everything else (activate, plans, corrections, certificates, settings, revoke, test delete,
+ *  role changes, staff management…) stays admin only. */
 export const ACTION_PERM: Record<string, PermKey | "any"> = {
   status: "any",
   cert_images_status: "any",
-  pro_dashboard: "any",
+  pro_dashboard: "view_students",
   pro_students: "view_students",
   pro_reveal: "see_contacts",
   student_info_get: "edit_student_info",
@@ -117,6 +120,68 @@ export function maskEmail(v: unknown): string {
   return s[0] + "•••@" + (dot > 0 ? dom[0] + "•••" + dom.slice(dot) : "•••");
 }
 export function maskPhone(v: unknown): string { const s = String(v || "").replace(/\s+/g, ""); if (!s) return ""; return s.length < 5 ? "•••" : s.slice(0, 3) + "•••" + s.slice(-2); }
+/** CNIC, DOB and address (plus city/state/country, which are part of the address) stay admin-only. No separate flag. */
+export const ADMIN_ONLY_INFO_FIELDS = ["dob", "cnic", "address", "city", "state", "country"] as const;
+/** Contact fields on the student-details form. Staff need see_contacts to receive the raw values. */
+export const CONTACT_INFO_FIELDS = ["email", "phone"] as const;
+function isAdminOnlyInfo(k: string) { return (ADMIN_ONLY_INFO_FIELDS as readonly string[]).includes(k); }
+function isContactInfo(k: string) { return (CONTACT_INFO_FIELDS as readonly string[]).includes(k); }
+/** Mask or drop fields on a registration / override / effective bag for a staff response. */
+export function redactInfoRecord(obj: Record<string, any> | null | undefined, seeContacts: boolean): Record<string, any> {
+  const o: Record<string, any> = { ...(obj || {}) };
+  for (const k of ADMIN_ONLY_INFO_FIELDS) delete o[k];
+  if (!seeContacts) {
+    if (o.email) o.email = maskEmail(o.email);
+    if (o.phone) o.phone = maskPhone(o.phone);
+  }
+  return o;
+}
+/** enrollment_audit old/new for staff: keys only (values redacted), admin-only fields omitted. Same idea as pro_activity. */
+export function redactInfoHistoryValues(v: Record<string, any> | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v || typeof v !== "object") return out;
+  for (const k of Object.keys(v)) {
+    if (isAdminOnlyInfo(k)) continue;
+    out[k] = "•••";
+  }
+  return out;
+}
+export function redactInfoHistory<T extends { old_values?: any; new_values?: any }>(hist: T[] | null | undefined, role: string): T[] {
+  if (role === "admin") return hist || [];
+  return (hist || []).map((h) => ({ ...h, old_values: redactInfoHistoryValues(h.old_values), new_values: redactInfoHistoryValues(h.new_values) }));
+}
+/** Shape student_info_get for the caller. Admin gets the raw payload; staff get contacts only with see_contacts, and never CNIC/DOB/address. */
+export function shapeStudentInfoGet(raw: { fields: { key: string; label: string }[]; registration: any; overrides: any; effective: any; login_email?: string | null; history?: any[]; [k: string]: any }, role: string, perms?: StaffPerms | null) {
+  if (role === "admin") return raw;
+  const see = !!(perms && perms.see_contacts && !perms.disabled);
+  const fields = (raw.fields || []).filter((f) => !isAdminOnlyInfo(f.key));
+  const login = raw.login_email ? (see ? raw.login_email : maskEmail(raw.login_email)) : raw.login_email;
+  return {
+    ...raw,
+    fields,
+    registration: redactInfoRecord(raw.registration, see),
+    overrides: redactInfoRecord(raw.overrides, see),
+    effective: redactInfoRecord(raw.effective, see),
+    login_email: login,
+    history: redactInfoHistory(raw.history, role),
+    contacts_shown: see,
+  };
+}
+/** Server-side save guard for staff. Returns an error message, or null if the save may continue. */
+export function staffInfoSaveError(body: any, role: string | null | undefined, perms?: StaffPerms | null): string | null {
+  if (role !== "staff") return null;
+  if (body && (body.login_email !== undefined || body.loginEmail !== undefined)) return "You cannot change the login email.";
+  const info = body && body.info && typeof body.info === "object" ? body.info : {};
+  for (const k of Object.keys(info)) {
+    if (isAdminOnlyInfo(k)) return "You cannot change the CNIC, date of birth or address. Ask an admin.";
+  }
+  if (!perms?.see_contacts) {
+    for (const k of Object.keys(info)) {
+      if (isContactInfo(k)) return "You cannot change contact details. Ask an admin.";
+    }
+  }
+  return null;
+}
 /** Columns of enrollments a staff list may carry. No student_info (CNIC, DOB, address), notes, raw email/phone or files. */
 export const STAFF_ENR_COLS = "id,full_name,student_id,course_code,course_label,batch_id,batch_code,status,payment_plan,fee_total,amount_paid,balance_due,due_date,created_at,start_date,end_date,activated_at,invoice_no,installment_plan,reminder_stage,source,last_docs_sent_at,last_docs_sent_items,certificate_no,certificate_issued_at,certificate_revoked_at,certificate_hold,docs_error,email,phone";
 export const STAFF_PAY_COLS = "id,enrollment_id,invoice_no,installment_no,installments,is_final,amount,paid_on,method,installment_label,voided_at,revision,reference,proof_file,proof_url,created_at";

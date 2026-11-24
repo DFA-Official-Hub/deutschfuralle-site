@@ -248,3 +248,12 @@ Deno.test("R4-1: staffRow redacts docs_error; used by the staff student list", (
   assertEquals(staffRow({ id: 1, docs_error: "" }).docs_error, null);
   assertMatch(PRO, /staffRow/);
 });
+
+Deno.test("B20-2: all-off staff gets 403 on the dashboard; view_students is allowed", async () => {
+  const db = fakeDb(() => ({ data: [] }));
+  const off = await handlePro(db, { action: "pro_dashboard" }, staff, "staff", ctx);
+  assertEquals(off!.status, 403);
+  const on = await handlePro(db, { action: "pro_dashboard" }, staff, "staff", { ...ctx, perms: { ...emptyPerms(), view_students: true } });
+  // fakeDb returns empty lists; the handler should still 200 once permitted
+  assertEquals(on!.status, 200);
+});
