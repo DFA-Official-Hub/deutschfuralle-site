@@ -9,7 +9,7 @@ import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS a
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { handlePro, logActivity } from "./pro.ts";
 import { withAudit } from "./audit.ts";
-import { allowed, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, STAFF_PAYMENT_ACTIONS } from "./prologic.ts";
+import { allowed, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, STAFF_PAYMENT_ACTIONS, redactDocs, redactMailRows, isRefundGuard } from "./prologic.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
@@ -739,17 +739,17 @@ const serveReq = withAudit(async (req) => {
       return json({ ok: true });
     }
     if (body.action === "status") return json({ sending: (await sendingOn()) ? "on" : "off" });
-    if (body.action === "docs_status") return json(await docsStatus(db, Number(body.id)));
+    if (body.action === "docs_status") return json(redactDocs(await docsStatus(db, Number(body.id)), role));
     if (body.action === "process_docs") {
       const id = Number(body.id);
       await enqueueDocJobs(db, id);
       const r: any = await processNextDocJob(db, id, u.user.id);
       return json(r, r.code || 200);
     }
-    if (body.action === "resend") { const r: any = await resendDocs(db, Number(body.id), Array.isArray(body.items) ? body.items.map(String) : [], u.user.id); return json(r, r.code || 200); }
+    if (body.action === "resend") { const r: any = await resendDocs(db, Number(body.id), Array.isArray(body.items) ? body.items.map(String) : [], u.user.id); return json(redactDocs(r, role), r.code || 200); }
     if (body.action === "email_log") {
       const r = await db.from("email_log").select("kind,items,status,created_at,error").eq("enrollment_id", Number(body.id)).order("created_at", { ascending: false }).limit(20);
-      return json({ log: r.data || [] });
+      return json({ log: redactMailRows(r.data || [], role) });
     }
     if (body.action === "record_payment") {
       const id = Number(body.id), amount = Math.round(Number(body.amount));
@@ -918,7 +918,7 @@ const serveReq = withAudit(async (req) => {
       const u1 = await db.from("payments").update(pp).eq("id", pid).eq("revision", rev).is("voided_at", null).select("id").maybeSingle();
       if (u1.error) {
         // payments_refund_guard (migration 20261125140000): the payment can't drop below the live refunds
-        if (/refunds against it/i.test(u1.error.message || "")) return json({ error: "This payment has refunds against it. Void the refund first.", code: "refund_guard" }, 409);
+        if (isRefundGuard(u1.error)) return json({ error: "This payment has refunds against it. Void the refund first.", code: "refund_guard" }, 409);
         return json({ error: "Could not update the payment: " + u1.error.message }, 500);
       }
       if (!u1.data) return json({ error: "This payment was changed by someone else just now. Reload the page and check it before correcting again." }, 409);

@@ -1,6 +1,6 @@
 // Admin portal upgrade (WD-3): actions behind the "pro_" prefix, plus the activity log writer used by index.ts.
 // Every caller is already signed in, confirmed and admin/staff (index.ts checks that and allowed() before calling).
-import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, searchOr, confirmOk, sameJson, STAFF_ENR_COLS, STAFF_PAY_COLS, type Role } from "./prologic.ts";
+import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, searchOr, confirmOk, sameJson, STAFF_MAIL_ERR, STAFF_ENR_COLS, STAFF_PAY_COLS, type Role } from "./prologic.ts";
 import { method as payMethod, type Inst } from "./plan.ts";
 
 type Ctx = { json: (b: unknown, s?: number) => Response; today: () => string; pingSheets?: () => void };
@@ -198,7 +198,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const r = await q; if (r.error) return json({ error: r.error.message }, 500);
     const eids = [...new Set((r.data || []).map((x: any) => x.enrollment_id).filter(Boolean))];
     const en = new Map(((eids.length ? (await db.from("enrollments").select("id,full_name,student_id").in("id", eids)).data : []) || []).map((e: any) => [e.id, e]));
-    return json({ ok: true, rows: (r.data || []).map((x: any) => ({ id: x.id, enrollment_id: x.enrollment_id, kind: x.kind, items: x.items, status: x.status, delivery: x.delivery, delivery_at: x.delivery_at, error: role === "admin" ? x.error : (x.error ? "Not delivered (an admin can see the details)" : null), created_at: x.created_at, student: en.get(x.enrollment_id) || null })) });
+    return json({ ok: true, rows: (r.data || []).map((x: any) => ({ id: x.id, enrollment_id: x.enrollment_id, kind: x.kind, items: x.items, status: x.status, delivery: x.delivery, delivery_at: x.delivery_at, error: role === "admin" ? x.error : (x.error ? STAFF_MAIL_ERR : null), created_at: x.created_at, student: en.get(x.enrollment_id) || null })) });
   }
 
   // ---- payment reference + proof file -----------------------------------------------------------

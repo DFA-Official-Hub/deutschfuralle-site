@@ -1,6 +1,6 @@
 // deno test tests/admin-hardening.test.ts — fixes from the Head of Tech review of PR #12 (B1, B2 and the money/security list).
 import { assert, assertEquals, assertFalse, assertMatch } from "jsr:@std/assert@1";
-import { searchOr, verifySvix, safeEqual, maskEmail, maskPhone, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, allowed } from "../supabase/functions/admission/prologic.ts";
+import { redactDocs, redactMailRows, isRefundGuard, STAFF_MAIL_ERR, STAFF_DOC_ERR, searchOr, verifySvix, safeEqual, maskEmail, maskPhone, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, allowed } from "../supabase/functions/admission/prologic.ts";
 import { handlePro } from "../supabase/functions/admission/pro.ts";
 
 const src = (p: string) => Deno.readTextFileSync(new URL("../" + p, import.meta.url));
@@ -202,8 +202,36 @@ Deno.test("staff payment slips behind the flag and logged; staff email log hides
   assertFalse(JSON.stringify(st).includes("ali.khan")); assertEquals(st.rows[0].error, "Not delivered (an admin can see the details)");
   const ad = await (await handlePro(db2, { action: "pro_email_log" }, { id: "a" }, "admin", ctx))!.json();
   assert(JSON.stringify(ad).includes("550 mailbox"));
-  assertMatch(IDX, /if \(\/refunds against it\/i\.test\(u1\.error\.message \|\| ""\)\) return json\(\{ error: "This payment has refunds against it\. Void the refund first\.", code: "refund_guard" \}, 409\);/);
+  assertMatch(IDX, /if \(isRefundGuard\(u1\.error\)\) return json\(\{ error: "This payment has refunds against it\. Void the refund first\.", code: "refund_guard" \}, 409\);/);
   assertMatch(IDX, /content_type must be one of the documents bucket's allowed MIME types/);
   const M3 = src("supabase/migrations/20261125140000_payment_refund_guard.sql");
   assertMatch(M3, /security definer set search_path to ''/); assertMatch(M3, /for no key update;/); assertMatch(M3, /before update of voided_at, amount on public\.payments/);
+});
+
+Deno.test("R3-1: legacy email_log, docs_status and resend never give staff raw error texts", () => {
+  const rows = [{ kind: "docs", status: "error", error: "550 5.1.1 <ali.khan@gmail.com>: mailbox unknown" }, { kind: "welcome", status: "sent", error: null }];
+  const st = redactMailRows(rows, "staff");
+  assertFalse(JSON.stringify(st).includes("ali.khan")); assertEquals(st[0].error, STAFF_MAIL_ERR); assertEquals(st[1].error, null);
+  assertEquals(redactMailRows(rows, "admin"), rows, "admins keep the details");
+  const ds = { ok: true, docs_error: "Sending failed: 550 ali.khan@gmail.com", jobs: [{ kind: "welcome", status: "error", last_error: "550 <ali.khan@gmail.com>" }, { kind: "receipt", status: "done", last_error: null }], ready: false };
+  const sd = redactDocs(ds, "staff");
+  assertFalse(JSON.stringify(sd).includes("ali.khan")); assertEquals(sd.docs_error, STAFF_DOC_ERR); assertEquals(sd.jobs[0].last_error, STAFF_DOC_ERR); assertEquals(sd.jobs[1].last_error, null);
+  assertEquals(sd.ready, false); assertEquals(sd.jobs[0].status, "error", "status stays so staff know something failed");
+  assertEquals(redactDocs({ error: "Sending failed: 550 ali.khan@gmail.com", code: 500 }, "staff").error, STAFF_DOC_ERR);
+  assertEquals(redactDocs(ds, "admin"), ds);
+  assertEquals(redactDocs({ ok: true, docs_error: null, jobs: [] }, "staff").docs_error, null);
+  // wired into the three staff-callable actions
+  assertMatch(IDX, /body\.action === "docs_status"\) return json\(redactDocs\(await docsStatus\(db, Number\(body\.id\)\), role\)\);/);
+  assertMatch(IDX, /return json\(\{ log: redactMailRows\(r\.data \|\| \[\], role\) \}\);/);
+  assertMatch(IDX, /u\.user\.id\); return json\(redactDocs\(r, role\), r\.code \|\| 200\); \}/);
+  assert(allowed("staff", "email_log") && allowed("staff", "docs_status"), "staff keep the actions, only the texts are hidden");
+});
+
+Deno.test("R3-1: refund guard recognised by SQLSTATE 23514 + hint, not by message text", () => {
+  assert(isRefundGuard({ code: "23514", hint: "DFA_REFUND_GUARD" }));
+  assertFalse(isRefundGuard({ code: "23514", hint: null }), "other check violations (e.g. amount > 0) are not the guard");
+  assertFalse(isRefundGuard({ code: "P0001", hint: "DFA_REFUND_GUARD" }));
+  assertFalse(isRefundGuard({ code: "23514" } as any)); assertFalse(isRefundGuard(null));
+  assertFalse(/refunds against it\/i\.test/.test(IDX), "no message-text matching left");
+  assertMatch(src("supabase/migrations/20261125140000_payment_refund_guard.sql"), /errcode = '23514', hint = 'DFA_REFUND_GUARD'/);
 });
