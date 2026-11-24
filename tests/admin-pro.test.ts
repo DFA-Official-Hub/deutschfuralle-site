@@ -75,6 +75,7 @@ Deno.test("dashboard: month collected minus refunds, outstanding, overdue, next 
 Deno.test("activity summaries for existing actions", () => {
   assertEquals(summarize("record_payment", { id: 1 }, { ok: true, payment: { amount: 5000, invoice_no: "INV-2026-0050", method: "bank", reference: "TID9" }, email: "sent" }), "Installment payment PKR 5,000 (INV-2026-0050) by bank, ref TID9. Receipt email: sent");
   assertEquals(summarize("cert_revoke", { undo: false }, { ok: true }), "Certificate revoked");
+  assertEquals(summarize("cert_revoke", { undo: false, reason: "Did not attend" }, { ok: true }), "Certificate revoked: Did not attend");
   assertEquals(summarize("resend", { items: ["admission"] }, { retry: true }), null, "retries are not logged");
   assertEquals(summarize("resend", { items: ["admission"] }, { error: "x" }), null);
   assertEquals(summarize("regen_docs", { done: [] }, { ok: true, remaining: 2 }), null);

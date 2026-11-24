@@ -281,7 +281,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     if (pr?.role === "admin") return json({ error: "Admin accounts can't be deleted here. Change the role first." }, 400);
     const u = (await db.auth.admin.getUserById(target)).data?.user;
     if (u?.email) { const live = (await db.from("enrollments").select("id,status").eq("email", String(u.email).toLowerCase())).data || []; const tm = await metaOf(db, live.map((x: any) => x.id)); if (live.some((x: any) => !tm.get(x.id)?.is_test)) return json({ error: "This login belongs to a student record that is not marked TEST. Mark or delete that record first." }, 400); }
-    await logActivity(db, uid, null, "account_deleted", `TEST account ${pr?.username || target} deleted`, { user_id: target });
+    await logActivity(db, uid, null, "account_deleted", `TEST account ${pr?.username || target} deleted${body.reason ? ". Reason: " + String(body.reason).slice(0, 300) : ""}`, { user_id: target });
     const r = await db.auth.admin.deleteUser(target); if (r.error) return json({ error: r.error.message }, 400);
     return json({ ok: true });
   }
@@ -299,7 +299,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const es = (await db.from("enrollments").select("id,full_name,email,student_id,admission_file,receipt_file,certificate_file").in("id", ids)).data || [];
     const ps = (await db.from("payments").select("receipt_file,proof_file").in("enrollment_id", ids)).data || [];
     const files = [...es.flatMap((e: any) => [e.admission_file, e.receipt_file]), ...ps.flatMap((p: any) => [p.receipt_file, p.proof_file])].filter((f) => typeof f === "string" && f && !/^https?:/.test(f));
-    for (const e of es) await logActivity(db, uid, null, "test_deleted", `TEST record deleted: ${e.full_name || e.email}${e.student_id ? " (" + e.student_id + ")" : ""}`, { enrollment_id: e.id });
+    for (const e of es) await logActivity(db, uid, null, "test_deleted", `TEST record deleted: ${e.full_name || e.email}${e.student_id ? " (" + e.student_id + ")" : ""}${body.reason ? ". Reason: " + String(body.reason).slice(0, 300) : ""}`, { enrollment_id: e.id });
     const r = await db.from("enrollments").delete().in("id", es.map((e: any) => e.id)); if (r.error) return json({ error: r.error.message }, 400);
     let removed = 0; if (files.length) { const s = await db.storage.from("documents").remove(files); removed = s.data?.length || 0; }
     const cf = es.map((e: any) => e.certificate_file).filter((f: any) => typeof f === "string" && f && !/^https?:/.test(f));
