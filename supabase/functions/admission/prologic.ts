@@ -1,15 +1,80 @@
 // Admin portal upgrade (WD-3): pure helpers, no I/O. Tested by tests/admin-pro.test.ts.
 import { next as nextInst, status as instStatus, type Inst } from "./plan.ts";
+import { FIELDS, cleanOverrides, effective, isoDob, type Field, type Info } from "./student.ts";
 
 /** Roles that may use the admin portal. */
 export type Role = "admin" | "staff";
-/** Existing admission actions staff may call. Everything else (activate, plans, corrections, certificates,
- *  settings, revoke, refunds, exports, test-data deletion…) is admin only. */
-export const STAFF_ACTIONS = new Set([
-  "status", "docs_status", "cert_file_admin", "cert_images_status", "email_log", "resend", "record_payment",
-  "pro_activity", "pro_assign_batch", "pro_reminders", "pro_email_log", "pro_proof_upload", "pro_proof_attach", "pro_proof_url", "pro_payment_ref", "pro_dashboard",
-  "pro_students", "pro_reveal", "pro_add_student",
-]);
+/** Permission keys stored on public.staff_permissions. Every one defaults to off for a new staff member. */
+export const PERM_KEYS = [
+  "view_students", "see_contacts", "edit_student_info", "add_students",
+  "record_payments", "open_payment_slips", "discounts_refunds", "batches",
+  "attendance", "notes_tags", "reminders", "documents_emails", "export", "view_activity",
+] as const;
+export type PermKey = typeof PERM_KEYS[number];
+export type StaffPerms = { [K in PermKey]: boolean } & { disabled: boolean };
+
+export function emptyPerms(): StaffPerms {
+  const o = { disabled: false } as StaffPerms;
+  for (const k of PERM_KEYS) o[k] = false;
+  return o;
+}
+export function parsePerms(row: any): StaffPerms {
+  const o = emptyPerms();
+  if (!row || typeof row !== "object") return o;
+  for (const k of PERM_KEYS) o[k] = !!row[k];
+  o.disabled = !!row.disabled;
+  return o;
+}
+/** Teacher: students, batches, attendance, notes. Front desk: contacts, name/contact edits, adds, payments, slips, docs, reminders, notes.
+ *  CNIC, date of birth and address stay admin-only (no separate flag). */
+export const STAFF_PRESETS: Record<string, Partial<StaffPerms>> = {
+  teacher: { view_students: true, batches: true, attendance: true, notes_tags: true },
+  front_desk: {
+    view_students: true, see_contacts: true, edit_student_info: true, add_students: true,
+    record_payments: true, open_payment_slips: true, notes_tags: true, reminders: true, documents_emails: true,
+  },
+};
+export function applyPreset(name: string): StaffPerms {
+  const o = emptyPerms();
+  const p = STAFF_PRESETS[name];
+  if (p) for (const k of PERM_KEYS) if (p[k]) o[k] = true;
+  return o;
+}
+
+/** Existing admission actions a staff member may call *if* they have the matching permission.
+ *  "any" means a signed-in, not-disabled staff member may call it (portal shell: status).
+ *  pro_dashboard uses view_students (not a separate view_fees flag): the dashboard shows fee
+ *  totals and named overdue/soon lists, so it is the same student-list permission.
+ *  Everything else (activate, plans, corrections, certificates, settings, revoke, test delete,
+ *  role changes, staff management…) stays admin only. */
+export const ACTION_PERM: Record<string, PermKey | "any"> = {
+  status: "any",
+  cert_images_status: "any",
+  pro_dashboard: "view_students",
+  pro_students: "view_students",
+  pro_reveal: "see_contacts",
+  student_info_get: "edit_student_info",
+  student_info_save: "edit_student_info",
+  pro_add_student: "add_students",
+  record_payment: "record_payments",
+  pro_proof_upload: "record_payments",
+  pro_proof_attach: "record_payments",
+  pro_payment_ref: "record_payments",
+  pro_proof_url: "open_payment_slips",
+  pro_adjust: "discounts_refunds",
+  pro_adjust_void: "discounts_refunds",
+  pro_assign_batch: "batches",
+  pro_reminders: "reminders",
+  docs_status: "documents_emails",
+  cert_file_admin: "documents_emails",
+  email_log: "documents_emails",
+  resend: "documents_emails",
+  pro_email_log: "documents_emails",
+  pro_export_log: "export",
+  pro_activity: "view_activity",
+};
+/** @deprecated Kept so older tests/comments still compile. Prefer ACTION_PERM + allowed(). */
+export const STAFF_ACTIONS = new Set(Object.keys(ACTION_PERM));
 /** What staff see instead of raw provider / document errors (bounce texts usually contain the student's email). */
 export const STAFF_MAIL_ERR = "Not delivered (an admin can see the details)";
 export const STAFF_DOC_ERR = "Failed (an admin can see the details)";
@@ -30,12 +95,23 @@ export function redactDocs<T extends Record<string, any>>(r: T, role: string): T
 export function isRefundGuard(err: { code?: unknown; hint?: unknown } | null | undefined): boolean {
   return !!err && err.code === "23514" && err.hint === "DFA_REFUND_GUARD";
 }
-/** Money writes staff may only do when an admin switches site_settings.staff_payments to "on" (default off). */
+/** Payment-related actions, for deny messages. The global staff_payments flag is no longer used. */
 export const STAFF_PAYMENT_ACTIONS = new Set(["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref", "pro_proof_url"]);
-export function allowed(role: string | null | undefined, action: string, staffPayments = false): boolean {
+export function allowed(role: string | null | undefined, action: string, perms?: StaffPerms | null): boolean {
   if (role === "admin") return true;
-  if (role === "staff") return STAFF_ACTIONS.has(action) && (staffPayments || !STAFF_PAYMENT_ACTIONS.has(action));
-  return false;
+  if (role !== "staff") return false;
+  if (perms?.disabled) return false;
+  const need = ACTION_PERM[action];
+  if (!need) return false;
+  if (need === "any") return true;
+  return !!(perms && perms[need]);
+}
+export function denyMessage(action: string, perms?: StaffPerms | null): string {
+  if (perms?.disabled) return "Your staff access is switched off. Please contact an admin.";
+  const need = ACTION_PERM[action];
+  if (need === "record_payments") return "Recording payments is switched off for you. Ask an admin.";
+  if (need === "open_payment_slips") return "Opening payment slips is switched off for you. Ask an admin.";
+  return "You do not have permission to do this. Ask an admin.";
 }
 
 // ---- staff privacy (B2): staff never get raw contacts or student details from the server ------------
@@ -45,6 +121,151 @@ export function maskEmail(v: unknown): string {
   return s[0] + "•••@" + (dot > 0 ? dom[0] + "•••" + dom.slice(dot) : "•••");
 }
 export function maskPhone(v: unknown): string { const s = String(v || "").replace(/\s+/g, ""); if (!s) return ""; return s.length < 5 ? "•••" : s.slice(0, 3) + "•••" + s.slice(-2); }
+/** CNIC, DOB and address (plus city/state/country, which are part of the address) stay admin-only. No separate flag. */
+export const ADMIN_ONLY_INFO_FIELDS = ["dob", "cnic", "address", "city", "state", "country"] as const;
+/** Contact fields on the student-details form. Staff need see_contacts to receive the raw values. */
+export const CONTACT_INFO_FIELDS = ["email", "phone"] as const;
+const ADMIN_ONLY_INFO_SET = new Set<string>(ADMIN_ONLY_INFO_FIELDS);
+const CONTACT_INFO_SET = new Set<string>(CONTACT_INFO_FIELDS);
+const KNOWN_INFO_SET = new Set<string>(FIELDS);
+/** Case-insensitive match to a known student-info field, or "" if the key is not one. */
+export function canonicalInfoKey(k: string): Field | "" {
+  const s = String(k || "").trim().toLowerCase();
+  return KNOWN_INFO_SET.has(s) ? s as Field : "";
+}
+export function isAdminOnlyInfo(k: string) { const c = canonicalInfoKey(k) || String(k || "").trim().toLowerCase(); return ADMIN_ONLY_INFO_SET.has(c); }
+export function isContactInfo(k: string) { const c = canonicalInfoKey(k) || String(k || "").trim().toLowerCase(); return CONTACT_INFO_SET.has(c); }
+/** Masked values from the staff form (bullet placeholder). Treated as "unchanged" on save. */
+export function isMaskedInfoValue(v: unknown): boolean { return String(v ?? "").includes("•••"); }
+/** Keep only known info fields (allowlist, case-insensitive). Drop admin-only keys. Mask contacts unless see_contacts is on. */
+export function redactInfoRecord(obj: Record<string, any> | null | undefined, seeContacts: boolean): Record<string, any> {
+  const out: Record<string, any> = {};
+  if (!obj || typeof obj !== "object") return out;
+  for (const [rawK, rawV] of Object.entries(obj)) {
+    const k = canonicalInfoKey(rawK);
+    if (!k || isAdminOnlyInfo(k)) continue;
+    let v = rawV;
+    if (isContactInfo(k) && !seeContacts && v) v = k === "email" ? maskEmail(v) : maskPhone(v);
+    out[k] = v;
+  }
+  return out;
+}
+/** enrollment_audit old/new for staff: keys only (values redacted), admin-only and unknown fields omitted. Same idea as pro_activity. */
+export function redactInfoHistoryValues(v: Record<string, any> | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v || typeof v !== "object") return out;
+  for (const rawK of Object.keys(v)) {
+    const k = canonicalInfoKey(rawK);
+    if (!k || isAdminOnlyInfo(k)) continue;
+    out[k] = "•••";
+  }
+  return out;
+}
+export function redactInfoHistory<T extends { old_values?: any; new_values?: any }>(hist: T[] | null | undefined, role: string): T[] {
+  if (role === "admin") return hist || [];
+  return (hist || []).map((h) => ({ ...h, old_values: redactInfoHistoryValues(h.old_values), new_values: redactInfoHistoryValues(h.new_values) }));
+}
+/** Shape student_info_get for the caller. Admin gets the raw payload; staff get contacts only with see_contacts, and never CNIC/DOB/address. */
+export function shapeStudentInfoGet(raw: { fields: { key: string; label: string }[]; registration: any; overrides: any; effective: any; login_email?: string | null; history?: any[]; [k: string]: any }, role: string, perms?: StaffPerms | null) {
+  if (role === "admin") return raw;
+  const see = !!(perms && perms.see_contacts && !perms.disabled);
+  const fields = (raw.fields || []).filter((f) => { const k = canonicalInfoKey(f.key); return !!k && !isAdminOnlyInfo(k); });
+  const login = raw.login_email ? (see ? raw.login_email : maskEmail(raw.login_email)) : raw.login_email;
+  return {
+    ...raw,
+    fields,
+    registration: redactInfoRecord(raw.registration, see),
+    overrides: redactInfoRecord(raw.overrides, see),
+    effective: redactInfoRecord(raw.effective, see),
+    login_email: login,
+    history: redactInfoHistory(raw.history, role),
+    contacts_shown: see,
+  };
+}
+/** Staff save answers use the same shaping as GET so `effective` never returns CNIC/DOB/address or raw contacts. */
+export function shapeStudentInfoSave<T extends { effective?: any }>(payload: T, role: string, perms?: StaffPerms | null): T & { contacts_shown?: boolean } {
+  if (role === "admin") return payload;
+  const shaped = shapeStudentInfoGet({ fields: [], registration: {}, overrides: {}, effective: payload.effective, history: [] }, role, perms);
+  return { ...payload, effective: shaped.effective, contacts_shown: shaped.contacts_shown };
+}
+export const STUDENT_INFO_CONFLICT = "Record changed, reload";
+export const STUDENT_INFO_LOCK_RPC = "student_info_lock_update";
+/** Call the lock RPC. 0 rows means a concurrent change. */
+export function studentInfoLockUpdate(db: { rpc: (name: string, args: Record<string, unknown>) => any }, id: number, expect: unknown, patch: Record<string, unknown>) {
+  return db.rpc(STUDENT_INFO_LOCK_RPC, { p_id: id, p_expect: expect ?? null, p_patch: patch });
+}
+/** True when the optimistic lock matched no row (someone else changed student_info). */
+export function studentInfoWriteConflict(up: { data?: unknown; error?: unknown } | null | undefined): boolean {
+  if (!up || up.error) return false;
+  const d = up.data;
+  if (d == null) return true;
+  if (Array.isArray(d) && d.length === 0) return true;
+  return false;
+}
+function normInfoCompare(k: Field, v: string): string {
+  const s = v.replace(/\s+/g, " ").trim();
+  if (k === "email") return s.toLowerCase();
+  if (k === "dob") return isoDob(s) || s;
+  return s;
+}
+/** Load current student_info and merge only the keys this staff member is allowed to change.
+ *  Omitted keys and masked values (•••) stay as they are. Admin-only keys, and contact keys when
+ *  see_contacts is off, always keep their current values. A real attempt to change a forbidden
+ *  field returns an error (403). */
+export function mergeStaffStudentInfo(
+  current: Info | null | undefined,
+  input: Record<string, unknown> | null | undefined,
+  opts: { seeContacts: boolean },
+  reg: Info,
+  e: { full_name?: string | null; email?: string | null; phone?: string | null },
+): { info: Info | null; error?: string } {
+  const cur: Info = {};
+  for (const [rawK, rawV] of Object.entries(current || {})) {
+    const k = canonicalInfoKey(rawK);
+    if (k && rawV != null && String(rawV).trim()) (cur as any)[k] = String(rawV);
+  }
+  const eff = effective(reg, cur, e);
+  const forbidden = new Set<string>(ADMIN_ONLY_INFO_FIELDS);
+  if (!opts.seeContacts) for (const k of CONTACT_INFO_FIELDS) forbidden.add(k);
+
+  for (const [rawK, rawV] of Object.entries(input || {})) {
+    const k = canonicalInfoKey(rawK);
+    if (!k || !forbidden.has(k)) continue;
+    if (isMaskedInfoValue(rawV)) continue;
+    const v = String(rawV ?? "").replace(/\s+/g, " ").trim();
+    const curV = String((cur as any)[k] ?? "").trim();
+    const effV = String((eff as any)[k] ?? "").trim();
+    if (!v) {
+      if (curV) return { info: null, error: isContactInfo(k) ? "You cannot change contact details. Ask an admin." : "You cannot change the CNIC, date of birth or address. Ask an admin." };
+      continue;
+    }
+    const nv = normInfoCompare(k, v);
+    if (nv !== normInfoCompare(k, curV) && nv !== normInfoCompare(k, effV)) {
+      return { info: null, error: isContactInfo(k) ? "You cannot change contact details. Ask an admin." : "You cannot change the CNIC, date of birth or address. Ask an admin." };
+    }
+  }
+
+  const merged: Record<string, unknown> = {};
+  for (const f of FIELDS) if ((cur as any)[f] != null) merged[f] = (cur as any)[f];
+  for (const [rawK, rawV] of Object.entries(input || {})) {
+    const k = canonicalInfoKey(rawK);
+    if (!k || forbidden.has(k) || isMaskedInfoValue(rawV)) continue;
+    merged[k] = rawV;
+  }
+  return cleanOverrides(merged, reg, e);
+}
+/** Server-side save guard for staff. login_email may never change. Info-field rules are in mergeStaffStudentInfo. */
+export function staffInfoSaveError(body: any, role: string | null | undefined, currentEmail?: string | null): string | null {
+  if (role !== "staff") return null;
+  if (!body || (body.login_email === undefined && body.loginEmail === undefined)) return null;
+  const v = body.login_email !== undefined ? body.login_email : body.loginEmail;
+  if (isMaskedInfoValue(v)) return null;
+  const s = String(v ?? "").trim().toLowerCase();
+  const cur = String(currentEmail || "").trim().toLowerCase();
+  if (!s || s === cur) return null;
+  return "You cannot change the login email.";
+}
+
 /** Columns of enrollments a staff list may carry. No student_info (CNIC, DOB, address), notes, raw email/phone or files. */
 export const STAFF_ENR_COLS = "id,full_name,student_id,course_code,course_label,batch_id,batch_code,status,payment_plan,fee_total,amount_paid,balance_due,due_date,created_at,start_date,end_date,activated_at,invoice_no,installment_plan,reminder_stage,source,last_docs_sent_at,last_docs_sent_items,certificate_no,certificate_issued_at,certificate_revoked_at,certificate_hold,docs_error,email,phone";
 export const STAFF_PAY_COLS = "id,enrollment_id,invoice_no,installment_no,installments,is_final,amount,paid_on,method,installment_label,voided_at,revision,reference,proof_file,proof_url,created_at";

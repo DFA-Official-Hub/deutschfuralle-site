@@ -21,7 +21,8 @@ function boot(role) {
   const document = { addEventListener() {}, querySelectorAll: () => [], querySelector: () => null, createElement: () => ({ setAttribute() {}, appendChild() {} }), head: { appendChild() {} } };
   const ctx = { window: {}, document, DFA, console, setTimeout, clearTimeout, Promise, localStorage: { getItem: () => null, setItem() {} } };
   ctx.window = ctx; vm.createContext(ctx); vm.runInContext(pro, ctx);
-  const api = ctx.ADMPRO({ sb: { from: q, storage: { from: q } }, E: (s) => String(s ?? ''), T: () => '', lab: (_h, t) => t, dlg: () => null, toast() {}, pk: String, d: String, today: () => '2026-11-25', H: { tabs: {} }, P: {}, role, me: 'u', courses: () => [], copts: () => '', mopts: () => '', waDigits: (s) => String(s || '').replace(/\D/g, '') });
+  const perms = role === 'staff' ? { view_students: true, see_contacts: true, disabled: false } : null;
+  const api = ctx.ADMPRO({ sb: { from: q, storage: { from: q } }, E: (s) => String(s ?? ''), T: () => '', lab: (_h, t) => t, dlg: () => null, toast() {}, pk: String, d: String, today: () => '2026-11-25', H: { tabs: {} }, P: {}, role, perms, me: 'u', courses: () => [], copts: () => '', mopts: () => '', waDigits: (s) => String(s || '').replace(/\D/g, '') });
   return { api, calls, tables };
 }
 
@@ -48,8 +49,8 @@ for (const line of pro.split('\n').filter((l) => l.includes("sb.from('enrollment
 assert.ok(/async function dataCheckTab\(\)\{if\(!ADMIN\)|function dataCheckTab/.test(pro));
 // 4. masked cards: reveal-on-click asks the server; staff cards lose documents with student details and (flag off) payment buttons
 assert.ok(/if\(x\.masked\)card\.querySelectorAll\('\.adm-r'\)/.test(pro));
-assert.ok(/a\.adm-pill\[href\^="doc\.html"\],\[data-doc\]/.test(pro));
-assert.ok(/if\(!ADMIN&&!FLAGS\.staff_payments\)card\.querySelectorAll\('\[data-a=inst\],\[data-p=proof-add\]'\)/.test(pro));
+assert.ok(/if\(!can\('edit_student_info'\)\)hide\.push\('\[data-a=info\]','a\.adm-pill\[href\^="doc\.html"\]','\[data-doc\]'\)/.test(pro));
+assert.ok(/if\(!ADMIN&&!can\('record_payments'\)\)card\.querySelectorAll\('\[data-a=inst\],\[data-p=proof-add\]'\)/.test(pro));
 assert.ok(/b\.dataset\.full=await reveal\(\+b\.dataset\.rid,b\.dataset\.f,'card'\)/.test(pro));
 // 5. typed confirmation words are sent to the server (which checks them), never hard-coded
 for (const a of ['pro_revoke', 'pro_remove', 'cert_revoke', 'pro_delete_test', 'pro_account_delete']) {

@@ -1,14 +1,178 @@
 // deno test tests/admin-pro.test.ts — admin portal upgrade (WD-3): roles, reminders, discounts, proof paths, webhook signature, dashboard, activity summaries.
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
-import { allowed, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard } from "../supabase/functions/admission/prologic.ts";
+import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, shapeStudentInfoSave, staffInfoSaveError, mergeStaffStudentInfo, redactInfoRecord, studentInfoLockUpdate, studentInfoWriteConflict, STUDENT_INFO_CONFLICT, STUDENT_INFO_LOCK_RPC, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
 import { summarize } from "../supabase/functions/admission/audit.ts";
 
-Deno.test("staff may resend and use their lists, but not revoke, refund, activate or change settings; payments only behind the flag", () => {
-  for (const a of ["resend", "docs_status", "pro_assign_batch", "pro_activity", "pro_dashboard", "pro_students", "pro_reveal", "pro_add_student"]) assert(allowed("staff", a), a);
-  for (const a of ["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref"]) { assertFalse(allowed("staff", a), a + " off by default"); assert(allowed("staff", a, true), a + " when switched on"); }
-  for (const a of ["student_info_get", "doc_file_admin", "wa_links"]) assertFalse(allowed("staff", a), a + " (student details / documents with CNIC)");
-  for (const a of ["activate", "cert_revoke", "cert_hold", "certify", "set_plan", "payment_correct", "set_emails", "cert_images", "settings_get", "pro_revoke", "pro_adjust", "pro_delete_test", "pro_role_set", "pro_accounts", "student_info_save"]) assertFalse(allowed("staff", a), a);
-  assert(allowed("admin", "pro_delete_test")); assertFalse(allowed("user", "record_payment")); assertFalse(allowed(null, "status"));
+const on = (...ks: PermKey[]) => { const p = emptyPerms(); for (const k of ks) p[k] = true; return p; };
+Deno.test("staff actions are off by default and follow per-staff permissions; admin-only stays admin-only", () => {
+  assert(allowed("staff", "status", emptyPerms()), "portal shell stays available");
+  assertFalse(allowed("staff", "pro_dashboard"), "all-off staff cannot open the dashboard");
+  assertFalse(allowed("staff", "pro_dashboard", emptyPerms()));
+  assertFalse(allowed("staff", "pro_dashboard", { ...emptyPerms(), disabled: true }), "disabled staff are blocked");
+  const map: [string, PermKey][] = [
+    ["pro_dashboard", "view_students"], ["pro_students", "view_students"], ["pro_reveal", "see_contacts"],
+    ["student_info_get", "edit_student_info"], ["student_info_save", "edit_student_info"],
+    ["pro_add_student", "add_students"], ["record_payment", "record_payments"],
+    ["pro_proof_upload", "record_payments"], ["pro_proof_attach", "record_payments"], ["pro_payment_ref", "record_payments"],
+    ["pro_proof_url", "open_payment_slips"], ["pro_adjust", "discounts_refunds"], ["pro_adjust_void", "discounts_refunds"],
+    ["pro_assign_batch", "batches"], ["pro_reminders", "reminders"],
+    ["docs_status", "documents_emails"], ["resend", "documents_emails"], ["email_log", "documents_emails"], ["pro_email_log", "documents_emails"], ["cert_file_admin", "documents_emails"],
+    ["pro_export_log", "export"], ["pro_activity", "view_activity"],
+  ];
+  for (const [a, k] of map) {
+    assertFalse(allowed("staff", a), a + " off by default");
+    assertFalse(allowed("staff", a, emptyPerms()), a + " empty perms");
+    assert(allowed("staff", a, on(k)), a + " when " + k + " is on");
+    const other = PERM_KEYS.find((x) => x !== k)!;
+    assertFalse(allowed("staff", a, on(other)), a + " not granted by " + other);
+  }
+  for (const a of ["activate", "cert_revoke", "cert_hold", "certify", "set_plan", "payment_correct", "set_emails", "cert_images", "settings_get", "pro_revoke", "pro_delete_test", "pro_role_set", "pro_accounts", "pro_staff_invite", "pro_staff_perms", "pro_staff_disable", "doc_file_admin", "wa_links"]) {
+    assertFalse(allowed("staff", a, on(...PERM_KEYS)), a + " stays admin-only even with every flag on");
+  }
+  assert(allowed("admin", "pro_delete_test")); assert(allowed("admin", "pro_staff_invite", emptyPerms()));
+  assertFalse(allowed("user", "record_payment", on("record_payments"))); assertFalse(allowed(null, "status"));
+  assertEquals(denyMessage("record_payment", emptyPerms()), "Recording payments is switched off for you. Ask an admin.");
+  assertEquals(denyMessage("pro_proof_url", emptyPerms()), "Opening payment slips is switched off for you. Ask an admin.");
+  assertEquals(denyMessage("pro_students", { ...emptyPerms(), disabled: true }), "Your staff access is switched off. Please contact an admin.");
+  const t = applyPreset("teacher"), d = applyPreset("front_desk");
+  assert(t.view_students && t.batches && t.attendance && t.notes_tags && !t.record_payments && !t.see_contacts);
+  assert(d.see_contacts && d.record_payments && d.open_payment_slips && d.add_students && !d.discounts_refunds && !d.export && !d.view_activity);
+  assertFalse(parsePerms(null).view_students); assert(parsePerms({ view_students: true, disabled: 1 }).disabled);
+});
+Deno.test("B20-1: staff student_info_get masks contacts without see_contacts, hides CNIC/DOB/address, redacts history; save rejects login_email", () => {
+  const raw = {
+    ok: true,
+    fields: [
+      { key: "full_name", label: "Full name" }, { key: "dob", label: "Date of birth" }, { key: "cnic", label: "CNIC / ID" },
+      { key: "email", label: "Email" }, { key: "phone", label: "Mobile" }, { key: "address", label: "Address" },
+      { key: "gender", label: "Gender" },
+    ],
+    registration: { full_name: "Ali Khan", dob: "1995-02-11", cnic: "35202-1234567-1", email: "ali.khan@gmail.com", phone: "03001234567", address: "Street 1, Lahore" },
+    overrides: { email: "ali.new@gmail.com", cnic: "35202-9999999-1" },
+    effective: { full_name: "Ali Khan", dob: "1995-02-11", cnic: "35202-9999999-1", email: "ali.new@gmail.com", phone: "03001234567", address: "Street 1, Lahore", gender: "Male" },
+    login_email: "ali.khan@gmail.com",
+    history: [{ kind: "student_info", reason: "typo", old_values: { cnic: "35202-1", email: "old@x.com" }, new_values: { cnic: "35202-2", email: "new@x.com" }, changed_by: "Admin" }],
+  };
+  const masked = shapeStudentInfoGet(raw, "staff", on("edit_student_info"));
+  assertFalse(JSON.stringify(masked).includes("35202"), "CNIC never leaves for staff");
+  assertFalse(JSON.stringify(masked).includes("1995-02-11"), "DOB stays admin-only");
+  assertFalse(JSON.stringify(masked).includes("Street 1"), "address stays admin-only");
+  assertFalse((masked.fields || []).some((f: any) => ["dob", "cnic", "address"].includes(f.key)));
+  assertEquals(masked.effective.full_name, "Ali Khan");
+  assertEquals(masked.effective.email, maskEmail("ali.new@gmail.com"));
+  assertEquals(masked.effective.phone, maskPhone("03001234567"));
+  assertEquals(masked.login_email, maskEmail("ali.khan@gmail.com"));
+  assertFalse(masked.contacts_shown);
+  const mh = masked.history!; assertEquals(mh[0].old_values.email, "•••");
+  assertFalse("cnic" in (mh[0].old_values || {}));
+  assertFalse(JSON.stringify(mh).includes("old@x.com"));
+
+  const shown = shapeStudentInfoGet(raw, "staff", on("edit_student_info", "see_contacts"));
+  assertEquals(shown.effective.email, "ali.new@gmail.com");
+  assertEquals(shown.login_email, "ali.khan@gmail.com");
+  assert(shown.contacts_shown);
+  assertFalse(JSON.stringify(shown).includes("35202"), "CNIC stays hidden even with see_contacts");
+  assertEquals(shown.history![0].new_values.email, "•••", "history values stay redacted, like pro_activity");
+
+  const admin = shapeStudentInfoGet(raw, "admin", null);
+  assertEquals(admin.effective.cnic, "35202-9999999-1");
+  assertEquals(admin.history![0].old_values.cnic, "35202-1");
+
+  assertEquals(staffInfoSaveError({ login_email: "x@y.com", info: { full_name: "A" } }, "staff", "ali.khan@gmail.com"), "You cannot change the login email.");
+  assertEquals(staffInfoSaveError({ login_email: "a•••@g•••.com" }, "staff", "ali.khan@gmail.com"), null, "a masked login email is not a change");
+  assertEquals(staffInfoSaveError({ login_email: "ali.khan@gmail.com" }, "staff", "ali.khan@gmail.com"), null);
+  assertEquals(staffInfoSaveError({ login_email: "x@y.com" }, "admin", "ali.khan@gmail.com"), null, "admins are not blocked by this guard");
+});
+Deno.test("B20-3: a staff name-only save keeps CNIC/DOB/address; masked contacts are unchanged; a real contact change is 403", () => {
+  const reg = { full_name: "Ali Khan", dob: "1995-02-11", cnic: "35202-1234567-1", email: "ali.khan@gmail.com", phone: "03001234567", address: "Street 1, Lahore" };
+  const current = { cnic: "35202-9999999-1", dob: "1994-01-01", address: "Staff must not wipe this", email: "ali.new@gmail.com", full_name: "Ali Khan" };
+  const e = { full_name: "Ali Khan", email: "ali.khan@gmail.com", phone: "03001234567" };
+
+  const nameOnly = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan" }, { seeContacts: false }, reg, e);
+  assertEquals(nameOnly.error, undefined);
+  assertEquals(nameOnly.info?.full_name, "Ayesha Khan");
+  assertEquals(nameOnly.info?.cnic, "35202-9999999-1");
+  assertEquals(nameOnly.info?.dob, "1994-01-01");
+  assertEquals(nameOnly.info?.address, "Staff must not wipe this");
+  assertEquals(nameOnly.info?.email, "ali.new@gmail.com");
+
+  const masked = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan", email: maskEmail("ali.new@gmail.com"), phone: maskPhone("03001234567") }, { seeContacts: false }, reg, e);
+  assertEquals(masked.error, undefined);
+  assertEquals(masked.info?.full_name, "Ayesha Khan");
+  assertEquals(masked.info?.cnic, "35202-9999999-1");
+  assertEquals(masked.info?.email, "ali.new@gmail.com", "masked contacts posted without see_contacts stay as they are");
+
+  const real = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan", email: "hacker@x.com" }, { seeContacts: false }, reg, e);
+  assertEquals(real.error, "You cannot change contact details. Ask an admin.");
+  assertEquals(real.info, null);
+
+  const cnicTry = mergeStaffStudentInfo(current, { full_name: "Ayesha Khan", cnic: "35202-0000000-1" }, { seeContacts: true }, reg, e);
+  assertEquals(cnicTry.error, "You cannot change the CNIC, date of birth or address. Ask an admin.");
+
+  const keepSame = mergeStaffStudentInfo(current, { cnic: "35202-9999999-1", full_name: "Ayesha Khan" }, { seeContacts: true }, reg, e);
+  assertEquals(keepSame.error, undefined);
+  assertEquals(keepSame.info?.cnic, "35202-9999999-1");
+
+  const withContacts = mergeStaffStudentInfo(current, { email: "desk@x.com" }, { seeContacts: true }, reg, e);
+  assertEquals(withContacts.error, undefined);
+  assertEquals(withContacts.info?.email, "desk@x.com");
+  assertEquals(withContacts.info?.cnic, "35202-9999999-1");
+
+  const stray = redactInfoRecord({ CNIC: "35202-1234567-1", Email: "ali.khan@gmail.com", full_name: "Ali Khan", DOB: "1995-02-11", Address: "Street 1" }, false);
+  assertFalse(JSON.stringify(stray).includes("35202"), "allowlist drops overrides.CNIC");
+  assertFalse(JSON.stringify(stray).includes("1995-02-11"));
+  assertFalse(JSON.stringify(stray).includes("Street 1"));
+  assertEquals(stray.full_name, "Ali Khan");
+  assertEquals(stray.email, maskEmail("ali.khan@gmail.com"));
+  assertFalse("cnic" in stray || "CNIC" in stray || "dob" in stray || "DOB" in stray);
+});
+Deno.test("B20-4: a staff name-only save's effective has no CNIC/DOB/address or raw contacts; a stale write is 409", () => {
+  const after = { full_name: "Ayesha Khan", cnic: "35202-9999999-1", dob: "1994-01-01", address: "Staff must not wipe this", city: "Lahore", state: "Punjab", country: "PK", email: "ali.new@gmail.com", phone: "03001234567" };
+  const payload = { ok: true, changed: ["full_name"], effective: after, regen: false, certificate: false };
+
+  const staff = shapeStudentInfoSave(payload, "staff", on("edit_student_info"));
+  assertEquals(staff.effective.full_name, "Ayesha Khan");
+  assertFalse("cnic" in staff.effective || "dob" in staff.effective || "address" in staff.effective || "city" in staff.effective || "state" in staff.effective || "country" in staff.effective);
+  assertFalse(JSON.stringify(staff.effective).includes("ali.new@gmail.com"));
+  assertFalse(JSON.stringify(staff.effective).includes("03001234567"));
+  assertEquals(staff.effective.email, maskEmail("ali.new@gmail.com"));
+  assertEquals(staff.effective.phone, maskPhone("03001234567"));
+  assertEquals(staff.contacts_shown, false);
+
+  const withSee = shapeStudentInfoSave(payload, "staff", on("edit_student_info", "see_contacts"));
+  assertEquals(withSee.effective.email, "ali.new@gmail.com");
+  assertEquals(withSee.effective.phone, "03001234567");
+  assertFalse("cnic" in withSee.effective || "dob" in withSee.effective || "address" in withSee.effective);
+  assertEquals(withSee.contacts_shown, true);
+
+  const admin = shapeStudentInfoSave(payload, "admin", null);
+  assertEquals(admin.effective.cnic, "35202-9999999-1");
+  assertEquals(admin.effective.email, "ali.new@gmail.com");
+
+  assertEquals(STUDENT_INFO_CONFLICT, "Record changed, reload");
+  assertEquals(studentInfoWriteConflict({ data: null, error: null }), true);
+  assertEquals(studentInfoWriteConflict({ data: undefined, error: undefined }), true);
+  assertEquals(studentInfoWriteConflict({ data: { id: 1 }, error: null }), false);
+  assertEquals(studentInfoWriteConflict({ data: null, error: { message: "fail" } }), false);
+});
+Deno.test("B20-5: student_info_save calls the lock RPC and maps 0 rows to 409", async () => {
+  const calls: { name: string; args: Record<string, unknown> }[] = [];
+  const db = { rpc: (name: string, args: Record<string, unknown>) => { calls.push({ name, args }); return Promise.resolve({ data: [], error: null }); } };
+  const expect = { full_name: "Ayesha Khan", address: '12, "Quoted" Road, Lahore' };
+  const patch = { student_info: { ...expect, full_name: "Ayesha Khan 2" }, full_name: "Ayesha Khan 2" };
+  const up = await studentInfoLockUpdate(db, 42, expect, patch);
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].name, STUDENT_INFO_LOCK_RPC);
+  assertEquals(calls[0].args, { p_id: 42, p_expect: expect, p_patch: patch });
+  assertEquals(studentInfoWriteConflict(up), true, "empty set is a conflict");
+  assertEquals(studentInfoWriteConflict({ data: null, error: null }), true);
+  assertEquals(studentInfoWriteConflict({ data: [{ id: 42, full_name: "Ayesha Khan 2" }], error: null }), false);
+  assertEquals(studentInfoWriteConflict({ data: [], error: { message: "fail" } }), false, "an RPC error is not a silent conflict");
+  const src = await Deno.readTextFile(new URL("../supabase/functions/admission/index.ts", import.meta.url));
+  const save = src.slice(src.indexOf('body.action === "student_info_save"'), src.indexOf('body.action === "regen_docs"'));
+  assert(save.includes("studentInfoLockUpdate(db, e.id, e.student_info, patch)"));
+  assertFalse(save.includes('.eq("student_info"') || save.includes('.is("student_info"'), "no PostgREST eq/is on the jsonb object");
+  assert(save.includes("STUDENT_INFO_CONFLICT") && save.includes("409"));
 });
 Deno.test("reminder schedule parsing and stages", () => {
   assertEquals(parseOffsets("-3,0,3"), [-3, 0, 3]); assertEquals(parseOffsets(" -5, -1 ,2"), [-5, -1, 2]);

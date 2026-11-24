@@ -85,6 +85,6 @@ assert.equal(api.histExtra({ id: 7 }).includes('Add ref/proof'), true);
 // staff build: no export button, no admin tabs from the module
 const H2 = { tabs: {} };
 const st = ctx.window.ADMPRO({ sb: {}, E: esc, T: (k) => ` title="${k}"`, lab: (k, t) => t, dlg() {}, toast() {}, pk: String, d: String, today: () => '2026-11-25', H: H2, P: { METHODS: {} }, role: 'staff', me: 'u2', courses: () => courses, copts: () => '', mopts: () => '', waDigits: () => '' });
-assert.ok(/if\(!ADMIN\)return alert\('Only admins can export data\.'\)/.test(pro), 'export refuses staff');
+assert.ok(/if\(!can\('export'\)\)return alert\('You do not have permission to export\. Ask an admin\.'\)/.test(pro), 'export refuses staff without the export permission');
 assert.ok(st && typeof st.decorate === 'function');
 console.log('admin-pro-ui tests passed');

@@ -20,6 +20,28 @@ select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authent
 do $$ begin update public.profiles set role = 'admin' where id = '00000000-0000-0000-0000-00000000000b'; raise exception 'staff promoted self'; exception when others then if sqlerrm like 'staff promoted%' then raise; end if; end $$;
 reset role; select pg_temp.check((select role from public.profiles where username = 'staff1') = 'staff', 'staff cannot promote themselves');
 
+-- 1b) promoting to staff creates an all-off permissions row; staff cannot write the table; staff_can is false until flags are on
+select pg_temp.check((select count(*) from public.staff_permissions where user_id = '00000000-0000-0000-0000-00000000000b') = 1
+  and not (select view_students or see_contacts or edit_student_info or add_students or record_payments or open_payment_slips or discounts_refunds or batches or attendance or notes_tags or reminders or documents_emails or export or view_activity or disabled from public.staff_permissions where user_id = '00000000-0000-0000-0000-00000000000b'),
+  'new staff start with every permission off');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authenticated;
+select pg_temp.check((select count(*) from public.staff_permissions) = 1, 'staff can read their own permissions row');
+select pg_temp.check(not private.staff_can('notes_tags') and not private.staff_can('attendance') and not private.staff_can('view_students') and not private.staff_can('no_such_perm'), 'staff_can is false when flags are off');
+do $$ begin insert into public.student_notes (enrollment_id, body) values (1, 'should fail'); raise exception 'all-off staff wrote a note'; exception when insufficient_privilege then null; when others then if sqlerrm like 'all-off%' then raise; end if; end $$;
+do $$ begin insert into public.student_meta (enrollment_id, tags) values (1, array['x']); raise exception 'all-off staff wrote meta'; exception when insufficient_privilege then null; when others then if sqlerrm like 'all-off%' then raise; end if; end $$;
+do $$ begin insert into public.class_sessions (batch_id, session_date) values (1, '2026-12-01'); raise exception 'all-off staff wrote a class'; exception when insufficient_privilege then null; when others then if sqlerrm like 'all-off%' then raise; end if; end $$;
+do $$ begin update public.staff_permissions set view_students = true; raise exception 'staff wrote permissions'; exception when insufficient_privilege then null; when others then if sqlerrm like 'staff wrote%' then raise; end if; end $$;
+reset role;
+select pg_temp.check(has_table_privilege('authenticated', 'public.staff_permissions', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.staff_permissions', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.staff_permissions', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.staff_permissions', 'DELETE')
+  and not has_table_privilege('authenticated', 'public.staff_permissions', 'TRUNCATE')
+  and not has_table_privilege('anon', 'public.staff_permissions', 'SELECT'), 'staff_permissions: authenticated may only SELECT; anon nothing');
+-- existing tests 4 and 6 still describe a staff member who has notes, reminders and attendance
+update public.staff_permissions set notes_tags = true, reminders = true, attendance = true, view_students = true, batches = true
+  where user_id = '00000000-0000-0000-0000-00000000000b';
+
 -- 2) B1/B2: staff get nothing from the raw student/payment/email/audit tables and cannot insert students
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authenticated;
 select pg_temp.check((select count(*) from public.enrollments) = 0, 'B2: staff cannot read enrollments directly (lists come from pro_students, masked)');
@@ -285,3 +307,110 @@ select pg_temp.check(not exists (
           where has_table_privilege('authenticated', c.oid, p) or has_table_privilege('anon', c.oid, p)
        )
   ), 'R5: no public table grants TRUNCATE/MAINTAIN/TRIGGER/REFERENCES to anon or authenticated');
+
+-- 18) per-staff permissions: a second staff member, isolation, disable, column guards, trigger backfill
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000d', 'staff2@test.local');
+insert into public.profiles (id, username, full_name, role) values ('00000000-0000-0000-0000-00000000000d', 'staff2', 'Staff Two', 'staff');
+select pg_temp.check((select not view_students and not attendance and not notes_tags and not disabled from public.staff_permissions where user_id = '00000000-0000-0000-0000-00000000000d'), 'inserting a profile as staff also creates an all-off row');
+
+-- D can read own row only (admin can read both)
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d'); set role authenticated;
+select pg_temp.check((select count(*) from public.staff_permissions) = 1
+  and (select user_id from public.staff_permissions) = '00000000-0000-0000-0000-00000000000d', 'a staff member cannot read another staff member''s permissions');
+select pg_temp.check((select count(*) from public.student_notes) = 0, 'staff without notes_tags cannot read notes');
+select pg_temp.check((select count(*) from public.attendance) = 0, 'staff without attendance cannot read marks');
+select pg_temp.check((select count(*) from public.batches) = 0, 'staff without batches or attendance cannot read batches');
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a'); set role authenticated;
+select pg_temp.check((select count(*) from public.staff_permissions) = 2, 'admin can read every staff permissions row');
+reset role;
+
+-- give D only notes_tags: can write notes and tags, cannot pause reminders, cannot mark attendance
+update public.staff_permissions set notes_tags = true where user_id = '00000000-0000-0000-0000-00000000000d';
+update public.student_meta set reminders_paused = false where enrollment_id = 1;
+select pg_temp.check(not (select reminders_paused from public.student_meta where enrollment_id = 1), 'pre-condition: reminders are running before the notes-only staff tries to pause them');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d'); set role authenticated;
+insert into public.student_notes (enrollment_id, body) values (1, 'Staff two note');
+update public.student_meta set tags = array['vip','staff2'] where enrollment_id = 1;
+do $$ begin update public.student_meta set reminders_paused = true, reminders_paused_until = '2027-01-01', pause_reason = 'no'; raise exception 'notes staff paused reminders'; exception when others then if sqlerrm like 'notes staff paused%' then raise; end if; end $$;
+do $$ begin insert into public.attendance (session_id, enrollment_id, status) values ((select id from public.class_sessions limit 1), 1, 'present'); raise exception 'notes staff marked attendance'; exception when insufficient_privilege then null; when others then if sqlerrm like 'notes staff marked%' then raise; end if; end $$;
+reset role;
+select pg_temp.check((select count(*) from public.student_notes where body = 'Staff two note') = 1, 'notes_tags staff can add a note');
+select pg_temp.check((select tags @> array['staff2'] from public.student_meta where enrollment_id = 1), 'notes_tags staff can change tags');
+select pg_temp.check(not (select reminders_paused from public.student_meta where enrollment_id = 1), 'notes_tags staff cannot pause reminders');
+
+-- disable D: staff_can becomes false even with flags still on
+update public.staff_permissions set disabled = true where user_id = '00000000-0000-0000-0000-00000000000d';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d'); set role authenticated;
+select pg_temp.check(not private.staff_can('notes_tags'), 'disabled staff fail staff_can even when the flag is on');
+do $$ begin insert into public.student_notes (enrollment_id, body) values (1, 'disabled'); raise exception 'disabled staff wrote a note'; exception when insufficient_privilege then null; when others then if sqlerrm like 'disabled staff%' then raise; end if; end $$;
+reset role;
+update public.staff_permissions set disabled = false where user_id = '00000000-0000-0000-0000-00000000000d';
+
+-- B has attendance (from 1b): still can mark; D still cannot
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authenticated;
+select pg_temp.check(private.staff_can('attendance') and private.staff_can('notes_tags') and not private.staff_can('record_payments') and not private.staff_can('discounts_refunds'), 'staff B keeps only the flags granted in 1b');
+select pg_temp.check((select count(*) from public.class_sessions) > 0, 'attendance staff can read classes');
+reset role;
+
+-- admin is always allowed
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a'); set role authenticated;
+select pg_temp.check(private.staff_can('view_students') and private.staff_can('record_payments') and private.staff_can('export'), 'admin staff_can is true for every known permission');
+reset role;
+
+-- B20-5: student_info_lock_update is service-role only; match, mismatch, null, and quoted addresses
+select pg_temp.check(
+  has_function_privilege('service_role', 'public.student_info_lock_update(bigint,jsonb,jsonb)', 'execute')
+  and not has_function_privilege('authenticated', 'public.student_info_lock_update(bigint,jsonb,jsonb)', 'execute')
+  and not has_function_privilege('anon', 'public.student_info_lock_update(bigint,jsonb,jsonb)', 'execute'),
+  'student_info_lock_update is service-role only');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a'); set role authenticated;
+do $$ begin
+  perform * from public.student_info_lock_update(1, null, '{}'::jsonb);
+  raise exception 'authenticated called lock update';
+exception when insufficient_privilege then null; when others then if sqlerrm like 'authenticated called%' then raise; end if; end $$;
+reset role;
+
+insert into public.enrollments (email, full_name, course_code, status, student_info)
+values ('test-lock-b20@test.local', 'TEST Lock', 'a1-normal', 'pending',
+        '{"full_name":"TEST Lock","address":"12, \"Quoted\" Road, Lahore"}'::jsonb);
+insert into public.enrollments (email, full_name, course_code, status, student_info)
+values ('test-lock-null@test.local', 'TEST Lock Null', 'a1-normal', 'pending', null);
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-b20@test.local'),
+    '{"full_name":"TEST Lock","address":"12, \"Quoted\" Road, Lahore"}'::jsonb,
+    jsonb_build_object(
+      'student_info', '{"full_name":"TEST Lock 2","address":"12, \"Quoted\" Road, Lahore"}'::jsonb,
+      'full_name', 'TEST Lock 2'))) = 1,
+  'lock update match returns 1 row');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-b20@test.local') = 'TEST Lock 2'
+  and (select student_info->>'address' from public.enrollments where email = 'test-lock-b20@test.local') = '12, "Quoted" Road, Lahore',
+  'lock update keeps an address with commas and quotes');
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-b20@test.local'),
+    '{"full_name":"TEST Lock","address":"12, \"Quoted\" Road, Lahore"}'::jsonb,
+    jsonb_build_object('student_info', '{"full_name":"Hacked"}'::jsonb, 'full_name', 'Hacked'))) = 0,
+  'lock update mismatch returns 0 rows');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-b20@test.local') = 'TEST Lock 2',
+  'lock update mismatch does not write');
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-null@test.local'),
+    null,
+    jsonb_build_object('student_info', '{"full_name":"From null"}'::jsonb, 'full_name', 'From null'))) = 1,
+  'lock update matches when both sides are null');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-null@test.local') = 'From null'
+  and (select student_info->>'full_name' from public.enrollments where email = 'test-lock-null@test.local') = 'From null',
+  'lock update from a null student_info writes the new value');
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-null@test.local'),
+    null,
+    jsonb_build_object('student_info', '{"full_name":"Again"}'::jsonb))) = 0,
+  'lock update does not match a null expect after student_info is set');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-null@test.local') = 'From null',
+  'a stale null expect does not write');
+
+delete from public.enrollments where email in ('test-lock-b20@test.local', 'test-lock-null@test.local');

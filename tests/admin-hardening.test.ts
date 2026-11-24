@@ -1,6 +1,6 @@
 // deno test tests/admin-hardening.test.ts — fixes from the Head of Tech review of PR #12 (B1, B2 and the money/security list).
 import { assert, assertEquals, assertFalse, assertMatch } from "jsr:@std/assert@1";
-import { redactDocs, redactMailRows, isRefundGuard, STAFF_MAIL_ERR, STAFF_DOC_ERR, searchOr, verifySvix, safeEqual, maskEmail, maskPhone, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, allowed } from "../supabase/functions/admission/prologic.ts";
+import { emptyPerms, parsePerms,  redactDocs, redactMailRows, isRefundGuard, STAFF_MAIL_ERR, STAFF_DOC_ERR, searchOr, verifySvix, safeEqual, maskEmail, maskPhone, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, allowed } from "../supabase/functions/admission/prologic.ts";
 import { handlePro } from "../supabase/functions/admission/pro.ts";
 
 const src = (p: string) => Deno.readTextFileSync(new URL("../" + p, import.meta.url));
@@ -101,7 +101,9 @@ Deno.test("B2: staff activity hides old/new values of student-detail edits; expo
   const ad = await (await handlePro(db, { action: "pro_activity", id: 1 }, { id: "a" }, "admin", ctx))!.json();
   assert(JSON.stringify(ad).includes("35202-2"));
   assertEquals((await handlePro(db, { action: "pro_export_log", what: "students" }, staff, "staff", ctx))!.status, 403);
-  assertFalse(allowed("staff", "pro_export_log")); assertFalse(allowed("staff", "export"));
+  const ctxExport = { ...ctx, perms: { ...emptyPerms(), export: true } };
+  assertEquals((await handlePro(db, { action: "pro_export_log", what: "students" }, staff, "staff", ctxExport))!.status, 200);
+  assertFalse(allowed("staff", "pro_export_log")); assert(allowed("staff", "pro_export_log", { ...emptyPerms(), export: true })); assertFalse(allowed("staff", "export"));
   for (const t of ["enr_staff_select", "pay_staff_select", "elog_staff_select", "act_staff_select", "audit_staff_select"]) {
     assertMatch(MIG, new RegExp(`drop policy if exists ${t} `)); assertFalse(new RegExp(`create policy ${t}`).test(MIG0 + MIG), t);
   }
@@ -194,7 +196,7 @@ Deno.test("R2-2: staff search matches contacts only on the exact full email or a
 });
 
 Deno.test("staff payment slips behind the flag and logged; staff email log hides raw errors; payment void guard mapped to 409", async () => {
-  assertFalse(allowed("staff", "pro_proof_url")); assert(allowed("staff", "pro_proof_url", true));
+  assertFalse(allowed("staff", "pro_proof_url")); assert(allowed("staff", "pro_proof_url", { ...emptyPerms(), open_payment_slips: true }));
   const db = fakeDb((c) => c.table === "payments" ? { data: { id: 9, enrollment_id: 1, invoice_no: "INV-1", proof_url: "https://drive.google.com/file/d/abcdefghijklmnopqrstu/view" } } : c.table === "profiles" ? { data: { full_name: "Staff One" } } : { data: null });
   const r = await handlePro(db, { action: "pro_proof_url", payment_id: 9 }, staff, "staff", ctx);
   assertEquals(r!.status, 200);
@@ -226,7 +228,7 @@ Deno.test("R3-1: legacy email_log, docs_status and resend never give staff raw e
   assertMatch(IDX, /body\.action === "docs_status"\) return json\(redactDocs\(await docsStatus\(db, Number\(body\.id\)\), role\)\);/);
   assertMatch(IDX, /return json\(\{ log: redactMailRows\(r\.data \|\| \[\], role\) \}\);/);
   assertMatch(IDX, /u\.user\.id\); return json\(redactDocs\(r, role\), r\.code \|\| 200\); \}/);
-  assert(allowed("staff", "email_log") && allowed("staff", "docs_status"), "staff keep the actions, only the texts are hidden");
+  const docs = { ...emptyPerms(), documents_emails: true }; assert(allowed("staff", "email_log", docs) && allowed("staff", "docs_status", docs), "staff with documents_emails keep the actions, only the texts are hidden"); assertFalse(allowed("staff", "email_log"));
 });
 
 Deno.test("R3-1: refund guard recognised by SQLSTATE 23514 + hint, not by message text", () => {
@@ -245,4 +247,13 @@ Deno.test("R4-1: staffRow redacts docs_error; used by the staff student list", (
   assertFalse(JSON.stringify(r).includes("ali.khan") || JSON.stringify(r).includes("550") || JSON.stringify(r).includes(raw));
   assertEquals(staffRow({ id: 1, docs_error: "" }).docs_error, null);
   assertMatch(PRO, /staffRow/);
+});
+
+Deno.test("B20-2: all-off staff gets 403 on the dashboard; view_students is allowed", async () => {
+  const db = fakeDb(() => ({ data: [] }));
+  const off = await handlePro(db, { action: "pro_dashboard" }, staff, "staff", ctx);
+  assertEquals(off!.status, 403);
+  const on = await handlePro(db, { action: "pro_dashboard" }, staff, "staff", { ...ctx, perms: { ...emptyPerms(), view_students: true } });
+  // fakeDb returns empty lists; the handler should still 200 once permitted
+  assertEquals(on!.status, 200);
 });

@@ -9,7 +9,7 @@ import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS a
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { handlePro, logActivity } from "./pro.ts";
 import { withAudit } from "./audit.ts";
-import { allowed, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, STAFF_PAYMENT_ACTIONS, redactDocs, redactMailRows, isRefundGuard } from "./prologic.ts";
+import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, shapeStudentInfoGet, shapeStudentInfoSave, staffInfoSaveError, mergeStaffStudentInfo, studentInfoLockUpdate, studentInfoWriteConflict, STUDENT_INFO_CONFLICT, type StaffPerms } from "./prologic.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
@@ -621,8 +621,12 @@ const serveReq = withAudit(async (req) => {
     const { data: p } = await db.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
     const role = p?.role === "admin" || p?.role === "staff" ? p.role : null;
     if (!role) return json({ error: "forbidden" }, 403);
-    const staffPay = role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? (await db.from("site_settings").select("value").eq("key", "staff_payments").maybeSingle()).data?.value === "on" : false;
-    if (!allowed(role, String(body.action || ""), staffPay)) return json({ error: role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? (body.action === "pro_proof_url" ? "Opening payment slips is switched off for staff. Ask an admin." : "Recording payments is switched off for staff. Ask an admin.") : "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
+    let perms: StaffPerms | null = null;
+    if (role === "staff") {
+      const row = (await db.from("staff_permissions").select("*").eq("user_id", u.user.id).maybeSingle()).data;
+      perms = parsePerms(row);
+    }
+    if (!allowed(role, String(body.action || ""), perms)) return json({ error: role === "staff" ? denyMessage(String(body.action || ""), perms) : "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
     if (!confirmOk(String(body.action || ""), body)) return json({ error: `Type ${CONFIRM_WORDS[String(body.action)]} to confirm.`, code: "confirm" }, 400);
     {
       // Security: admin actions need a confirmed sign-in (device/email check) and the 2FA code when an authenticator app is set up.
@@ -633,7 +637,7 @@ const serveReq = withAudit(async (req) => {
       const vs = cl.session_id ? (await db.from("verified_sessions").select("session_id").eq("session_id", cl.session_id).maybeSingle()).data : null;
       if (!vs) return json({ error: "Please confirm this sign-in first: reload the page and enter the code we emailed you.", code: "verify_session" }, 403);
     }
-    { const pr = await handlePro(db, body, u.user, role, { json, today: todayPk, pingSheets }); if (pr) return pr; }
+    { const pr = await handlePro(db, body, u.user, role, { json, today: todayPk, pingSheets, perms }); if (pr) return pr; }
     if (body.action === "activate") {
       const id = Number(body.id);
       const patch: Record<string, unknown> = { status: "active", activated_by: u.user.id };
@@ -830,21 +834,33 @@ const serveReq = withAudit(async (req) => {
       pingSheets(); return json({ ok: true, due_date: due });
     }
     if (body.action === "student_info_get") {
-      // Admin: what the documents will show, where each value comes from (registration form or staff edit), and the change history.
+      // What the documents will show, where each value comes from (registration form or staff edit), and the change history.
+      // Staff: contacts only with see_contacts (masked otherwise); CNIC, DOB and address stay admin-only; history values redacted; every view is logged.
       const e = (await db.from("enrollments").select("id,full_name,email,phone,sheet_row,student_info,student_id,certificate_no,certificate_revoked_at").eq("id", Number(body.id)).maybeSingle()).data;
       if (!e) return json({ error: "Student not found." }, 404);
       const reg = fromRegistration(await loadDetails(db, e));
       const hist = (await db.from("enrollment_audit").select("kind,reason,old_values,new_values,changed_at,changed_by,payment_id").eq("enrollment_id", e.id).order("changed_at", { ascending: false }).limit(30)).data || [];
       const ids = [...new Set(hist.map((h: any) => h.changed_by).filter(Boolean))];
       const names = new Map(((ids.length ? (await db.from("profiles").select("id,username,full_name").in("id", ids)).data : []) || []).map((p: any) => [p.id, p.full_name || p.username || "Admin"]));
-      return json({ ok: true, fields: INFO_FIELDS.map((f) => ({ key: f, label: infoLabel(f) })), registration: reg, has_registration: Object.values(reg).some(Boolean), overrides: e.student_info || {}, effective: effective(reg, e.student_info, e), login_email: e.email, has_certificate: !!(e.certificate_no && !e.certificate_revoked_at), history: hist.map((h: any) => ({ ...h, changed_by: names.get(h.changed_by) || "Admin" })) });
+      const raw = { ok: true, fields: INFO_FIELDS.map((f) => ({ key: f, label: infoLabel(f) })), registration: reg, has_registration: Object.values(reg).some(Boolean), overrides: e.student_info || {}, effective: effective(reg, e.student_info, e), login_email: e.email, has_certificate: !!(e.certificate_no && !e.certificate_revoked_at), history: hist.map((h: any) => ({ ...h, changed_by: names.get(h.changed_by) || "Admin" })) };
+      if (role === "staff") {
+        const see = !!(perms && perms.see_contacts);
+        await logActivity(db, u.user.id, e.id, "info_viewed", see ? "Student details viewed (contacts shown)" : "Student details viewed", { see_contacts: see });
+      }
+      return json(shapeStudentInfoGet(raw, role, perms));
     }
     if (body.action === "student_info_save") {
       const e = (await db.from("enrollments").select("id,full_name,email,phone,sheet_row,student_info,student_id,invoice_no,certificate_no,certificate_revoked_at").eq("id", Number(body.id)).maybeSingle()).data;
       if (!e) return json({ error: "Student not found." }, 404);
+      const blocked = staffInfoSaveError(body, role, e.email);
+      if (blocked) return json({ error: blocked }, 403);
       const reg = fromRegistration(await loadDetails(db, e));
-      const c = cleanOverrides(body.info && typeof body.info === "object" ? body.info : {}, reg, e);
-      if (c.error) return json({ error: c.error }, 400);
+      // Staff: merge only allowed keys into the current overrides so a name fix cannot wipe CNIC/DOB/address.
+      // Admin: the form posts every field, so cleanOverrides still replaces the whole object.
+      const c = role === "staff"
+        ? mergeStaffStudentInfo(e.student_info, body.info && typeof body.info === "object" ? body.info : {}, { seeContacts: !!(perms && perms.see_contacts) }, reg, e)
+        : cleanOverrides(body.info && typeof body.info === "object" ? body.info : {}, reg, e);
+      if (c.error) return json({ error: c.error }, c.error.startsWith("You cannot change") ? 403 : 400);
       const before = effective(reg, e.student_info, e);
       if (JSON.stringify(e.student_info || null) === JSON.stringify(c.info) && !Object.keys(infoDiff(before, effective(reg, c.info, savedRow(e, c.info, {}))).new).length) return json({ ok: true, unchanged: true });
       const patch: Record<string, unknown> = { student_info: c.info };
@@ -865,11 +881,13 @@ const serveReq = withAudit(async (req) => {
       // The certificate shows the name: drop the cached image so the image and PDF are made again with the new name.
       const certRedo = !!(patch.full_name && e.certificate_no && !e.certificate_revoked_at);
       if (certRedo) patch.certificate_file = null;
-      const up = await db.from("enrollments").update(patch).eq("id", e.id).select("id").maybeSingle();
-      if (up.error || !up.data) return json({ error: up.error?.message || "Could not save." }, 400);
+      // Optimistic lock via student_info_lock_update: PostgREST .eq(jsonb) cannot be used (it sends [object Object]).
+      const up = await studentInfoLockUpdate(db, e.id, e.student_info, patch);
+      if (studentInfoWriteConflict(up)) return json({ error: STUDENT_INFO_CONFLICT, code: "conflict" }, 409);
+      if (up.error) return json({ error: up.error?.message || "Could not save." }, 400);
       await db.from("enrollment_audit").insert({ enrollment_id: e.id, kind: "student_info", reason: String(body.reason || "").trim().slice(0, 300) || null, old_values: ch.old, new_values: ch.new, changed_by: u.user.id });
       pingSheets();
-      return json({ ok: true, changed: Object.keys(ch.new), effective: after, regen: !!e.invoice_no || certRedo, certificate: certRedo });
+      return json(shapeStudentInfoSave({ ok: true, changed: Object.keys(ch.new), effective: after, regen: !!e.invoice_no || certRedo, certificate: certRedo }, role, perms));
     }
     if (body.action === "regen_docs") {
       // Rebuilds ONE document per call (CPU limit): admission form first, then each counted payment's receipt. The page calls again with done[] until remaining is 0.
