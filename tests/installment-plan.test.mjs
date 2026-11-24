@@ -132,17 +132,20 @@ assert.deepEqual(plain(c2.sortCourses(db).map((c) => c.code)), ['a1-normal', 'a1
 
 // admin: renamed button, plan wiring, hints on every button
 assert.ok(!/>Record payment</.test(admin), 'old "Record payment" label is gone');
-assert.ok(admin.includes('>Add installment payment</button>') && admin.includes('<h3>Add an installment payment</h3>'));
+assert.ok(admin.includes("bt('inst','Add installment payment'") && admin.includes('<h3>Add an installment payment</h3>'));
 assert.ok(admin.includes('<option value="custom">Custom plan (2 to 5 installments)</option>'));
 assert.ok(admin.includes("action:'set_plan'") && admin.includes('installments:inst'));
 const buttons = admin.match(/<button\b[\s\S]*?<\/button>/g) || [];
-assert.ok(buttons.length > 25, 'found admin buttons');
+assert.ok(buttons.length > 15, 'found admin buttons');
+// student-card buttons come from bt(action, label, hint, …), which always adds the hint
+assert.ok(/function bt\(a,txt,hint,cls,attrs\)\{return '<button[^}]*T\(hint\)/.test(admin), 'bt() adds a hint to every card button');
+assert.ok((admin.match(/bt\('/g) || []).length >= 12, 'card buttons use bt()');
 const noHint = buttons.filter((b) => !/title=|'\+T\(/.test(b) && !/value="(ok|cancel)"/.test(b));
 assert.deepEqual(noHint, [], 'every admin button has a hint');
-for (const k of ['pay', 'remove', 'certify', 'hold', 'release', 'crev', 'crestore', 'resend', 'wa', 'wacopy', 'inst', 'planEdit', 'revoke', 'show', 'plan', 'first', 'count', 'amt', 'due', 'sid', 'batch', 'inv', 'docs', 'sent', 'access', 'startPend'])
+for (const k of ['info', 'fix', 'fixEdit', 'fixVoid', 'regen', 'waAdm', 'waRcpt', 'waCert', 'waPrev', 'pay', 'remove', 'certify', 'hold', 'release', 'crev', 'crestore', 'resend', 'wa', 'wacopy', 'inst', 'planEdit', 'revoke', 'show', 'plan', 'first', 'count', 'amt', 'due', 'sid', 'batch', 'inv', 'docs', 'sent', 'access', 'startPend'])
   assert.ok(new RegExp('\\b' + k + ":'").test(admin.slice(admin.indexOf('var H={'), admin.indexOf('function T('))), 'hint text for ' + k);
 // all inputs/selects inside admin markup carry a title (direct or via T())
-const fields = (admin.match(/<(input|select)\b[^>]*>/g) || []).filter((f) => !/type="checkbox" name="i"|role="switch"|name="em"/.test(f));
+const fields = (admin.match(/<(input|select|textarea)\b[^>]*>/g) || []).filter((f) => !/type="checkbox" name="i"|role="switch"|name="em"/.test(f));
 assert.deepEqual(fields.filter((f) => !/title=|'\+T\(/.test(f)), [], 'every admin field has a hint');
 
 // server: activate/record_payment/set_plan use the plan
@@ -162,11 +165,11 @@ assert.ok(rp.includes('const st = settle({ plan, feeTotal: e.fee_total, amount, 
 assert.ok(/if \(st\.over\) \{[\s\S]*from\("payments"\)\.delete\(\)\.eq\("id", ins\.data\.id\)[\s\S]*409/.test(rp), 'overpayment after a race is undone with 409');
 assert.ok(rp.includes('update({ is_final: st.fin, installment_label: st.label })'), 'payment row fixed when label/is_final changed');
 assert.ok(rp.includes('before = st.before; after = st.after;') && rp.includes('buildPaymentReceipt(db, e, ins.data, before)'), 'receipt uses the fresh before');
-assert.ok(rp.includes('if (w.error || !w.data) warnings.push('), 'update error becomes a warning');
-assert.ok(rp.includes('readOk: !rr.error && Array.isArray(rr.data)'), 'sum re-read error is checked');
+assert.ok(rp.includes('.eq("id", id).eq("amount_paid", after);') && !rp.includes('could not be updated'), 'due date/reminders set only while the total is unchanged; a newer request wins quietly (amount_paid is owned by the DB trigger)');
+assert.ok(rp.includes('readOk: !rr.error && !!rr.data, sumAfter: Number(rr.data?.amount_paid)'), 'total re-read (set by the DB trigger) error is checked');
 assert.ok(/if \(st\.bad\) return json\(\{ ok: true[^\n]*Payment saved; reload and check/.test(rp), 'bad re-read: ok + warning, before any amount_paid write');
 assert.ok(rp.indexOf('if (st.bad)') < rp.indexOf('from("enrollments").update(upd)') && rp.indexOf('if (st.bad)') < rp.indexOf('buildPaymentReceipt'), 'bad re-read skips update and receipt');
-assert.ok(rp.includes('from("enrollments").update(upd).eq("id", id).lte("amount_paid", after)'), 'enrollment update is conditional (no lower overwrite)');
+assert.ok(!/amount_paid:\s*after/.test(rp), 'record_payment never writes amount_paid');
 assert.ok(/const del = await db\.from\("payments"\)\.delete\(\)\.eq\("id", ins\.data\.id\);\s*if \(del\.error\) return json\(\{ error: [^\n]*still exists/.test(rp), 'rollback delete error says the row still exists');
 assert.ok(sp.includes('reminder_stage: !due ? 3 : same ? (e.reminder_stage || 0) : 0'), 'set_plan keeps the reminder stage when the due date stays');
 assert.ok(idx.includes('installment_label: plan ? payLabel(plan, 0, first) : null, method: payMethod(body.method)'));
@@ -176,7 +179,7 @@ assert.ok(admin.includes("value=\"'+E(x.amount)+'\"") && admin.includes("value=\
 assert.ok(read('assets/dfa-portal.js').includes("E(f(s.amount))"));
 assert.ok(admin.includes('dated before today'), 'past-date warning');
 assert.ok(admin.includes('<select data-pm') && admin.includes('<select name="pm"') && admin.includes("method:f.pm.value||undefined") && admin.includes("method:tr.querySelector('[data-pm]').value||undefined"));
-assert.ok(admin.includes("row('Payments',histHtml(PAYS[x.id]),'hist')"));
+assert.ok(admin.includes("row('Payments',histHtml(PAYS[x.id],act),'hist')"));
 assert.match(read('assets/style.css'), /\.adm-i\{[^}]*width:24px;height:24px/);
 const mig = read('supabase/migrations/20261121120000_custom_installment_plan.sql');
 assert.match(mig, /add column if not exists installment_plan jsonb/);

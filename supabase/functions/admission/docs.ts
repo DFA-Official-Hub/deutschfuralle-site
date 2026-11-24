@@ -2,6 +2,8 @@
 import { initWasm, Resvg } from "npm:@resvg/resvg-wasm@2.6.2";
 import { PDFDocument } from "npm:pdf-lib@1.17.1";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+import { fromRegistration, effective, longDate as longDob, addressLine, pickDetails } from "./student.ts";
+import { receiptPath } from "./payfix.ts";
 const A = "https://www.deutschfuralle.com/assets/docs/";
 let wasm: Promise<void> | null = null;
 export function ensureWasm() {
@@ -53,18 +55,25 @@ export async function warmDocAssets() {
 const long = (d: string) => d ? new Date(String(d).slice(0, 10) + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : "–";
 const addDays = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 const pkr = (n: number) => n.toLocaleString("en-US");
-function pick(data: any, re: RegExp) { for (const k of Object.keys(data || {})) if (re.test(k)) return String(data[k] || "").trim(); return ""; }
+/** Registration form answers for this enrollment (sheet row only when the email matches too; see pickDetails). */
+export async function loadDetails(db: any, e: any) {
+  const rows: any[] = [];
+  if (e.sheet_row) { const r = (await db.from("registration_details").select("sheet_row,email,data,updated_at").eq("sheet_row", e.sheet_row).maybeSingle()).data; if (r) rows.push(r); }
+  if (e.email) rows.push(...((await db.from("registration_details").select("sheet_row,email,data,updated_at").ilike("email", String(e.email).trim()).limit(5)).data || []));
+  return pickDetails(rows, e)?.data || null;
+}
 export function docData(e: any, details: any, pay?: any) {
   const c = e.courses || {}, dd = details || {};
   const fee = Number(e.fee_total) || Number(c.fee_pkr) || 0, reg = Math.max(Number(c.old_fee_pkr) || 0, fee);
   const end = c.duration_days && e.start_date ? addDays(e.start_date, c.duration_days) : e.end_date;
   const paid = pay?.paid_on ? String(pay.paid_on).slice(0, 10) : String(e.invoiced_at || new Date().toISOString()).slice(0, 10);
   const amt = pay ? Number(pay.amount) || 0 : fee, before = pay ? Number(pay.before) || 0 : 0, bal = Math.max(fee - before - amt, 0);
-  const name = e.full_name || [pick(dd, /^first name/i), pick(dd, /^last name/i)].join(" ").trim();
-  const addr = [pick(dd, /^address/i), pick(dd, /^city/i), pick(dd, /^state/i), pick(dd, /^country/i)].filter(Boolean).join(", ");
+  // Student details: staff edits (enrollments.student_info) first, then the registration form copy. The date of birth is a calendar date (no time zone).
+  const info = effective(fromRegistration(dd), e.student_info, e);
+  const name = info.full_name;
   return {
-    name, firstName: (name.split(" ")[0] || "there"), dob: pick(dd, /date of birth/i), cnic: pick(dd, /cnic/i), email: e.email,
-    phone: pick(dd, /mobile|phone/i), address: addr, course: c.name || e.course_label || "German course", level: String(c.level || "").replace("-", " + "),
+    name, firstName: (name.split(" ")[0] || "there"), dob: longDob(info.dob), cnic: info.cnic, email: info.email,
+    phone: info.phone, address: addressLine(info), revised: pay && Number(pay.revision) > 0 ? Number(pay.revision) : 0, voided: !!pay?.voided_at, course: c.name || e.course_label || "German course", level: String(c.level || "").replace("-", " + "),
     feeText: fee ? `PKR ${pkr(fee)}` + (reg > fee ? ` (regular fee PKR ${pkr(reg)})` : "") : "–",
     start: long(e.start_date), end: long(end), accessUntil: long(e.end_date), batch: e.batch_code, studentId: e.student_id, invoiceNo: e.invoice_no,
     date: long(paid), paidDate: paid.split("-").reverse().join("-"),
@@ -83,15 +92,14 @@ async function pdfFromSvg(svg: string, fonts: Uint8Array[]) {
 }
 /** Builds both PDFs, stores them in the private "documents" bucket and returns their bytes. */
 export async function buildDocs(db: any, e: any) {
-  let details: any = null;
-  if (e.sheet_row) details = (await db.from("registration_details").select("data").eq("sheet_row", e.sheet_row).maybeSingle()).data?.data || null;
+  const details = await loadDetails(db, e);
   const first = (await db.from("payments").select("*").eq("enrollment_id", e.id).eq("invoice_no", e.invoice_no).maybeSingle()).data;
   const d = docData(e, details, first ? { ...first, before: 0 } : null);
   const a = await load("admission");
   const admission = await pdfFromSvg(admissionSvg(d, a.img), a.fonts);
   const r = await load("receipt");
   const receipt = await pdfFromSvg(receiptSvg(d, r.img), r.fonts);
-  const ap = `admissions/${e.student_id}.pdf`, rp = `receipts/${e.invoice_no}.pdf`;
+  const ap = `admissions/${e.student_id}.pdf`, rp = receiptPath(e.invoice_no, first?.revision);
   for (const [p, b] of [[ap, admission], [rp, receipt]] as [string, Uint8Array][]) {
     const up = await db.storage.from("documents").upload(p, b, { contentType: "application/pdf", upsert: true });
     if (up.error) throw new Error(up.error.message);
@@ -102,12 +110,11 @@ export async function buildDocs(db: any, e: any) {
 /** Builds ONE document (admission form or first receipt) per call, to stay inside the CPU limit. */
 export async function buildOne(db: any, e: any, kind: "admission" | "receipt", dry = false) {
   const { fonts, img } = await load(kind);
-  let details: any = null;
-  if (e.sheet_row) details = (await db.from("registration_details").select("data").eq("sheet_row", e.sheet_row).maybeSingle()).data?.data || null;
+  const details = await loadDetails(db, e);
   const first = (await db.from("payments").select("*").eq("enrollment_id", e.id).eq("invoice_no", e.invoice_no).maybeSingle()).data;
   const d = docData(e, details, first ? { ...first, before: 0 } : null);
   const bytes = await pdfFromSvg(kind === "admission" ? admissionSvg(d, img) : receiptSvg(d, img), fonts);
-  const path = kind === "admission" ? `admissions/${e.student_id}.pdf` : `receipts/${e.invoice_no}.pdf`;
+  const path = kind === "admission" ? `admissions/${e.student_id}.pdf` : receiptPath(e.invoice_no, first?.revision);
   if (dry) return { bytes, path, d };
   const up = await db.storage.from("documents").upload(path, bytes, { contentType: "application/pdf", upsert: true });
   if (up.error) throw new Error(up.error.message);
@@ -119,11 +126,10 @@ export async function buildOne(db: any, e: any, kind: "admission" | "receipt", d
 /** Receipt for one payment (installment). `before` = amount paid before this payment. */
 export async function buildPaymentReceipt(db: any, e: any, pay: any, before: number) {
   const { fonts, img } = await load("receipt");
-  let details: any = null;
-  if (e.sheet_row) details = (await db.from("registration_details").select("data").eq("sheet_row", e.sheet_row).maybeSingle()).data?.data || null;
+  const details = await loadDetails(db, e);
   const d = docData(e, details, { ...pay, before });
   const receipt = await pdfFromSvg(receiptSvg(d, img), fonts);
-  const rp = `receipts/${pay.invoice_no}.pdf`;
+  const rp = receiptPath(pay.invoice_no, pay.revision);
   const up = await db.storage.from("documents").upload(rp, receipt, { contentType: "application/pdf", upsert: true });
   if (up.error) throw new Error(up.error.message);
   await db.from("payments").update({ receipt_file: rp }).eq("id", pay.id);
@@ -213,6 +219,7 @@ export function receiptSvg(d: any, img: any) {
 <image href="${img.logo}" x="24" y="30" width="86" height="86"/>
 <text x="146" y="76" font-family="Oswald" font-weight="700" font-size="29" fill="${G}">DEUTSCH FÜR ALLE</text>
 <text x="146" y="96" font-family="Poppins" font-size="9" fill="${MUT}">Live online German classes · www.deutschfuralle.com</text>
+${d.revised ? `<text x="146" y="120" font-family="Poppins" font-weight="600" font-size="9" fill="#c4621a">REVISED RECEIPT (revision ${d.revised}) · replaces the copy issued earlier</text>` : ""}
 <g font-family="Poppins" font-size="9.4" fill="${BL}">
 <text x="398" y="60">Invoice No:</text><text x="398" y="76">Date:</text><text x="398" y="92">Student ID:</text><text x="398" y="108">Batch:</text>
 </g>
@@ -244,6 +251,6 @@ ${d.payNote ? `<text x="160" y="${ty + 176}" font-weight="600" fill="${G}">${esc
 <text x="499" y="712" font-family="Poppins" font-size="8" fill="${MUT}" text-anchor="middle">Deutsch Für Alle, Accounts</text>
 <text x="0" y="0" font-family="Archivo Black" font-size="66" fill="#2f5c0c" transform="translate(98 812) rotate(-90)">Receipt</text>
 <text x="146" y="806" font-family="Poppins" font-style="italic" font-size="8" fill="${MUT}">Computer-generated receipt, valid without a signature. Please keep it for your records.</text>
-${sampleMark(d.sample)}
+${sampleMark(d.sample)}${d.voided ? `<text x="330" y="470" font-family="Poppins" font-weight="700" font-size="90" fill="#d33" fill-opacity="0.16" text-anchor="middle" transform="rotate(-35 330 430)">VOID</text>` : ""}
 </svg>`;
 }

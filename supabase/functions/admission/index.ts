@@ -3,7 +3,9 @@ import nodemailer from "npm:nodemailer@6.9.16";
 import { confirmation, welcome, reminder, docsMail, receiptMail, type FeeInfo } from "./templates.ts";
 import { decodeBase64, encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { certificateUrls, certificatePdfUrls } from "./render.ts";
-import { buildOne, signed, buildPaymentReceipt, fileBytes, docData, warmDocAssets } from "./docs.ts";
+import { buildOne, signed, buildPaymentReceipt, fileBytes, docData, warmDocAssets, loadDetails } from "./docs.ts";
+import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS as INFO_FIELDS, label as infoLabel } from "./student.ts";
+import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
 async function imagesOn(db: any) { const { data } = await db.from("site_settings").select("value").eq("key", "certificate_images_public").maybeSingle(); return data?.value === "on"; }
@@ -24,6 +26,14 @@ const pkr = (n: number) => "PKR " + Number(n || 0).toLocaleString("en-US");
 const todayPk = () => new Date(Date.now() + 5 * 3600e3).toISOString().slice(0, 10);
 const addD = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 const ENR_SEL = "*,courses(name,level,duration_days,fee_pkr,old_fee_pkr)";
+const WA_LINK_HOURS = 48; // WhatsApp document links stop working after this many hours (the portal keeps the files)
+/** Tells the Google Sheets script to pull the fee summary now (optional; it also pulls every 10 minutes).
+ *  FEES_SYNC_URL = the Apps Script web app URL. Nothing secret is sent; the script then calls fees_feed with its own token. */
+function pingSheets() {
+  const url = env("FEES_SYNC_URL"); if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) return;
+  const p = fetch(url, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ ping: "fees", at: Date.now() }) }).then((r) => r.body?.cancel()).catch(() => {});
+  try { EdgeRuntime.waitUntil(p); } catch (_) { /* older runtimes */ }
+}
 function feeInfo(e: any): FeeInfo {
   const n = Array.isArray(e.installment_plan) ? nextInst(e.installment_plan, e.amount_paid) : null;
   return { name: e.full_name || "", studentId: e.student_id || "–", course: e.courses?.name || e.course_label || "your course", batch: e.batch_code || "", total: pkr(e.fee_total), paid: pkr(e.amount_paid), balance: pkr(e.balance_due), due: e.due_date ? fmt(e.due_date) : "on request", next: n ? `${pkr(n.left)} (installment ${n.no} of ${n.of})` : undefined };
@@ -51,7 +61,7 @@ async function logMail(db: any, e: any, kind: string, items: string[], status: s
 async function receiptByInv(db: any, e: any, inv: string) {
   const pays = (await db.from("payments").select("*").eq("enrollment_id", e.id).order("installment_no")).data || [];
   let before = 0, p: any = null;
-  for (const x of pays) { if (x.invoice_no === inv) { p = x; break; } before += Number(x.amount) || 0; }
+  for (const x of pays) { if (x.invoice_no === inv) { p = x; break; } if (!x.voided_at) before += Number(x.amount) || 0; }
   if (!p) return null;
   let f = p.receipt_file || (p.invoice_no === e.invoice_no ? e.receipt_file : null);
   if (!f) f = (await buildPaymentReceipt(db, e, p, before)).rp;
@@ -71,7 +81,7 @@ async function resendDocs(db: any, id: number, want: string[], by: string | null
   if (want.includes("receipt")) {
     const pays = (await db.from("payments").select("*").eq("enrollment_id", id).order("installment_no")).data || [];
     let before = 0;
-    for (const p of pays.length ? pays : [{ invoice_no: e.invoice_no, receipt_file: e.receipt_file }]) {
+    for (const p of pays.length ? pays.filter((x: any) => !x.voided_at) : [{ invoice_no: e.invoice_no, receipt_file: e.receipt_file }]) {
       let f = p.receipt_file || (p.invoice_no === e.invoice_no ? e.receipt_file : null); if (!f && p.id) { await buildPaymentReceipt(db, e, p, before); return { retry: true, built: p.invoice_no }; }
       before += Number(p.amount) || 0;
       att.push({ filename: `DFA Fee Receipt ${p.invoice_no}.pdf`, content: await fileBytes(db, "documents", f), contentType: "application/pdf" }); names.push(`Fee receipt ${p.invoice_no}`);
@@ -190,10 +200,7 @@ async function fillEnrollmentPhone(db: any, id: number) {
   if (usable(e.phone)) return usable(e.phone);
   const fromData = (data: any) => { for (const k of Object.keys(data || {})) if (/mobile|phone/i.test(k)) { const v = usable(data[k]); if (v) return v; } return ""; };
   let phone = "";
-  if (e.sheet_row) {
-    const data = (await db.from("registration_details").select("data").eq("sheet_row", e.sheet_row).maybeSingle()).data?.data;
-    phone = fromData(data);
-  }
+  if (e.sheet_row || e.email) phone = fromData(await loadDetails(db, e)); // sheet row only counts when the email matches
   if (!phone && e.email) {
     const byEmail = (await db.from("registration_details").select("data").ilike("email", e.email.trim()).limit(3)).data || [];
     for (const r of byEmail) { phone = fromData(r.data); if (phone) break; }
@@ -395,6 +402,15 @@ Deno.serve(async (req) => {
       const r = await db.from("enrollments").select("sheet_row,email,student_id,batch_code,invoice_no,certificate_no,certificate_code,certificate_revoked_at,certificate_hold").not("sheet_row", "is", null).order("sheet_row");
       if (r.error) return json({ error: r.error.message }, 500);
       return json({ rows: r.data || [] });
+    }
+    if (body.action === "fees_feed") {
+      // Apps Script (Google Sheets): one fee summary per student + their payments. Read-only.
+      const tok = env("AUTOMATION_TOKEN");
+      if (!tok || req.headers.get("x-intake-token") !== tok) return json({ error: "forbidden" }, 403);
+      const es = (await db.from("enrollments").select(ENR_SEL).not("student_id", "is", null).order("id")).data || [];
+      const ps = (await db.from("payments").select("id,enrollment_id,amount,paid_on,installment_no,invoice_no,method,voided_at,installment_label,revision,proof_url")).data || [];
+      const by = new Map<number, any[]>(); for (const p of ps) { const l = by.get(p.enrollment_id) || []; l.push(p); by.set(p.enrollment_id, l); }
+      return json({ generated_at: new Date().toISOString(), rows: es.map((e: any) => ({ ...feeRow(e, by.get(e.id) || []), sheet_row: e.sheet_row })) });
     }
     if (body.action === "sync_courses") {
       const tok = env("AUTOMATION_TOKEN");
@@ -621,6 +637,7 @@ Deno.serve(async (req) => {
       // Warm WASM/fonts in the background so the first build_doc is less likely to hit the CPU limit on a cold isolate.
       try { EdgeRuntime.waitUntil(warmDocAssets()); } catch (_) { /* older runtimes */ }
       // Documents + welcome are processed in separate requests (process_docs / build_doc) to stay inside the 2s CPU limit.
+      pingSheets();
       return json({ ok: true, enrollment: e, next: ["admission", "receipt", "welcome"], jobs: "queued" });
     }
     if (body.action === "build_doc") {
@@ -713,13 +730,13 @@ Deno.serve(async (req) => {
       // with a plan the receipt label says which installment(s) the money covers.
       const ins = await db.from("payments").insert({ enrollment_id: id, amount, paid_on: paidOn, proof_url: proof, installment_no: n, installments: Math.max(planCount(e), n), is_final: fin, installment_label: plan ? payLabel(plan, before, after) : null, method: payMethod(body.method), created_by: u.user.id }).select("*").single();
       if (ins.error) return json({ error: /duplicate|unique/i.test(ins.error.message || "") ? "Another payment was just saved for this student. Reload the page and check before adding it again." : ins.error.message }, ins.error && /duplicate|unique/i.test(ins.error.message || "") ? 409 : 400);
-      // The insert and the enrollment update are separate requests, so recompute everything from the sum of all payments now stored.
-      const rr = await db.from("payments").select("amount").eq("enrollment_id", id);
-      const st = settle({ plan, feeTotal: e.fee_total, amount, readOk: !rr.error && Array.isArray(rr.data), sumAfter: (rr.data || []).reduce((t: number, p: { amount: number }) => t + (Number(p.amount) || 0), 0) });
-      // Re-read failed or can't include this payment: don't write amount_paid or send a receipt from a wrong total.
+      // The database keeps amount_paid = sum of live payments (trigger payments_sync_amount_paid), so read the total it just set.
+      const rr = await db.from("enrollments").select("amount_paid").eq("id", id).maybeSingle();
+      const st = settle({ plan, feeTotal: e.fee_total, amount, readOk: !rr.error && !!rr.data, sumAfter: Number(rr.data?.amount_paid) });
+      // Re-read failed or can't include this payment: don't send a receipt from a wrong total.
       if (st.bad) return json({ ok: true, payment: ins.data, email: "not sent", warning: "Payment saved; reload and check" + (rr.error ? " (" + rr.error.message + ")" : "") + "." });
       if (st.over) {
-        // Another payment landed meanwhile and this one would take the total above the fee: undo it.
+        // Another payment landed meanwhile and this one would take the total above the fee: undo it (the trigger re-totals on delete).
         const del = await db.from("payments").delete().eq("id", ins.data.id);
         if (del.error) return json({ error: "This payment would take the total above the fee, but it could not be removed: the payment row " + (ins.data.invoice_no || ins.data.id) + " still exists. Reload, check the payments and delete the extra one before doing anything else. (" + del.error.message + ")" }, 500);
         return json({ error: "Another payment was just saved for this student, and this one would take the total above the fee. Reload the page and check the balance." }, 409);
@@ -731,12 +748,12 @@ Deno.serve(async (req) => {
       }
       // Custom plan: the next unpaid installment's date becomes the due date, so reminders follow the schedule.
       // Reminders restart only when the due date moves; a part payment towards the same installment keeps the reminder stage.
-      const upd: Record<string, unknown> = { amount_paid: after, reminder_stage: st.fin ? 3 : 0 };
+      // amount_paid is owned by the database; only the due date and reminder stage are set here, and only while the
+      // total is still the one this request saw. If it changed, a newer request (or a correction) already set them.
+      const upd: Record<string, unknown> = { reminder_stage: st.fin ? 3 : 0 };
       if (plan) { const nd = planDue(plan, after); upd.due_date = nd; if (!st.fin && nd === (e.due_date ? String(e.due_date).slice(0, 10) : null)) upd.reminder_stage = e.reminder_stage || 0; e.due_date = nd; }
-      // Conditional: a stale request (smaller total) must never overwrite a newer, higher amount_paid; then no row changes and the warning below fires.
-      const w = await db.from("enrollments").update(upd).eq("id", id).lte("amount_paid", after).select("id").maybeSingle();
+      await db.from("enrollments").update(upd).eq("id", id).eq("amount_paid", after);
       const warnings: string[] = [];
-      if (w.error || !w.data) warnings.push("Payment saved, but the student's paid total could not be updated: " + (w.error?.message || "no row updated") + ". Reload and check before adding anything else.");
       e.amount_paid = after; e.balance_due = Math.max((e.fee_total || 0) - after, 0);
       let rc: any = null; try { rc = await buildPaymentReceipt(db, e, ins.data, before); } catch (x) { return json({ ok: true, payment: ins.data, warning: [...warnings, "Payment saved, but the receipt could not be created: " + String((x as Error).message || x)].join(" ") }); }
       let mail = "not sent";
@@ -745,6 +762,7 @@ Deno.serve(async (req) => {
         try { mail = await send(e.email, m.subject, m.text, [{ filename: `DFA Fee Receipt ${ins.data.invoice_no}.pdf`, content: rc.receipt, contentType: "application/pdf" }]); await logMail(db, e, "payment", ["receipt"], mail, u.user.id); }
         catch (x) { mail = "error"; await logMail(db, e, "payment", ["receipt"], "error", u.user.id, String((x as Error).message || x)); }
       }
+      pingSheets();
       return json({ ok: true, payment: ins.data, balance_due: e.balance_due, email: mail, ...(warnings.length ? { warning: warnings.join(" ") } : {}) });
     }
     if (body.action === "set_plan") {
@@ -759,12 +777,12 @@ Deno.serve(async (req) => {
         const due = open && e.start_date && e.end_date ? addD(e.start_date, Math.round(((Date.parse(e.end_date) - Date.parse(e.start_date)) / 864e5 - 15) / 2)) : null;
         const up = await db.from("enrollments").update({ installment_plan: null, payment_plan: open ? "two" : "full", due_date: due, reminder_stage: open ? 0 : 3 }).eq("id", id).eq("amount_paid", paid).select("id").maybeSingle();
         if (!up.data) return json({ error: "Reload, a payment was just recorded." }, 409);
-        return json({ ok: true, cleared: true, due_date: due });
+        pingSheets(); return json({ ok: true, cleared: true, due_date: due });
       }
       const np = normPlan(body.installments);
       if (np.error) return json({ error: np.error }, 400);
       if (e.fee_total && np.total !== e.fee_total) return json({ error: `The installments add up to ${pkr(np.total!)}, but the fee is ${pkr(e.fee_total)}. Make them match.` }, 400);
-      const pays = Array.isArray(e.installment_plan) && e.installment_plan.length ? [] : ((await db.from("payments").select("amount,paid_on,installment_no").eq("enrollment_id", id).order("installment_no")).data || []);
+      const pays = Array.isArray(e.installment_plan) && e.installment_plan.length ? [] : ((await db.from("payments").select("amount,paid_on,installment_no").eq("enrollment_id", id).is("voided_at", null).order("installment_no")).data || []);
       const lockErr = checkLocked(lockedRows(e.installment_plan, paid, pays), np.plan!);
       if (lockErr) return json({ error: lockErr }, 400);
       const due = planDue(np.plan!, paid);
@@ -772,7 +790,154 @@ Deno.serve(async (req) => {
       const up = await db.from("enrollments").update({ installment_plan: np.plan, payment_plan: "custom", due_date: due, reminder_stage: !due ? 3 : same ? (e.reminder_stage || 0) : 0 }).eq("id", id).eq("amount_paid", paid).select("id").maybeSingle();
       if (up.error) return json({ error: up.error.message }, 400);
       if (!up.data) return json({ error: "Reload, a payment was just recorded." }, 409);
-      return json({ ok: true, due_date: due });
+      pingSheets(); return json({ ok: true, due_date: due });
+    }
+    if (body.action === "student_info_get") {
+      // Admin: what the documents will show, where each value comes from (registration form or staff edit), and the change history.
+      const e = (await db.from("enrollments").select("id,full_name,email,phone,sheet_row,student_info,student_id,certificate_no,certificate_revoked_at").eq("id", Number(body.id)).maybeSingle()).data;
+      if (!e) return json({ error: "Student not found." }, 404);
+      const reg = fromRegistration(await loadDetails(db, e));
+      const hist = (await db.from("enrollment_audit").select("kind,reason,old_values,new_values,changed_at,changed_by,payment_id").eq("enrollment_id", e.id).order("changed_at", { ascending: false }).limit(30)).data || [];
+      const ids = [...new Set(hist.map((h: any) => h.changed_by).filter(Boolean))];
+      const names = new Map(((ids.length ? (await db.from("profiles").select("id,username,full_name").in("id", ids)).data : []) || []).map((p: any) => [p.id, p.full_name || p.username || "Admin"]));
+      return json({ ok: true, fields: INFO_FIELDS.map((f) => ({ key: f, label: infoLabel(f) })), registration: reg, has_registration: Object.values(reg).some(Boolean), overrides: e.student_info || {}, effective: effective(reg, e.student_info, e), login_email: e.email, has_certificate: !!(e.certificate_no && !e.certificate_revoked_at), history: hist.map((h: any) => ({ ...h, changed_by: names.get(h.changed_by) || "Admin" })) });
+    }
+    if (body.action === "student_info_save") {
+      const e = (await db.from("enrollments").select("id,full_name,email,phone,sheet_row,student_info,student_id,invoice_no,certificate_no,certificate_revoked_at").eq("id", Number(body.id)).maybeSingle()).data;
+      if (!e) return json({ error: "Student not found." }, 404);
+      const reg = fromRegistration(await loadDetails(db, e));
+      const c = cleanOverrides(body.info && typeof body.info === "object" ? body.info : {}, reg, e);
+      if (c.error) return json({ error: c.error }, 400);
+      const before = effective(reg, e.student_info, e), after = effective(reg, c.info, { ...e, full_name: c.info?.full_name || e.full_name });
+      const ch = infoDiff(before, after);
+      if (!Object.keys(ch.new).length && JSON.stringify(e.student_info || null) === JSON.stringify(c.info)) return json({ ok: true, unchanged: true });
+      const patch: Record<string, unknown> = { student_info: c.info };
+      // Name and mobile also live on the enrollment (certificates, emails, WhatsApp button). The login email never changes here.
+      // Clearing an override puts back the registration form value (or, without one, the value from before the first edit).
+      const prevOver = (e.student_info || {}) as Record<string, string>;
+      const before1 = async (k: string) => {
+        const h = (await db.from("enrollment_audit").select("old_values,new_values").eq("enrollment_id", e.id).eq("kind", "student_info").order("changed_at", { ascending: true }).limit(50)).data || [];
+        const first = h.find((x: any) => x.new_values && k in x.new_values); return first ? String(first.old_values?.[k] || "") : "";
+      };
+      if (c.info?.full_name) { if (c.info.full_name !== e.full_name) patch.full_name = c.info.full_name; }
+      else if (prevOver.full_name) { const back = reg.full_name || await before1("full_name"); if (back && back !== e.full_name) patch.full_name = back; }
+      if (c.info?.phone) { if (c.info.phone !== e.phone) patch.phone = c.info.phone; }
+      else if (prevOver.phone) { const back = reg.phone || await before1("phone"); if ((back || null) !== (e.phone || null)) patch.phone = back || null; }
+      // The certificate shows the name: drop the cached image so the image and PDF are made again with the new name.
+      const certRedo = !!(patch.full_name && e.certificate_no && !e.certificate_revoked_at);
+      if (certRedo) patch.certificate_file = null;
+      const up = await db.from("enrollments").update(patch).eq("id", e.id).select("id").maybeSingle();
+      if (up.error || !up.data) return json({ error: up.error?.message || "Could not save." }, 400);
+      await db.from("enrollment_audit").insert({ enrollment_id: e.id, kind: "student_info", reason: String(body.reason || "").trim().slice(0, 300) || null, old_values: ch.old, new_values: ch.new, changed_by: u.user.id });
+      pingSheets();
+      return json({ ok: true, changed: Object.keys(ch.new), effective: after, regen: !!e.invoice_no || certRedo, certificate: certRedo });
+    }
+    if (body.action === "regen_docs") {
+      // Rebuilds ONE document per call (CPU limit): admission form first, then each counted payment's receipt. The page calls again with done[] until remaining is 0.
+      const e = (await db.from("enrollments").select(ENR_SEL).eq("id", Number(body.id)).maybeSingle()).data;
+      if (!e || !e.invoice_no) return json({ error: "Documents are created when you click Payment received." }, 400);
+      const pays = livePays(((await db.from("payments").select("*").eq("enrollment_id", e.id)).data || []) as Pay[]);
+      const targets = [...(body.receipts_only ? [] : ["admission"]), ...pays.map((p) => "receipt:" + p.invoice_no), ...(!body.receipts_only && e.certificate_no && !e.certificate_revoked_at && !e.certificate_file ? ["certificate"] : [])];
+      const done = new Set((Array.isArray(body.done) ? body.done : []).map(String));
+      const t = targets.find((x) => !done.has(x));
+      if (!t) return json({ ok: true, remaining: 0 });
+      try {
+        if (t === "admission") await buildOne(db, e, "admission");
+        else if (t === "certificate") await certificatePdfUrls(db, (await db.from("enrollments").select(CERT_SEL).eq("id", e.id).maybeSingle()).data);
+        else {
+          const inv = t.slice(8); let before = 0, p: any = null;
+          for (const x of pays) { if (x.invoice_no === inv) { p = x; break; } before += Number(x.amount) || 0; }
+          if (p.invoice_no === e.invoice_no) await buildOne(db, e, "receipt"); else await buildPaymentReceipt(db, e, p, before);
+        }
+      } catch (x) { return json({ error: "Could not create " + (t === "admission" ? "the admission form" : t === "certificate" ? "the certificate" : "receipt " + t.slice(8)) + ": " + String((x as Error).message || x).slice(0, 200) }, 500); }
+      return json({ ok: true, built: t, remaining: targets.filter((x) => !done.has(x)).length - 1 });
+    }
+    if (body.action === "payment_correct") {
+      // Admin: fix or void a payment entered by mistake. Same invoice number; the receipt is re-issued as "Revised" (INV-…-R<n>.pdf, the old PDF is kept).
+      const id = Number(body.id), pid = Number(body.payment_id);
+      const e = (await db.from("enrollments").select(ENR_SEL).eq("id", id).maybeSingle()).data;
+      if (!e || !e.invoice_no || !["active", "expired"].includes(e.status)) return json({ error: "Only paid (active) students have payments to correct." }, 400);
+      const all = ((await db.from("payments").select("*").eq("enrollment_id", id).order("installment_no")).data || []) as any[];
+      const p = all.find((x) => x.id === pid);
+      if (!p) return json({ error: "Payment not found." }, 404);
+      if (p.voided_at) return json({ error: "This payment is already void." }, 400);
+      const c = checkCorrection(body, todayPk());
+      if (c.error) return json({ error: c.error }, 400);
+      const meth = c.void ? p.method : body.method === undefined ? p.method : payMethod(body.method);
+      if (!c.void && c.amount === Number(p.amount) && c.paid_on === String(p.paid_on || "").slice(0, 10) && (meth || null) === (p.method || null)) return json({ error: "Nothing changed. Edit the amount, date or method, or void the payment." }, 400);
+      const nowIso = new Date().toISOString();
+      const next = all.map((x) => x.id === pid ? { ...x, amount: c.void ? x.amount : c.amount, paid_on: c.void ? x.paid_on : c.paid_on, voided_at: c.void ? nowIso : null } : x);
+      const plan: Inst[] | null = Array.isArray(e.installment_plan) && e.installment_plan.length ? e.installment_plan : null;
+      const rc = recompute(next, plan, e.fee_total, planCount(e));
+      if (rc.error) return json({ error: rc.error + " Check the amount." }, 400);
+      const oldPaid = Number(e.amount_paid) || 0, fee = Number(e.fee_total) || 0;
+      // 1) the payment itself. Optimistic lock on revision: if anyone corrected this payment meanwhile, nothing is written.
+      //    The revision goes up for a void too, so the receipt is re-issued with the VOID stamp (INV-…-R<n>.pdf) and the old file is no longer served.
+      //    The student's paid total is kept by the database (trigger payments_sync_amount_paid = sum of non-voided payments).
+      const rev = Number(p.revision) || 0;
+      const pp: Record<string, unknown> = c.void ? { voided_at: nowIso, void_reason: c.reason, revision: rev + 1, receipt_file: null } : { amount: c.amount, paid_on: c.paid_on, method: meth, revision: rev + 1, receipt_file: null };
+      const u1 = await db.from("payments").update(pp).eq("id", pid).eq("revision", rev).is("voided_at", null).select("id").maybeSingle();
+      if (u1.error) return json({ error: "Could not update the payment: " + u1.error.message }, 500);
+      if (!u1.data) return json({ error: "This payment was changed by someone else just now. Reload the page and check it before correcting again." }, 409);
+      // 2) re-read what the database now holds (another payment may have landed at the same moment)
+      const now = (await db.from("enrollments").select("amount_paid,due_date,reminder_stage").eq("id", id).maybeSingle()).data;
+      const sumNow = (((await db.from("payments").select("amount,voided_at").eq("enrollment_id", id)).data || []) as any[]).filter((x) => !x.voided_at).reduce((t, x) => t + (Number(x.amount) || 0), 0);
+      const paidNow = Number(now?.amount_paid ?? sumNow) || 0;
+      const warnings: string[] = [];
+      if (paidNow !== rc.paid) warnings.push(`Another payment was saved for this student at the same moment: the paid total is now ${pkr(paidNow)} (not ${pkr(rc.paid)}). Reload and check.`);
+      if (paidNow !== sumNow) warnings.push(`The paid total (${pkr(paidNow)}) does not match the payments (${pkr(sumNow)}). Reload and check before doing anything else.`);
+      if (fee && sumNow > fee) warnings.push(`The payments now add up to ${pkr(sumNow)}, more than the fee of ${pkr(fee)}.`);
+      const due = plan ? planDue(plan, paidNow) : fee && paidNow >= fee ? null : (now?.due_date ? String(now.due_date).slice(0, 10) : null);
+      const fin = !!fee && paidNow >= fee, oldDue = now?.due_date ? String(now.due_date).slice(0, 10) : null;
+      const w = await db.from("enrollments").update({ due_date: due, reminder_stage: fin ? 3 : due === oldDue ? (now?.reminder_stage || 0) : 0, ...(p.invoice_no === e.invoice_no ? { receipt_file: null } : {}) }).eq("id", id).select("id").maybeSingle();
+      if (w.error) warnings.push("The due date could not be updated: " + w.error.message);
+      // 3) later receipts show "paid earlier" and the balance, so they are re-issued too (labels recomputed)
+      for (const r of rc.rows) {
+        const x = all.find((y) => y.id === r.id); if (!x || x.id === pid) continue;
+        const later = x.installment_no > p.installment_no;
+        const lab = (r.label || null) !== (x.installment_label || null) || r.is_final !== !!x.is_final;
+        if (!later && !lab) continue;
+        await db.from("payments").update({ installment_label: r.label, is_final: r.is_final, installments: r.installments, revision: (Number(x.revision) || 0) + 1, receipt_file: null }).eq("id", x.id).eq("revision", Number(x.revision) || 0);
+        if (x.invoice_no === e.invoice_no) await db.from("enrollments").update({ receipt_file: null }).eq("id", id);
+      }
+      const mine = rc.rows.find((r) => r.id === pid);
+      if (mine) await db.from("payments").update({ installment_label: mine.label, is_final: mine.is_final, installments: mine.installments }).eq("id", pid);
+      await db.from("enrollment_audit").insert({ enrollment_id: id, payment_id: pid, kind: c.void ? "payment_void" : "payment_correct", reason: c.reason,
+        old_values: { invoice_no: p.invoice_no, amount: p.amount, paid_on: String(p.paid_on || "").slice(0, 10), method: p.method, student_paid_total: oldPaid },
+        new_values: c.void ? { invoice_no: p.invoice_no, voided: true, student_paid_total: paidNow, receipt_revision: rev + 1 } : { invoice_no: p.invoice_no, amount: c.amount, paid_on: c.paid_on, method: meth, student_paid_total: paidNow, receipt_revision: rev + 1 },
+        changed_by: u.user.id });
+      pingSheets();
+      return json({ ok: true, amount_paid: paidNow, balance_due: Math.max(fee - paidNow, 0), status: payStatus(fee, paidNow), due_date: due, regen: true, ...(warnings.length ? { warning: warnings.join(" ") } : {}) });
+    }
+    if (body.action === "wa_links") {
+      // Admin: download links for the WhatsApp message. wa.me can't attach files, so these are signed links that stop working after WA_LINK_HOURS.
+      // File names carry only the document number (no student name), in case a link is forwarded.
+      const id = Number(body.id), want = (Array.isArray(body.items) ? body.items : []).map(String);
+      const e = (await db.from("enrollments").select(ENR_SEL).eq("id", id).maybeSingle()).data;
+      if (!e || !e.invoice_no) return json({ error: "Documents are created when you click Payment received." }, 400);
+      const ttl = WA_LINK_HOURS * 3600, links: any[] = [];
+      const sign = async (bucket: string, path: string, name: string) => (await db.storage.from(bucket).createSignedUrl(path, ttl, { download: name })).data?.signedUrl || null;
+      if (want.includes("admission")) {
+        if (!e.admission_file) { await buildOne(db, e, "admission"); return json({ retry: true, built: "admission" }); }
+        links.push({ kind: "admission", label: "Admission form", url: await sign("documents", e.admission_file, `${e.student_id}_Admission_Form.pdf`) });
+      }
+      if (want.includes("receipt")) {
+        const pays = livePays(((await db.from("payments").select("*").eq("enrollment_id", id)).data || []) as Pay[]);
+        const p: any = pays[pays.length - 1];
+        let f = p ? p.receipt_file || (p.invoice_no === e.invoice_no ? e.receipt_file : null) : e.receipt_file;
+        if (!f) { if (p) { let before = 0; for (const x of pays) { if (x.id === p.id) break; before += Number(x.amount) || 0; } if (p.invoice_no === e.invoice_no) await buildOne(db, e, "receipt"); else await buildPaymentReceipt(db, e, p, before); } else await buildOne(db, e, "receipt"); return json({ retry: true, built: "receipt" }); }
+        const inv = p?.invoice_no || e.invoice_no;
+        links.push({ kind: "receipt", label: "Fee receipt " + inv, url: await sign("documents", f, `${inv}_Fee_Receipt.pdf`) });
+      }
+      if (want.includes("certificate")) {
+        if (!e.certificate_no || e.certificate_revoked_at) return json({ error: "No valid certificate has been issued yet." }, 400);
+        const c = (await db.from("enrollments").select(CERT_SEL).eq("id", id).maybeSingle()).data;
+        await certificatePdfUrls(db, c); // makes sure the PDF exists
+        links.push({ kind: "certificate", label: "Certificate " + e.certificate_no, url: await sign("certificates", `${e.certificate_no}.pdf`, `${e.certificate_no}_Certificate.pdf`) });
+      }
+      if (links.some((l) => !l.url)) return json({ error: "Could not create a download link. Try again." }, 500);
+      const exp = new Date(Date.now() + ttl * 1000 + 5 * 3600e3).toISOString().slice(0, 10);
+      return json({ ok: true, links, expires: fmt(exp), hours: WA_LINK_HOURS, portal: "https://www.deutschfuralle.com/portal.html" });
     }
     if (body.action === "set_due") {
       const d = String(body.due_date || ""); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "Pick a date." }, 400);
