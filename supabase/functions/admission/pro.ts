@@ -2,6 +2,7 @@
 // Every caller is already signed in, confirmed and admin/staff (index.ts checks that and allowed() before calling).
 import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, searchOr, confirmOk, sameJson, STAFF_MAIL_ERR, STAFF_ENR_COLS, STAFF_PAY_COLS, allowed, denyMessage, PERM_KEYS, parsePerms, emptyPerms, type Role, type StaffPerms } from "./prologic.ts";
 import { method as payMethod, type Inst } from "./plan.ts";
+import { testConfirmOk, testConfirmWord, expectSidOk, actorLabel, activityKind, proofBytesOk, PROOF_MIN, adjustmentMail } from "./prologic.ts";
 
 type Ctx = { json: (b: unknown, s?: number) => Response; today: () => string; pingSheets?: () => void; perms?: StaffPerms | null };
 const pkr = (n: number) => "PKR " + Number(n || 0).toLocaleString("en-US");
@@ -10,8 +11,12 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 export async function actorName(db: any, uid: string | null): Promise<string | null> {
   if (!uid) return null;
   const p = (await db.from("profiles").select("full_name,username").eq("id", uid).maybeSingle()).data;
-  return p ? (p.full_name || p.username || "Staff") : null;
+  return actorLabel(p);
 }
+/** Sends one plain email and writes it to email_log (index.ts sets this once; tests can set a fake). */
+export type Mailer = (db: any, e: { id: number; email: string }, kind: string, items: string[], subject: string, text: string, by: string | null) => Promise<{ status: string; error?: string }>;
+let MAILER: Mailer | null = null;
+export function setMailer(m: Mailer | null) { MAILER = m; }
 /** Writes one activity row. Never throws (the action itself already succeeded). */
 export async function logActivity(db: any, uid: string | null, enrollmentId: number | null, action: string, summary: string, details: Record<string, unknown> = {}) {
   try { await db.from("admin_activity").insert({ enrollment_id: enrollmentId || null, actor: uid, actor_name: await actorName(db, uid), action, summary: summary.slice(0, 500), details }); } catch (_) { /* best effort */ }
@@ -38,6 +43,11 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
   const { json } = ctx, a = String(body.action || ""), uid = user.id;
   if (!a.startsWith("pro_")) return null;
   const id = Number(body.id);
+  // QA2: the browser sends the Student ID shown on the card; a card that re-rendered under the cursor can't change someone else
+  if (id > 0 && body.expect_sid) {
+    const ck = (await db.from("enrollments").select("student_id").eq("id", id).maybeSingle()).data;
+    if (!expectSidOk(ck, body.expect_sid)) return json({ error: "The list changed under your click. Nothing was changed. Reload and try again.", code: "stale" }, 409);
+  }
 
   // ---- dashboard -------------------------------------------------------------------------------
   if (a === "pro_dashboard") {
@@ -59,12 +69,13 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
   // ---- activity log (per student or global) -----------------------------------------------------
   if (a === "pro_activity") {
     const lim = Math.min(Math.max(Number(body.limit) || 100, 1), 500);
-    let q = db.from("admin_activity").select("id,enrollment_id,actor_name,action,summary,details,created_at").order("created_at", { ascending: false }).limit(lim);
-    if (id) q = q.eq("enrollment_id", id); else if (role !== "admin") q = q.not("enrollment_id", "is", null);
+    let q = db.from("admin_activity").select("id,enrollment_id,actor,actor_name,action,summary,details,created_at").order("created_at", { ascending: false }).limit(lim);
+    if (id) q = q.eq("enrollment_id", id); else if (role !== "admin") q = q.or("enrollment_id.not.is.null,action.eq.attendance_saved");
     if (body.before && !isNaN(Date.parse(body.before))) q = q.lt("created_at", body.before);
     if (body.from && ISO.test(body.from)) q = q.gte("created_at", body.from + "T00:00:00+05:00");
     if (body.to && ISO.test(body.to)) q = q.lte("created_at", body.to + "T23:59:59+05:00");
-    if (body.kind) q = q.like("action", String(body.kind).replace(/[^a-z_]/g, "") + "%");
+    const kf = activityKind(body.kind);
+    if (kf?.in) q = q.in("action", kf.in); else if (kf?.like) q = q.like("action", kf.like);
     const r = await q; if (r.error) return json({ error: r.error.message }, 500);
     let rows = (r.data || []).map((x: any) => ({ ...x, source: "activity" }));
     // student-details edits and payment corrections (enrollment_audit, from PR #11) are part of the same story
@@ -75,7 +86,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
       const au = await aq;
       if (!au.error) {
         const ids = [...new Set((au.data || []).map((h: any) => h.changed_by).filter(Boolean))];
-        const names = new Map(((ids.length ? (await db.from("profiles").select("id,full_name,username").in("id", ids)).data : []) || []).map((p: any) => [p.id, p.full_name || p.username]));
+        const names = new Map(((ids.length ? (await db.from("profiles").select("id,full_name,username").in("id", ids)).data : []) || []).map((p: any) => [p.id, actorLabel(p)]));
         const lbl: Record<string, string> = { student_info: "Student details changed", payment_correct: "Payment corrected", payment_void: "Payment voided" };
         rows = rows.concat((au.data || []).map((h: any) => ({ id: "a" + h.id, enrollment_id: h.enrollment_id, actor_name: names.get(h.changed_by) || null, action: h.kind, summary: (lbl[h.kind] || h.kind) + ": " + (role === "admin" ? Object.keys(h.new_values || {}).map((k) => `${k} ${JSON.stringify((h.old_values || {})[k] ?? "")} → ${JSON.stringify(h.new_values[k])}`).join(", ") : Object.keys(h.new_values || {}).join(", ")).slice(0, 300) + (h.reason ? ` (${h.reason})` : ""), details: {}, created_at: h.changed_at, source: "audit" })));
       }
@@ -83,8 +94,14 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     rows.sort((x: any, y: any) => String(y.created_at).localeCompare(String(x.created_at)));
     rows = rows.slice(0, lim);
     const eids = [...new Set(rows.map((x: any) => x.enrollment_id).filter(Boolean))];
-    const en = new Map(((eids.length ? (await db.from("enrollments").select("id,full_name,student_id").in("id", eids)).data : []) || []).map((e: any) => [e.id, e]));
-    return json({ ok: true, rows: rows.map((x: any) => ({ ...x, student: en.get(x.enrollment_id) || null })), more: rows.length === lim });
+    const aids = [...new Set(rows.map((x: any) => x.actor).filter(Boolean))];
+    const [enR, prR] = await Promise.all([
+      eids.length ? db.from("enrollments").select("id,full_name,student_id").in("id", eids) : { data: [] },
+      aids.length ? db.from("profiles").select("id,username,full_name").in("id", aids) : { data: [] },
+    ]);
+    const en = new Map(((enR as any).data || []).map((e: any) => [e.id, e]));
+    const who = new Map(((prR as any).data || []).map((p: any) => [p.id, actorLabel(p)]));
+    return json({ ok: true, rows: rows.map(({ actor, ...x }: any) => ({ ...x, actor_name: (actor && who.get(actor)) || x.actor_name, student: en.get(x.enrollment_id) || null })), more: rows.length === lim });
   }
 
   // ---- staff lists (B2): masked contacts, no student details, no files -----------------------------
@@ -143,8 +160,14 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const ins = await db.from("enrollments").insert({ ...v.row, course_label: c.name, status: "pending" }).select("id,student_id,full_name").single();
     if (ins.error) return json({ error: ins.error.message }, 400);
     await logActivity(db, uid, ins.data.id, "student_added", `Added ${ins.data.full_name} as pending (${c.code}, ${v.row!.source})`);
+    let is_test = false;
+    if (body.is_test === true && role === "admin") {
+      // the creator ticked "TEST record" in the same form, so this is the confirmation; still one audit row
+      const t = await db.rpc("set_test_mark", { p_enr: ins.data.id, p_on: true, p_actor: uid, p_reason: "ticked when the record was added" });
+      is_test = !t.error;
+    }
     ctx.pingSheets?.();
-    return json({ ok: true, id: ins.data.id, student_id: ins.data.student_id });
+    return json({ ok: true, id: ins.data.id, student_id: ins.data.student_id, is_test });
   }
 
   // ---- batches -----------------------------------------------------------------------------------
@@ -218,7 +241,8 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     if (a === "pro_proof_upload") {
       const type = String(body.type || ""), size = Number(body.size) || 0;
       if (!PROOF_TYPES[type]) return json({ error: "Upload a photo (JPG, PNG, WebP) or a PDF." }, 400);
-      if (!(size > 0 && size <= PROOF_MAX)) return json({ error: "The file must be smaller than 5 MB." }, 400);
+      if (!(size > 0 && size <= PROOF_MAX)) return json({ error: size > PROOF_MAX ? "The file must be smaller than 5 MB." : "This file is empty. Pick the photo or PDF of the slip." }, 400);
+      if (size < PROOF_MIN) return json({ error: "This file is too small to be a payment slip. Pick the photo or PDF of the slip.", code: "tiny" }, 400);
       const path = proofPath(p.enrollment_id, pid, type)!;
       const r = await db.storage.from("documents").createSignedUploadUrl(path);
       if (r.error) return json({ error: r.error.message }, 500);
@@ -237,10 +261,16 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
         await db.storage.from("documents").remove([path]);
         return json({ error: !(sz > 0 && sz <= PROOF_MAX) ? "The file must be smaller than 5 MB." : "Upload a photo (JPG, PNG, WebP) or a PDF." }, 400);
       }
+      // QA2: tiny / fake images (e.g. a 1×1 PNG) are refused, never "saved" without a usable slip
+      const dl = await db.storage.from("documents").download(path);
+      const head = dl.data ? new Uint8Array(await dl.data.slice(0, 32).arrayBuffer()) : new Uint8Array(0);
+      const bad = dl.error ? "The upload did not arrive. Try again." : proofBytesOk(mt, head, sz);
+      if (bad) { await db.storage.from("documents").remove([path]); return json({ error: bad, code: "bad_file" }, 400); }
       const ref = body.reference === undefined ? p.reference : cleanRef(body.reference);
-      const r = await db.from("payments").update({ proof_file: path, reference: ref }).eq("id", pid); if (r.error) return json({ error: r.error.message }, 400);
+      const r = await db.from("payments").update({ proof_file: path, reference: ref }).eq("id", pid).select("id,proof_file").maybeSingle();
+      if (r.error || r.data?.proof_file !== path) return json({ error: r.error?.message || "The slip was not saved. Try again." }, 400);
       await logActivity(db, uid, p.enrollment_id, "payment_proof", `Payment ${p.invoice_no}: proof ${p.proof_file ? "replaced" : "uploaded"}${ref ? ", reference " + ref : ""}`);
-      return json({ ok: true });
+      return json({ ok: true, proof_file: path, has_proof: true });
     }
     // pro_proof_url (staff only with open_payment_slips, checked in index.ts); every open is logged
     await logActivity(db, uid, p.enrollment_id, "payment_proof_opened", `Payment ${p.invoice_no}: slip opened`, { payment_id: pid });
@@ -278,7 +308,13 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const adj: any = ins.data;
     await logActivity(db, uid, id, "adjust_" + kind, `${kind[0].toUpperCase() + kind.slice(1)} ${pkr(amount)} (${adj.receipt_no}), approved by ${appr}: ${reason}` + (kind === "refund" ? "" : `. Total fee ${pkr(e.fee_total)} → ${pkr(adj.fee_after)}`));
     ctx.pingSheets?.();
-    return json({ ok: true, adjustment: adj });
+    let email: { status: string; error?: string } | null = null;
+    if (body.email !== false && MAILER && e.email) {
+      const now = (await db.from("enrollments").select("balance_due").eq("id", id).maybeSingle()).data;
+      const m = adjustmentMail(e, { kind, amount, receipt_no: adj.receipt_no, reason, adj_date: dt }, Number(now?.balance_due ?? e.balance_due) || 0);
+      try { email = await MAILER(db, e, "adjustment", ["ADJ:" + adj.id, adj.receipt_no || kind], m.subject, m.text, uid); } catch (x) { email = { status: "error", error: String((x as Error)?.message || x) }; }
+    }
+    return json({ ok: true, adjustment: adj, email });
   }
   if (a === "pro_adjust_void") {
     if (role === "staff" && !allowed("staff", "pro_adjust_void", ctx.perms)) return json({ error: denyMessage("pro_adjust_void", ctx.perms) }, 403);
@@ -376,10 +412,25 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const r = await db.auth.admin.deleteUser(target); if (r.error) return json({ error: r.error.message }, 400);
     return json({ ok: true });
   }
+  if (a === "pro_adjust_mail") {
+    // QA2: email a discount / scholarship / refund receipt again (from the email log's Resend)
+    const adj = (await db.from("fee_adjustments").select("*").eq("id", Number(body.adjustment_id)).eq("enrollment_id", id).maybeSingle()).data;
+    const e = (await db.from("enrollments").select("id,email,full_name,student_id,balance_due").eq("id", id).maybeSingle()).data;
+    if (!adj || !e) return json({ error: "Not found." }, 404);
+    if (adj.voided_at) return json({ error: "This adjustment was voided, so its receipt is not sent again." }, 400);
+    if (!MAILER || !e.email) return json({ error: "Email sending is not available." }, 400);
+    const m = adjustmentMail(e, adj, Number(e.balance_due) || 0);
+    const r = await MAILER(db, e, "adjustment", ["ADJ:" + adj.id, adj.receipt_no || adj.kind], m.subject, m.text, uid);
+    return r.status === "error" ? json({ error: "Sending failed: " + (r.error || "unknown") }, 500) : json({ ok: true, email: r.status });
+  }
   if (a === "pro_mark_test") {
-    const r = await db.from("student_meta").upsert({ enrollment_id: id, is_test: !!body.on }, { onConflict: "enrollment_id" }); if (r.error) return json({ error: r.error.message }, 400);
-    await logActivity(db, uid, id, body.on ? "marked_test" : "unmarked_test", body.on ? "Marked as TEST record" : "TEST mark removed");
-    return json({ ok: true });
+    // QA2: the admin types the Student ID shown in the dialog; the server checks it against this enrollment id
+    const e = (await db.from("enrollments").select("id,student_id,full_name").eq("id", id).maybeSingle()).data;
+    if (!e) return json({ error: "Student not found." }, 404);
+    if (!testConfirmOk(e.student_id, body.confirm)) return json({ error: `Type ${testConfirmWord(e.student_id)} (the Student ID of ${e.full_name || "this record"}) to confirm.`, code: "confirm" }, 400);
+    const r = await db.rpc("set_test_mark", { p_enr: id, p_on: !!body.on, p_actor: uid, p_reason: body.reason ? String(body.reason).slice(0, 300) : null });
+    if (r.error) return json({ error: r.error.code === "23514" ? String(r.error.message || "").replace(/^DFA: /, "") : r.error.code === "P0002" ? "Student not found." : "Could not save. Try again." }, r.error.code === "23514" ? 409 : 400);
+    return json({ ok: true, is_test: !!body.on, student_id: e.student_id, name: e.full_name });
   }
   if (a === "pro_delete_test") {
     if (body.confirm !== "DELETE") return json({ error: "Type DELETE to confirm." }, 400);

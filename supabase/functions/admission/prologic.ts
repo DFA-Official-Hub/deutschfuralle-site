@@ -318,6 +318,68 @@ export function confirmOk(action: string, body: any): boolean {
   return String(body?.confirm || "").trim().toUpperCase() === w;
 }
 
+// ---- QA round 2 ---------------------------------------------------------------------------------
+/** TEST mark/unmark: the admin must type the Student ID (or TEST when the record has no ID yet). */
+export function testConfirmWord(studentId: unknown): string { const s = String(studentId || "").trim(); return s || "TEST"; }
+export function testConfirmOk(studentId: unknown, confirm: unknown): boolean {
+  return String(confirm || "").replace(/\s+/g, "").toUpperCase() === testConfirmWord(studentId).toUpperCase();
+}
+/** The card the admin clicked must still be the student the server is about to change. */
+export function expectSidOk(e: { student_id?: string | null } | null, expect: unknown): boolean {
+  if (expect === undefined || expect === null || expect === "") return true;
+  return !!e && String(e.student_id || "") === String(expect);
+}
+/** Who-column label: the login name, never the brand name in full_name. */
+export function actorLabel(p: { username?: string | null; full_name?: string | null } | null | undefined): string | null {
+  return p ? (p.username || p.full_name || "Staff") : null;
+}
+/** Activity filter: most kinds are prefixes, a few are groups. */
+export function activityKind(kind: unknown): { like?: string; in?: string[] } | null {
+  const k = String(kind || "").replace(/[^a-z_]/g, ""); if (!k) return null;
+  const groups: Record<string, string[]> = { marked_test: ["marked_test", "unmarked_test"], test_deleted: ["test_deleted"] };
+  return groups[k] ? { in: groups[k] } : { like: k + "%" };
+}
+/** Smallest file we accept as a payment slip, and a magic-byte check for the claimed type. */
+export const PROOF_MIN = 200;
+export function proofBytesOk(type: string, head: Uint8Array, size: number): string | null {
+  if (!(size >= PROOF_MIN)) return "This file is empty or too small to be a payment slip. Pick the photo or PDF of the slip.";
+  const b = (i: number) => head[i] ?? -1;
+  const ok = type === "image/png" ? b(0) === 0x89 && b(1) === 0x50 && b(2) === 0x4e && b(3) === 0x47
+    : type === "image/jpeg" ? b(0) === 0xff && b(1) === 0xd8
+    : type === "image/webp" ? b(0) === 0x52 && b(1) === 0x49 && b(8) === 0x57 && b(9) === 0x45
+    : type === "application/pdf" ? b(0) === 0x25 && b(1) === 0x50 && b(2) === 0x44 && b(3) === 0x46
+    : false;
+  if (!ok) return "This file is not a real JPG, PNG, WebP or PDF. Pick the photo or PDF of the slip.";
+  if (type === "image/png" && head.length >= 24) {
+    const w = (b(16) << 24) | (b(17) << 16) | (b(18) << 8) | b(19), h = (b(20) << 24) | (b(21) << 16) | (b(22) << 8) | b(23);
+    if (w < 10 || h < 10) return "This image is too small to read (" + w + "×" + h + " pixels). Pick a clear photo of the slip.";
+  }
+  return null;
+}
+/** Email log row -> what "Resend" sends again. null when the kind can't be resent. */
+export function resendPlan(row: { kind?: string | null; items?: unknown } | null): { kind: string; items: string[] } | null {
+  if (!row) return null;
+  const k = String(row.kind || ""), it = (Array.isArray(row.items) ? row.items : []).map(String);
+  if (k === "welcome") return { kind: "welcome", items: ["admission", "receipt"] };
+  if (k === "payment") return { kind: "payment", items: ["receipt"] };
+  if (/^reminder/.test(k)) return { kind: k, items: ["reminder"] };
+  if (k === "certificate") return { kind: "certificate", items: ["certificate"] };
+  if (k === "adjustment") return { kind: "adjustment", items: it.filter((x) => /^ADJ:\d+$/.test(x)).slice(0, 1) };
+  if (k === "resend" || k === "docs") { const ok = it.filter((x) => ["admission", "receipt", "certificate"].includes(x)); return ok.length ? { kind: "resend", items: ok } : null; }
+  return null;
+}
+/** Plain email for a discount / scholarship / refund (the PDF receipt stays in the portal). */
+export function adjustmentMail(e: { full_name?: string | null; student_id?: string | null }, adj: { kind: string; amount: number; receipt_no?: string | null; reason?: string | null; adj_date?: string | null }, balance: number): { subject: string; text: string } {
+  const k = adj.kind === "refund" ? "Refund" : adj.kind === "scholarship" ? "Scholarship" : "Discount";
+  const amt = "PKR " + Number(adj.amount || 0).toLocaleString("en-US");
+  const subject = `${k} receipt${adj.receipt_no ? " " + adj.receipt_no : ""} – Deutsch Für Alle`;
+  const text = [`Hello ${e.full_name || "student"},`, "",
+    `${k} of ${amt} has been recorded on your enrollment${e.student_id ? " " + e.student_id : ""}${adj.adj_date ? " on " + adj.adj_date : ""}.`,
+    adj.receipt_no ? `Receipt number: ${adj.receipt_no}` : "", `Balance now: PKR ${Number(balance || 0).toLocaleString("en-US")}`, "",
+    "If something looks wrong, reply to this email or write to contact.deutschfuralle@gmail.com.", "", "Deutsch Für Alle"].filter((l, i, a) => l !== "" || a[i - 1] !== "").join("\n");
+  return { subject, text };
+}
+
 // ---- reminders ---------------------------------------------------------------------------------
 export const DEFAULT_OFFSETS: [number, number, number] = [-3, 0, 3];
 /** "-3,0,3" → [-3,0,3]. Three whole days between -30 and +60, strictly increasing; anything else → default. */

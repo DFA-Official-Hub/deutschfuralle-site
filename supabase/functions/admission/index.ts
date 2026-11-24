@@ -7,14 +7,15 @@ import { certificateUrls, certificatePdfUrls } from "./render.ts";
 import { buildOne, signed, buildPaymentReceipt, fileBytes, docData, warmDocAssets, loadDetails } from "./docs.ts";
 import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS as INFO_FIELDS, label as infoLabel } from "./student.ts";
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
-import { handlePro, logActivity } from "./pro.ts";
+import { handlePro, logActivity, setMailer } from "./pro.ts";
 import { withAudit } from "./audit.ts";
 import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, shapeStudentInfoGet, shapeStudentInfoSave, staffInfoSaveError, mergeStaffStudentInfo, studentInfoLockUpdate, studentInfoWriteConflict, STUDENT_INFO_CONFLICT, type StaffPerms } from "./prologic.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
+import { resendPlan } from "./prologic.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
 async function imagesOn(db: any) { const { data } = await db.from("site_settings").select("value").eq("key", "certificate_images_public").maybeSingle(); return data?.value === "on"; }
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-intake-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-intake-token, x-region", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 const env = (k: string) => Deno.env.get(k) || "";
 let CUR: any = null; // service-role client of the current request
@@ -63,7 +64,7 @@ async function qrAttachment(db: any) {
 const MAIL_CTX = new AsyncLocalStorage<{ lastId: string | null }>();
 async function logMail(db: any, e: any, kind: string, items: string[], status: string, by: string | null, error?: string) {
   const st = MAIL_CTX.getStore(); const pid = status === "sent" ? (st?.lastId ?? null) : null; if (st) st.lastId = null;
-  await db.from("email_log").insert({ enrollment_id: e.id, kind, items, to_email: e.email, status, error: error ? error.slice(0, 300) : null, sent_by: by, provider_id: pid });
+  try { await db.from("email_log").insert({ enrollment_id: e.id, kind, items, to_email: e.email, status, error: error ? error.slice(0, 300) : null, sent_by: by, provider_id: pid }); } catch (_) { /* the mail itself already went */ }
   if (status === "sent") await db.from("enrollments").update({ last_docs_sent_at: new Date().toISOString(), last_docs_sent_items: items.join(", ") }).eq("id", e.id);
 }
 /** Signed URL for one installment receipt (builds it if missing). */
@@ -77,7 +78,7 @@ async function receiptByInv(db: any, e: any, inv: string) {
   return await signed(db, f, `${p.invoice_no}_${safeN(e.full_name)}_Fee_Receipt.pdf`);
 }
 /** Email the chosen documents (admission, receipt, certificate, reminder) to the student. */
-async function resendDocs(db: any, id: number, want: string[], by: string | null) {
+async function resendDocs(db: any, id: number, want: string[], by: string | null, kindIn?: string) {
   const e = (await db.from("enrollments").select(ENR_SEL).eq("id", id).maybeSingle()).data;
   if (!e) return { error: "Not found", code: 404 };
   if (!e.invoice_no) return { error: "Documents are created when you click Payment received.", code: 400 };
@@ -109,9 +110,16 @@ async function resendDocs(db: any, id: number, want: string[], by: string | null
   if (rem) att.push(await qrAttachment(db));
   const m = names.length ? docsMail(e.full_name, e.courses?.name || e.course_label || "course", names, rem ? feeInfo(e) : null, e.student_id) : reminder(0, feeInfo(e));
   const items = [...want.filter((w) => ["admission", "receipt", "certificate"].includes(w)), ...(rem ? ["reminder"] : [])];
-  try { const r = await send(e.email, m.subject, m.text, att); await logMail(db, e, "resend", items, r, by); return { ok: true, email: r, items, sent_at: new Date().toISOString() }; }
-  catch (x) { await logMail(db, e, "resend", items, "error", by, String((x as Error).message || x)); return { error: "Sending failed: " + String((x as Error).message || x), code: 500 }; }
+  // QA2: the email log names what went out (a manual reminder or a certificate is not just "resend")
+  const kind = kindIn || (items.length === 1 && items[0] === "reminder" ? "reminder-manual" : items.length === 1 && items[0] === "certificate" ? "certificate" : "resend");
+  try { const r = await send(e.email, m.subject, m.text, att); await logMail(db, e, kind, items, r, by); return { ok: true, email: r, items, kind, sent_at: new Date().toISOString() }; }
+  catch (x) { await logMail(db, e, kind, items, "error", by, String((x as Error).message || x)); return { error: "Sending failed: " + String((x as Error).message || x), code: 500 }; }
 }
+// pro.ts (discount / scholarship / refund receipts) sends through the same path and lands in email_log too
+setMailer(async (db, e, kind, items, subject, text, by) => {
+  try { const r = await send(e.email, subject, text); await logMail(db, e, kind, items, r, by); return { status: r }; }
+  catch (x) { const m = String((x as Error)?.message || x); await logMail(db, e, kind, items, "error", by, m); return { status: "error", error: m }; }
+});
 /** Daily: reminders around the due date (default 3 days before, on the day, 3 days after; set in the admin portal), then stop. */
 async function runReminders(db: any) {
   if (!(await sendingOn())) return { off: true };
@@ -380,7 +388,8 @@ const serveReq = withAudit(async (req) => {
       if (!/^[A-F0-9]{12}$/.test(code)) return json({ found: false });
       const { data: e } = await db.from("enrollments").select("full_name,course_label,start_date,end_date,certificate_no,certificate_issued_at,certificate_revoked_at,status,courses(name,level,duration_days)").eq("certificate_code", code).maybeSingle();
       if (!e || !e.certificate_no) return json({ found: false });
-      if (e.certificate_revoked_at || e.status === "revoked") return json({ found: false, revoked: true });
+      // QA2: a revoked certificate is shown as REVOKED (number and date only, nothing personal)
+      if (e.certificate_revoked_at || e.status === "revoked") return json({ found: false, revoked: true, certificate_no: e.certificate_no, revoked_at: e.certificate_revoked_at || null });
       // only a real (active or finished) enrollment can verify: pending/forged rows never do
       if (e.status !== "active" && e.status !== "expired") return json({ found: false });
       const tk = (req.headers.get("Authorization") || "").replace("Bearer ", "");
@@ -706,7 +715,14 @@ const serveReq = withAudit(async (req) => {
       const up = await db.from("enrollments").update({ certificate_issued_at: new Date().toISOString() }).eq("id", id).in("status", ["active", "expired"]).is("certificate_no", null).select("id,certificate_no,certificate_code").maybeSingle();
       if (up.error) return json({ error: up.error.message }, 400);
       if (!up.data) return json({ error: "Not found, not paid yet, or certificate already issued" }, 404);
-      return json({ ok: true, certificate_no: up.data.certificate_no, certificate_code: up.data.certificate_code });
+      // QA2: optional "email the certificate"; always leaves an email_log row (sent / error / skipped with the reason)
+      let email: any = null;
+      if (body.email === true) {
+        const r: any = await resendDocs(db, id, ["certificate"], u.user.id, "certificate");
+        if (r.error && r.code !== 500) { const e0 = (await db.from("enrollments").select("id,email").eq("id", id).maybeSingle()).data; if (e0) await logMail(db, e0, "certificate", ["certificate"], "skipped", u.user.id, r.error); }
+        email = r.error ? { status: r.code === 500 ? "error" : "skipped", error: r.error } : { status: r.email };
+      }
+      return json({ ok: true, certificate_no: up.data.certificate_no, certificate_code: up.data.certificate_code, email });
     }
     if (body.action === "doc_file_admin") {
       const { data: e } = await db.from("enrollments").select("*,courses(name,level,duration_days,fee_pkr,old_fee_pkr)").eq("id", Number(body.id)).maybeSingle();
@@ -738,6 +754,7 @@ const serveReq = withAudit(async (req) => {
       return json({ ok: true, hold: !!body.hold });
     }
     if (body.action === "cert_revoke") {
+      if (!body.undo && String(body.reason || "").trim().length < 3) return json({ error: "Write a short reason (it is kept in the activity log).", code: "reason" }, 400);
       const up = await db.from("enrollments").update({ certificate_revoked_at: body.undo ? null : new Date().toISOString(), certificate_hold: !body.undo }).eq("id", Number(body.id)).not("certificate_no", "is", null).select("id").maybeSingle();
       if (up.error || !up.data) return json({ error: up.error?.message || "No certificate to revoke" }, 400);
       return json({ ok: true });
@@ -754,6 +771,18 @@ const serveReq = withAudit(async (req) => {
     if (body.action === "email_log") {
       const r = await db.from("email_log").select("kind,items,status,created_at,error").eq("enrollment_id", Number(body.id)).order("created_at", { ascending: false }).limit(20);
       return json({ log: redactMailRows(r.data || [], role) });
+    }
+    if (body.action === "email_resend") {
+      // QA2: admin-only (allowed() keeps staff out). Sends the same thing again and writes a new email_log row.
+      const row = (await db.from("email_log").select("id,enrollment_id,kind,items").eq("id", Number(body.log_id)).maybeSingle()).data;
+      const plan = resendPlan(row);
+      if (!row || !row.enrollment_id) return json({ error: "Email not found." }, 404);
+      if (!plan || (plan.kind === "adjustment" && !plan.items.length)) return json({ error: "This email can't be sent again from here. Use Send documents on the student card." }, 400);
+      let r: any;
+      if (plan.kind === "adjustment") r = await handlePro(db, { action: "pro_adjust_mail", id: row.enrollment_id, adjustment_id: Number(plan.items[0].slice(4)) }, u.user, role, { json, today: todayPk, pingSheets });
+      else { const x: any = await resendDocs(db, row.enrollment_id, plan.items, u.user.id, plan.kind === "resend" ? undefined : plan.kind); r = json(x, x.code || 200); }
+      if (r.status < 300) await logActivity(db, u.user.id, row.enrollment_id, "email_resent", `Email sent again (${row.kind}${(row.items || []).length ? ": " + (row.items || []).join(", ") : ""})`, { email_log_id: row.id });
+      return r;
     }
     if (body.action === "record_payment") {
       const id = Number(body.id), amount = Math.round(Number(body.amount));

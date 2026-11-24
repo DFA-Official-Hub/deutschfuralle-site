@@ -163,8 +163,9 @@ Deno.test("last admin, private helpers, attendance deletes, staff payment flag, 
 Deno.test("proof slip: size and type are read from storage, not from the browser", async () => {
   let removed: string[] = [];
   const path = "payment-proofs/1/9-1764000000000.jpg";
-  const storage = { list: () => Promise.resolve({ data: [{ name: "9-1764000000000.jpg", metadata: { size: 9 * 1024 * 1024, mimetype: "image/jpeg" } }] }), remove: (p: string[]) => { removed = p; return Promise.resolve({ data: p }); } };
-  const db = fakeDb((c) => c.table === "payments" && c.op === "select" ? { data: { id: 9, enrollment_id: 1, invoice_no: "INV-1" } } : { data: null }, storage);
+  const jpg = new Uint8Array(1000); jpg[0] = 0xff; jpg[1] = 0xd8;
+  const storage = { list: () => Promise.resolve({ data: [{ name: "9-1764000000000.jpg", metadata: { size: 9 * 1024 * 1024, mimetype: "image/jpeg" } }] }), remove: (p: string[]) => { removed = p; return Promise.resolve({ data: p }); }, download: () => Promise.resolve({ data: new Blob([jpg]) }) };
+  const db = fakeDb((c) => c.table === "payments" && c.op === "select" ? { data: { id: 9, enrollment_id: 1, invoice_no: "INV-1" } } : c.table === "payments" && c.op === "update" ? { data: { id: 9, proof_file: path } } : { data: null }, storage);
   const r = await handlePro(db, { action: "pro_proof_attach", payment_id: 9, path, size: 1000, type: "image/jpeg" }, { id: "a" }, "admin", ctx);
   assertEquals(r!.status, 400); assertEquals(removed, [path]); assertFalse(db.calls.some((c) => c.op === "update"));
   storage.list = () => Promise.resolve({ data: [{ name: "9-1764000000000.jpg", metadata: { size: 1000, mimetype: "text/html" } }] });
