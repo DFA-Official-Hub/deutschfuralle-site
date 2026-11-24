@@ -9,7 +9,7 @@ import { fromRegistration, effective, cleanOverrides, diff as infoDiff, FIELDS a
 import { recompute, checkCorrection, live as livePays, feeRow, payStatus, type Pay } from "./payfix.ts";
 import { handlePro, logActivity } from "./pro.ts";
 import { withAudit } from "./audit.ts";
-import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, shapeStudentInfoGet, staffInfoSaveError, mergeStaffStudentInfo, type StaffPerms } from "./prologic.ts";
+import { allowed, denyMessage, parsePerms, parseOffsets, stageFor, isPaused, cleanRef, verifySvix, deliveryFrom, confirmOk, CONFIRM_WORDS, redactDocs, redactMailRows, isRefundGuard, shapeStudentInfoGet, shapeStudentInfoSave, staffInfoSaveError, mergeStaffStudentInfo, studentInfoWriteConflict, STUDENT_INFO_CONFLICT, type StaffPerms } from "./prologic.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { normalize as normPlan, next as nextInst, planCount, lockedRows, checkLocked, payLabel, settle, method as payMethod, type Inst } from "./plan.ts";
 const CERT_SEL = "id,full_name,course_label,start_date,end_date,status,student_id,batch_code,certificate_no,certificate_code,certificate_issued_at,certificate_revoked_at,certificate_file,courses(name,level,duration_days)";
@@ -881,11 +881,15 @@ const serveReq = withAudit(async (req) => {
       // The certificate shows the name: drop the cached image so the image and PDF are made again with the new name.
       const certRedo = !!(patch.full_name && e.certificate_no && !e.certificate_revoked_at);
       if (certRedo) patch.certificate_file = null;
-      const up = await db.from("enrollments").update(patch).eq("id", e.id).select("id").maybeSingle();
+      // Optimistic lock on the student_info we read: a concurrent save must not silently overwrite (staff and admin).
+      let uq = db.from("enrollments").update(patch).eq("id", e.id);
+      uq = e.student_info == null ? uq.is("student_info", null) : uq.eq("student_info", e.student_info);
+      const up = await uq.select("id").maybeSingle();
+      if (studentInfoWriteConflict(up)) return json({ error: STUDENT_INFO_CONFLICT, code: "conflict" }, 409);
       if (up.error || !up.data) return json({ error: up.error?.message || "Could not save." }, 400);
       await db.from("enrollment_audit").insert({ enrollment_id: e.id, kind: "student_info", reason: String(body.reason || "").trim().slice(0, 300) || null, old_values: ch.old, new_values: ch.new, changed_by: u.user.id });
       pingSheets();
-      return json({ ok: true, changed: Object.keys(ch.new), effective: after, regen: !!e.invoice_no || certRedo, certificate: certRedo });
+      return json(shapeStudentInfoSave({ ok: true, changed: Object.keys(ch.new), effective: after, regen: !!e.invoice_no || certRedo, certificate: certRedo }, role, perms));
     }
     if (body.action === "regen_docs") {
       // Rebuilds ONE document per call (CPU limit): admission form first, then each counted payment's receipt. The page calls again with done[] until remaining is 0.

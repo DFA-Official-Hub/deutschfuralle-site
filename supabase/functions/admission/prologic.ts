@@ -182,6 +182,17 @@ export function shapeStudentInfoGet(raw: { fields: { key: string; label: string 
     contacts_shown: see,
   };
 }
+/** Staff save answers use the same shaping as GET so `effective` never returns CNIC/DOB/address or raw contacts. */
+export function shapeStudentInfoSave<T extends { effective?: any }>(payload: T, role: string, perms?: StaffPerms | null): T & { contacts_shown?: boolean } {
+  if (role === "admin") return payload;
+  const shaped = shapeStudentInfoGet({ fields: [], registration: {}, overrides: {}, effective: payload.effective, history: [] }, role, perms);
+  return { ...payload, effective: shaped.effective, contacts_shown: shaped.contacts_shown };
+}
+export const STUDENT_INFO_CONFLICT = "Record changed, reload";
+/** True when the optimistic lock matched no row (someone else changed student_info). */
+export function studentInfoWriteConflict(up: { data?: unknown; error?: unknown } | null | undefined): boolean {
+  return !!up && !up.error && !up.data;
+}
 function normInfoCompare(k: Field, v: string): string {
   const s = v.replace(/\s+/g, " ").trim();
   if (k === "email") return s.toLowerCase();

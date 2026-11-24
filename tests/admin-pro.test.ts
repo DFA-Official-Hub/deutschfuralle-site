@@ -1,6 +1,6 @@
 // deno test tests/admin-pro.test.ts — admin portal upgrade (WD-3): roles, reminders, discounts, proof paths, webhook signature, dashboard, activity summaries.
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
-import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, staffInfoSaveError, mergeStaffStudentInfo, redactInfoRecord, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
+import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, shapeStudentInfoSave, staffInfoSaveError, mergeStaffStudentInfo, redactInfoRecord, studentInfoWriteConflict, STUDENT_INFO_CONFLICT, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
 import { summarize } from "../supabase/functions/admission/audit.ts";
 
 const on = (...ks: PermKey[]) => { const p = emptyPerms(); for (const k of ks) p[k] = true; return p; };
@@ -125,6 +125,35 @@ Deno.test("B20-3: a staff name-only save keeps CNIC/DOB/address; masked contacts
   assertEquals(stray.full_name, "Ali Khan");
   assertEquals(stray.email, maskEmail("ali.khan@gmail.com"));
   assertFalse("cnic" in stray || "CNIC" in stray || "dob" in stray || "DOB" in stray);
+});
+Deno.test("B20-4: a staff name-only save's effective has no CNIC/DOB/address or raw contacts; a stale write is 409", () => {
+  const after = { full_name: "Ayesha Khan", cnic: "35202-9999999-1", dob: "1994-01-01", address: "Staff must not wipe this", city: "Lahore", state: "Punjab", country: "PK", email: "ali.new@gmail.com", phone: "03001234567" };
+  const payload = { ok: true, changed: ["full_name"], effective: after, regen: false, certificate: false };
+
+  const staff = shapeStudentInfoSave(payload, "staff", on("edit_student_info"));
+  assertEquals(staff.effective.full_name, "Ayesha Khan");
+  assertFalse("cnic" in staff.effective || "dob" in staff.effective || "address" in staff.effective || "city" in staff.effective || "state" in staff.effective || "country" in staff.effective);
+  assertFalse(JSON.stringify(staff.effective).includes("ali.new@gmail.com"));
+  assertFalse(JSON.stringify(staff.effective).includes("03001234567"));
+  assertEquals(staff.effective.email, maskEmail("ali.new@gmail.com"));
+  assertEquals(staff.effective.phone, maskPhone("03001234567"));
+  assertEquals(staff.contacts_shown, false);
+
+  const withSee = shapeStudentInfoSave(payload, "staff", on("edit_student_info", "see_contacts"));
+  assertEquals(withSee.effective.email, "ali.new@gmail.com");
+  assertEquals(withSee.effective.phone, "03001234567");
+  assertFalse("cnic" in withSee.effective || "dob" in withSee.effective || "address" in withSee.effective);
+  assertEquals(withSee.contacts_shown, true);
+
+  const admin = shapeStudentInfoSave(payload, "admin", null);
+  assertEquals(admin.effective.cnic, "35202-9999999-1");
+  assertEquals(admin.effective.email, "ali.new@gmail.com");
+
+  assertEquals(STUDENT_INFO_CONFLICT, "Record changed, reload");
+  assertEquals(studentInfoWriteConflict({ data: null, error: null }), true);
+  assertEquals(studentInfoWriteConflict({ data: undefined, error: undefined }), true);
+  assertEquals(studentInfoWriteConflict({ data: { id: 1 }, error: null }), false);
+  assertEquals(studentInfoWriteConflict({ data: null, error: { message: "fail" } }), false);
 });
 Deno.test("reminder schedule parsing and stages", () => {
   assertEquals(parseOffsets("-3,0,3"), [-3, 0, 3]); assertEquals(parseOffsets(" -5, -1 ,2"), [-5, -1, 2]);

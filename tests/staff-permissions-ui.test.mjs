@@ -66,6 +66,15 @@ assert.ok(/pro_dashboard: "view_students"/.test(logic));
 // 8. B20-3: the staff form does not post contact fields when contacts were not shown
 assert.ok(/D\.contacts_shown===false&&\(F\.key==='email'\|\|F\.key==='phone'\)\)return/.test(adm));
 
+// 9. B20-4: save response is shaped for staff; write is locked to the student_info that was read
+const idx = read('supabase/functions/admission/index.ts');
+const save = idx.slice(idx.indexOf('body.action === "student_info_save"'), idx.indexOf('body.action === "regen_docs"'));
+assert.ok(save.includes('shapeStudentInfoSave({ ok: true, changed: Object.keys(ch.new), effective: after'));
+assert.ok(save.includes('.eq("student_info", e.student_info)') && save.includes('.is("student_info", null)') && save.includes('STUDENT_INFO_CONFLICT') && save.includes('409'));
+
+// 10. B20-4: a 409 conflict shows the message and a Reload button that reopens the details
+assert.ok(/s\.data\.code==='conflict'\|\|err==='Record changed, reload'/.test(adm) && adm.includes("rb.textContent='Reload'") && /g\.close\(\);infoDlg\(id\)/.test(adm),
+  '409 Record changed, reload is shown in the dialog with a Reload button that reopens the details');
+assert.ok(read('admin.html').includes('dfa-admin.js?v=54'), 'admin.js cache-bust bumped after the 409 UI');
+
 console.log('staff-permissions-ui: all checks passed');
-
-
