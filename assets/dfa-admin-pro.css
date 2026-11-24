@@ -115,3 +115,12 @@ tr.is-hidden td{opacity:.65}
  .att-seg span{width:34px}
  .adm-pager span{flex-basis:100%;text-align:center}
 }
+/* fixes found in screenshot QA */
+.adm-tabs button{white-space:nowrap}
+#adm-body .adm-bar label,#adm-body .adm-pager label{display:inline-flex;align-items:center;gap:6px}
+#adm-body .adm-bar select,#adm-body .adm-pager select,#adm-body .adm-bar input[type=date]{width:auto;min-width:0;padding:7px 10px}
+#adm-body .adm-bar input[type=search].adm-q{width:auto;flex:1 1 240px;min-width:180px;padding:8px 14px;border-radius:999px}
+#adm-body .adm-bar input[type=checkbox]{width:auto}
+.adm-sec-class .adm-r dd select{width:100%;max-width:100%}
+.att-seg input[type=radio]{width:100%!important;height:100%;padding:0!important}
+@media (max-width:420px){#adm-body .adm-bar2x label{flex:1 1 45%}#adm-body .adm-bar2x label select{flex:1 1 auto;width:100%}}
