@@ -192,3 +192,33 @@ select pg_temp.check(has_table_privilege('authenticated', 'public.batches', 'SEL
 select pg_temp.check(not has_table_privilege('authenticated', 'public.fee_adjustments', 'INSERT') and not has_table_privilege('authenticated', 'public.admin_activity', 'INSERT')
   and not has_table_privilege('authenticated', 'public.account_meta', 'UPDATE') and not has_table_privilege('authenticated', 'public.student_meta', 'DELETE'), 'grants: function-only tables stay read-only for the browser');
 select pg_temp.check(not has_table_privilege('anon', 'public.batches', 'SELECT') and not has_table_privilege('anon', 'public.student_notes', 'SELECT') and not has_table_privilege('anon', 'public.fee_adjustments', 'SELECT'), 'grants: anon gets nothing');
+
+-- 15) R4-1: MAINTAIN revoked; new tables get DML grants; every authenticated RLS policy has a matching grant
+select pg_temp.check(not has_table_privilege('authenticated', 'public.batches', 'MAINTAIN')
+  and not has_table_privilege('authenticated', 'public.student_notes', 'MAINTAIN')
+  and not has_table_privilege('authenticated', 'public.enrollment_audit', 'MAINTAIN')
+  and not has_table_privilege('authenticated', 'public.admin_activity', 'MAINTAIN'), 'R4-1: MAINTAIN is revoked on the portal tables');
+select pg_temp.check(has_table_privilege('authenticated', 'public.enrollment_audit', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.enrollment_audit', 'INSERT')
+  and not has_table_privilege('anon', 'public.enrollment_audit', 'SELECT'), 'R4-1: enrollment_audit SELECT matches its admin policy; anon gets nothing');
+create table public._grant_probe (id int primary key);
+select pg_temp.check(has_table_privilege('authenticated', 'public._grant_probe', 'SELECT,INSERT,UPDATE,DELETE')
+  and not has_table_privilege('anon', 'public._grant_probe', 'SELECT')
+  and not has_table_privilege('authenticated', 'public._grant_probe', 'MAINTAIN'), 'R4-1: a new public table gets DML grants for authenticated, not MAINTAIN, and nothing for anon');
+drop table public._grant_probe;
+do $$
+declare r record; missing text := '';
+begin
+  for r in
+    select p.tablename, p.cmd
+      from pg_policies p
+     where p.schemaname = 'public'
+       and ('authenticated' = any (p.roles) or 'public' = any (p.roles))
+     group by 1, 2
+  loop
+    if not has_table_privilege('authenticated', format('public.%I', r.tablename), r.cmd) then
+      missing := missing || r.tablename || '.' || r.cmd || ' ';
+    end if;
+  end loop;
+  perform pg_temp.check(missing = '', 'R4-1: every authenticated RLS policy has a matching grant' || case when missing = '' then '' else ': ' || missing end);
+end $$;

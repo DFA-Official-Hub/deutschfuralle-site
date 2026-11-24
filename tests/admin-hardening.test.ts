@@ -61,8 +61,10 @@ Deno.test("B1: enrollment inserts can't carry a certificate or a paid amount; pu
 
 Deno.test("B2: staff rows are masked and carry no student details; payments carry no files", () => {
   const e = { id: 1, full_name: "Ali", email: "ali.khan@gmail.com", phone: "03001234567", student_info: { cnic: "35202-1234567-1", dob: "1995-02-11", address: "x" }, notes: "secret", receipt_url: "https://drive.google.com/file/d/abc", admission_file: "a.pdf", status: "active" };
-  const r = staffRow(e);
+  const r = staffRow({ ...e, docs_error: "Sending failed: 550 5.1.1 <ali.khan@gmail.com>: mailbox unknown" });
   assertEquals(r.email, "a•••@g•••.com"); assertEquals(r.phone, "030•••67"); assert(r.has_email && r.has_phone && r.masked);
+  assertEquals(r.docs_error, STAFF_DOC_ERR); assertFalse(JSON.stringify(r).includes("ali.khan") || JSON.stringify(r).includes("550"));
+  assertEquals(staffRow({ ...e, docs_error: null }).docs_error, null);
   for (const k of ["student_info", "notes", "receipt_url", "admission_file", "receipt_file", "certificate_file", "certificate_code", "sheet_row", "source_ref"]) assertFalse(k in r, k);
   assertFalse(JSON.stringify(r).includes("35202") || JSON.stringify(r).includes("ali.khan") || JSON.stringify(r).includes("1234567"));
   assertFalse(/student_info|notes|receipt_url|certificate_code/.test(STAFF_ENR_COLS));
@@ -234,4 +236,13 @@ Deno.test("R3-1: refund guard recognised by SQLSTATE 23514 + hint, not by messag
   assertFalse(isRefundGuard({ code: "23514" } as any)); assertFalse(isRefundGuard(null));
   assertFalse(/refunds against it\/i\.test/.test(IDX), "no message-text matching left");
   assertMatch(src("supabase/migrations/20261125140000_payment_refund_guard.sql"), /errcode = '23514', hint = 'DFA_REFUND_GUARD'/);
+});
+
+Deno.test("R4-1: staffRow redacts docs_error; used by the staff student list", () => {
+  const raw = "Sending failed: 550 5.1.1 <ali.khan@gmail.com>: mailbox unknown";
+  const r = staffRow({ id: 1, full_name: "TEST", docs_error: raw, email: "ali.khan@gmail.com" });
+  assertEquals(r.docs_error, STAFF_DOC_ERR);
+  assertFalse(JSON.stringify(r).includes("ali.khan") || JSON.stringify(r).includes("550") || JSON.stringify(r).includes(raw));
+  assertEquals(staffRow({ id: 1, docs_error: "" }).docs_error, null);
+  assertMatch(PRO, /staffRow/);
 });

@@ -51,6 +51,8 @@ export const STAFF_PAY_COLS = "id,enrollment_id,invoice_no,installment_no,instal
 export function staffRow(e: any) {
   const o: any = {}; for (const k of STAFF_ENR_COLS.split(",")) if (k !== "email" && k !== "phone") o[k] = e[k] ?? null;
   o.email = maskEmail(e.email); o.phone = maskPhone(e.phone); o.has_email = !!e.email; o.has_phone = !!e.phone; o.masked = true;
+  // docs_error can contain the student's email (provider bounce text); staff only see that it failed
+  o.docs_error = e.docs_error ? STAFF_DOC_ERR : null;
   return o;
 }
 export function staffPay(p: any) {
