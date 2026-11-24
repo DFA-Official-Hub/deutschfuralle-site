@@ -132,17 +132,20 @@ assert.deepEqual(plain(c2.sortCourses(db).map((c) => c.code)), ['a1-normal', 'a1
 
 // admin: renamed button, plan wiring, hints on every button
 assert.ok(!/>Record payment</.test(admin), 'old "Record payment" label is gone');
-assert.ok(admin.includes('>Add installment payment</button>') && admin.includes('<h3>Add an installment payment</h3>'));
+assert.ok(admin.includes("bt('inst','Add installment payment'") && admin.includes('<h3>Add an installment payment</h3>'));
 assert.ok(admin.includes('<option value="custom">Custom plan (2 to 5 installments)</option>'));
 assert.ok(admin.includes("action:'set_plan'") && admin.includes('installments:inst'));
 const buttons = admin.match(/<button\b[\s\S]*?<\/button>/g) || [];
-assert.ok(buttons.length > 25, 'found admin buttons');
+assert.ok(buttons.length > 15, 'found admin buttons');
+// student-card buttons come from bt(action, label, hint, …), which always adds the hint
+assert.ok(/function bt\(a,txt,hint,cls,attrs\)\{return '<button[^}]*T\(hint\)/.test(admin), 'bt() adds a hint to every card button');
+assert.ok((admin.match(/bt\('/g) || []).length >= 12, 'card buttons use bt()');
 const noHint = buttons.filter((b) => !/title=|'\+T\(/.test(b) && !/value="(ok|cancel)"/.test(b));
 assert.deepEqual(noHint, [], 'every admin button has a hint');
-for (const k of ['pay', 'remove', 'certify', 'hold', 'release', 'crev', 'crestore', 'resend', 'wa', 'wacopy', 'inst', 'planEdit', 'revoke', 'show', 'plan', 'first', 'count', 'amt', 'due', 'sid', 'batch', 'inv', 'docs', 'sent', 'access', 'startPend'])
+for (const k of ['info', 'fix', 'fixEdit', 'fixVoid', 'regen', 'waAdm', 'waRcpt', 'waCert', 'waPrev', 'pay', 'remove', 'certify', 'hold', 'release', 'crev', 'crestore', 'resend', 'wa', 'wacopy', 'inst', 'planEdit', 'revoke', 'show', 'plan', 'first', 'count', 'amt', 'due', 'sid', 'batch', 'inv', 'docs', 'sent', 'access', 'startPend'])
   assert.ok(new RegExp('\\b' + k + ":'").test(admin.slice(admin.indexOf('var H={'), admin.indexOf('function T('))), 'hint text for ' + k);
 // all inputs/selects inside admin markup carry a title (direct or via T())
-const fields = (admin.match(/<(input|select)\b[^>]*>/g) || []).filter((f) => !/type="checkbox" name="i"|role="switch"|name="em"/.test(f));
+const fields = (admin.match(/<(input|select|textarea)\b[^>]*>/g) || []).filter((f) => !/type="checkbox" name="i"|role="switch"|name="em"/.test(f));
 assert.deepEqual(fields.filter((f) => !/title=|'\+T\(/.test(f)), [], 'every admin field has a hint');
 
 // server: activate/record_payment/set_plan use the plan
@@ -176,7 +179,7 @@ assert.ok(admin.includes("value=\"'+E(x.amount)+'\"") && admin.includes("value=\
 assert.ok(read('assets/dfa-portal.js').includes("E(f(s.amount))"));
 assert.ok(admin.includes('dated before today'), 'past-date warning');
 assert.ok(admin.includes('<select data-pm') && admin.includes('<select name="pm"') && admin.includes("method:f.pm.value||undefined") && admin.includes("method:tr.querySelector('[data-pm]').value||undefined"));
-assert.ok(admin.includes("row('Payments',histHtml(PAYS[x.id]),'hist')"));
+assert.ok(admin.includes("row('Payments',histHtml(PAYS[x.id],act),'hist')"));
 assert.match(read('assets/style.css'), /\.adm-i\{[^}]*width:24px;height:24px/);
 const mig = read('supabase/migrations/20261121120000_custom_installment_plan.sql');
 assert.match(mig, /add column if not exists installment_plan jsonb/);

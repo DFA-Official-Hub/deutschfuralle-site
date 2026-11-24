@@ -54,9 +54,16 @@ assert.ok(u.startsWith('https://wa.me/923181234567?text='));
 assert.ok(!u.includes('/whatsapp'));
 assert.equal(decodeURIComponent(u.split('text=')[1]), msg);
 
-assert.ok(src.includes('data-a="wa"'));
-assert.ok(src.includes('data-a="wacopy"'));
+// Card buttons are built by bt(action, …) since the Nov 2026 card redesign.
+assert.ok(src.includes("bt('wa','WhatsApp student'"));
+assert.ok(src.includes("bt('wacopy',"));
 assert.ok(src.includes('Copy message'));
+// WhatsApp dialog: documents are optional (unticked), shown in a preview, and only ever sent to the student's own number.
+assert.ok(src.includes('function waDlg'));
+assert.ok(!/name="i" value="(admission|receipt|certificate)" checked/.test(src.slice(src.indexOf('function waDlg'), src.indexOf('function payDlg'))), 'WhatsApp document boxes start unticked');
+assert.ok(src.includes("var dig=waDigits(x.phone)"), 'WhatsApp dialog uses the blocked-number check');
+assert.ok(src.includes("action:'wa_links'"));
+assert.ok(src.includes('data-wapv'), 'message preview before WhatsApp opens');
 assert.ok(src.includes('x.last_docs_sent_at'));
 assert.ok(src.includes('function copyWaMsg'));
 assert.ok(src.includes('function toast'));

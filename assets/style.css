@@ -575,3 +575,39 @@ label.adm-sw,.ac-card label.adm-sw{display:inline-flex;flex-direction:row;align-
 .adm-acts .btn.adm-wa:hover{background:#1ebe57;border-color:#1ebe57;color:#fff;box-shadow:0 0 0 6px rgba(37,211,102,.18)}
 .adm-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(16px);z-index:10050;background:#06231a;color:#fff;padding:12px 18px;border-radius:999px;font-weight:600;font-size:.92rem;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:calc(100% - 32px);text-align:center}
 .adm-toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+/* Admin student card v2: header + grouped sections (Nov 2026) */
+.adm-card{padding:0;overflow:hidden}
+.adm-ch{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:8px 16px;padding:16px 20px;background:#f4f9f5;border-bottom:1px solid #d9e4dc}
+.adm-cid{display:grid;gap:2px;min-width:0}.adm-cn{font-size:1.12rem;line-height:1.25;overflow-wrap:anywhere}
+.adm-tags{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.adm-tags .adm-fee{margin-top:0}
+.adm-secs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.adm-sec{padding:14px 20px 16px;border-bottom:1px solid #edf2ee;min-width:0}
+.adm-sh{display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#1d4d35}
+.adm-sec .adm-r{grid-template-columns:110px 1fr}.adm-sec .adm-r.adm-full{grid-template-columns:1fr}
+.adm-sec .adm-acts{margin-top:12px}
+.adm-sec-fee{background:#fffdf7}
+.adm-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.adm-stats>div{display:grid;gap:2px;padding:8px 10px;border:1px solid #e3ebe5;border-radius:10px;background:#fff;min-width:0}
+.adm-stats small{font-size:.72rem;color:#5b6b62;font-weight:600}.adm-stats b{font-size:1rem;overflow-wrap:anywhere}
+.adm-stats>.pp{border-color:#f3d77a;background:#fffaf0}.adm-stats>.od{border-color:#f0a5a5;background:#fff5f5}.adm-stats>.ok{border-color:#a8dcae;background:#f3fbf3}
+.adm-bar2{height:6px;border-radius:99px;background:#e8eee9;margin:8px 0 4px;overflow:hidden}.adm-bar2 span{display:block;height:100%;background:var(--g)}
+.adm-cf{display:flex;justify-content:flex-end;padding:10px 20px;background:#fafbfa}
+.adm-lnk{border:0;background:none;padding:2px 4px;font:inherit;font-size:.82rem;font-weight:700;color:var(--g);text-decoration:underline;cursor:pointer;min-height:32px}
+.adm-lnk:hover,.adm-lnk:focus-visible{color:#0b4a2c}
+.adm-tag{display:inline-block;padding:1px 8px;border-radius:999px;background:#eef3ff;color:#2a4a9a;font-size:.7rem;font-weight:700;margin-left:6px;vertical-align:middle}
+.adm-hist li.adm-void>span:not(.adm-fee),.adm-hist li.adm-void>b{text-decoration:line-through;opacity:.6}
+.adm-ifg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:0 14px}
+.adm-if .adm-ifh{display:flex;align-items:center;justify-content:space-between;gap:6px}.adm-if small{font-size:.74rem;overflow-wrap:anywhere}
+.adm-if.adm-ov input,.adm-if.adm-ov textarea{border-color:#5b7bd5;background:#f6f8ff}.adm-if.adm-ov .adm-tag{background:#5b7bd5;color:#fff}
+.adm-if .adm-tag{margin-left:0}
+.adm-warn{color:#9a3b00;font-weight:600}.adm-small{font-size:.8rem}
+.adm-sum{padding:8px 10px;border-radius:10px;background:#f4f9f5;margin:8px 0}
+.adm-histd{margin-top:8px;font-size:.85rem}.adm-histd ul{padding-left:18px;margin:6px 0;display:grid;gap:6px}
+.adm-dlg.adm-wide{max-height:calc(100vh - 32px);overflow:auto}
+.adm-dlg textarea{width:100%;font:inherit;font-size:.85rem}
+[data-wad] [data-wap]{margin:6px 0 4px}
+@media(max-width:640px){.adm-ch,.adm-sec{padding-left:14px;padding-right:14px}.adm-sec .adm-r{grid-template-columns:1fr}.adm-stats{gap:6px}.adm-stats>div{padding:6px 8px}.adm-stats b{font-size:.9rem}.adm-cf .btn{flex:1 1 auto;justify-content:center}}
+.adm-sec .adm-r{grid-template-columns:132px 1fr}
+.adm-hist .adm-lnk{text-decoration:none;border:1.5px solid var(--g);border-radius:999px;padding:2px 10px;min-height:28px;line-height:1.2}
+.adm-hist .adm-lnk:hover,.adm-hist .adm-lnk:focus-visible{background:var(--g);color:#fff}
+@media(max-width:640px){.adm-sec .adm-r{grid-template-columns:1fr}}
