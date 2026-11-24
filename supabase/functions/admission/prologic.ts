@@ -10,6 +10,26 @@ export const STAFF_ACTIONS = new Set([
   "pro_activity", "pro_assign_batch", "pro_reminders", "pro_email_log", "pro_proof_upload", "pro_proof_attach", "pro_proof_url", "pro_payment_ref", "pro_dashboard",
   "pro_students", "pro_reveal", "pro_add_student",
 ]);
+/** What staff see instead of raw provider / document errors (bounce texts usually contain the student's email). */
+export const STAFF_MAIL_ERR = "Not delivered (an admin can see the details)";
+export const STAFF_DOC_ERR = "Failed (an admin can see the details)";
+/** Email log rows for the given role: admins get the raw error, staff only that something failed. */
+export function redactMailRows<T extends { error?: unknown }>(rows: T[], role: string): T[] {
+  return role === "admin" ? rows : rows.map((x) => ({ ...x, error: x.error ? STAFF_MAIL_ERR : null }));
+}
+/** docs_status / process_docs / resend answers for the given role: staff never get docs_error, last_error or error texts. */
+export function redactDocs<T extends Record<string, any>>(r: T, role: string): T {
+  if (role === "admin" || !r || typeof r !== "object") return r;
+  const o: Record<string, any> = { ...r };
+  if (o.docs_error) o.docs_error = STAFF_DOC_ERR;
+  if (typeof o.error === "string" && o.error) o.error = STAFF_DOC_ERR;
+  if (Array.isArray(o.jobs)) o.jobs = o.jobs.map((j: any) => ({ ...j, last_error: j?.last_error ? STAFF_DOC_ERR : null }));
+  return o as T;
+}
+/** The payments_refund_guard trigger (migration 20261125140000), recognised by SQLSTATE + hint, not by message text. */
+export function isRefundGuard(err: { code?: unknown; hint?: unknown } | null | undefined): boolean {
+  return !!err && err.code === "23514" && err.hint === "DFA_REFUND_GUARD";
+}
 /** Money writes staff may only do when an admin switches site_settings.staff_payments to "on" (default off). */
 export const STAFF_PAYMENT_ACTIONS = new Set(["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref", "pro_proof_url"]);
 export function allowed(role: string | null | undefined, action: string, staffPayments = false): boolean {
