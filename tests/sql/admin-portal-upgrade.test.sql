@@ -276,6 +276,7 @@ select pg_temp.check(not exists (select 1 from public.admin_activity where actio
 delete from public.batches where code = 'TEST-DEL';
 
 -- 17) no public table grants TRUNCATE/MAINTAIN/TRIGGER/REFERENCES to anon or authenticated (leftover Dxtm)
+-- Older stub tables are seeded with production Dxtm before 160000/190000 so this fails if the revoke loop is missing.
 select pg_temp.check(not exists (
     select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind = 'r'
