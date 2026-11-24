@@ -25,7 +25,10 @@ select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authent
 select pg_temp.check((select count(*) from public.enrollments) = 0, 'B2: staff cannot read enrollments directly (lists come from pro_students, masked)');
 select pg_temp.check((select count(*) from public.payments) = 0, 'B2: staff cannot read payments directly');
 select pg_temp.check((select count(*) from public.email_log) = 0, 'B2: staff cannot read the email log directly');
-select pg_temp.check((select count(*) from public.enrollment_audit) = 0, 'B2: staff cannot read enrollment_audit (CNIC/DOB old/new values)');
+do $$ declare n bigint; begin
+  begin execute 'select count(*) from public.enrollment_audit' into n; exception when insufficient_privilege then n := 0; end;  -- production: no grant at all
+  perform pg_temp.check(n = 0, 'B2: staff cannot read enrollment_audit (CNIC/DOB old/new values)');
+end $$;
 -- the review's B1 repro: a staff insert with a certificate date and a paid amount. Must now fail.
 do $$ begin insert into public.enrollments (email, full_name, course_code, status, certificate_issued_at, fee_total, amount_paid) values ('student@test.local', 'Forged Person', 'a1-normal', 'pending', now(), 25000, 25000); raise exception 'staff inserted'; exception when insufficient_privilege then null; when others then if sqlerrm like 'staff inserted%' then raise; end if; end $$;
 do $$ begin insert into public.enrollments (email, full_name, course_code, source) values ('walkin@test.local', 'TEST Walkin', 'a1-normal', 'manual'); raise exception 'staff inserted plain'; exception when insufficient_privilege then null; when others then if sqlerrm like 'staff inserted%' then raise; end if; end $$;
@@ -176,3 +179,16 @@ select pg_temp.check((select amount_paid from public.enrollments where full_name
 update public.fee_adjustments set voided_at = now(), void_reason = 'entered by mistake' where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard');
 update public.payments set voided_at = now() where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard');
 select pg_temp.check((select amount_paid from public.enrollments where full_name = 'TEST Guard') = 0, 'R2-1: after voiding the refund, the payment can be voided');
+
+-- 14) privileges match production (no default grants): the signed-in role can reach the portal tables, anon can't
+select pg_temp.check(has_table_privilege('authenticated', 'public.batches', 'SELECT,INSERT,UPDATE,DELETE')
+  and has_table_privilege('authenticated', 'public.class_sessions', 'SELECT,INSERT,UPDATE,DELETE')
+  and has_table_privilege('authenticated', 'public.attendance', 'SELECT,INSERT,UPDATE,DELETE')
+  and has_table_privilege('authenticated', 'public.student_notes', 'SELECT,INSERT,UPDATE,DELETE')
+  and has_table_privilege('authenticated', 'public.student_meta', 'SELECT,INSERT,UPDATE')
+  and has_table_privilege('authenticated', 'public.fee_adjustments', 'SELECT')
+  and has_table_privilege('authenticated', 'public.admin_activity', 'SELECT')
+  and has_table_privilege('authenticated', 'public.account_meta', 'SELECT'), 'grants: authenticated can use the portal tables (RLS decides rows)');
+select pg_temp.check(not has_table_privilege('authenticated', 'public.fee_adjustments', 'INSERT') and not has_table_privilege('authenticated', 'public.admin_activity', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.account_meta', 'UPDATE') and not has_table_privilege('authenticated', 'public.student_meta', 'DELETE'), 'grants: function-only tables stay read-only for the browser');
+select pg_temp.check(not has_table_privilege('anon', 'public.batches', 'SELECT') and not has_table_privilege('anon', 'public.student_notes', 'SELECT') and not has_table_privilege('anon', 'public.fee_adjustments', 'SELECT'), 'grants: anon gets nothing');
