@@ -1,6 +1,6 @@
 /** Per-staff permissions UI: Accounts panel, presets, can() gates, 360px, no password in the invite path. */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'path';
 
@@ -70,11 +70,20 @@ assert.ok(/D\.contacts_shown===false&&\(F\.key==='email'\|\|F\.key==='phone'\)\)
 const idx = read('supabase/functions/admission/index.ts');
 const save = idx.slice(idx.indexOf('body.action === "student_info_save"'), idx.indexOf('body.action === "regen_docs"'));
 assert.ok(save.includes('shapeStudentInfoSave({ ok: true, changed: Object.keys(ch.new), effective: after'));
-assert.ok(save.includes('.eq("student_info", e.student_info)') && save.includes('.is("student_info", null)') && save.includes('STUDENT_INFO_CONFLICT') && save.includes('409'));
+assert.ok(save.includes('studentInfoLockUpdate(db, e.id, e.student_info, patch)') && save.includes('STUDENT_INFO_CONFLICT') && save.includes('409'));
+assert.equal(save.includes('.eq("student_info"') || save.includes('.is("student_info"'), false, 'no PostgREST eq/is on student_info');
 
 // 10. B20-4: a 409 conflict shows the message and a Reload button that reopens the details
 assert.ok(/s\.data\.code==='conflict'\|\|err==='Record changed, reload'/.test(adm) && adm.includes("rb.textContent='Reload'") && /g\.close\(\);infoDlg\(id\)/.test(adm),
   '409 Record changed, reload is shown in the dialog with a Reload button that reopens the details');
 assert.ok(read('admin.html').includes('dfa-admin.js?v=54'), 'admin.js cache-bust bumped after the 409 UI');
+
+
+// Edge functions pin supabase-js to the npm specifier (jsonb values must not go through an unpinned client).
+const walk = (d, acc = []) => { for (const n of readdirSync(d, { withFileTypes: true })) { const p = path.join(d, n.name); if (n.isDirectory()) walk(p, acc); else if (n.name.endsWith('.ts')) acc.push(p); } return acc; };
+for (const f of walk(path.join(root, 'supabase/functions'))) {
+  const imps = [...read(path.relative(root, f)).matchAll(/from ["']([^"']*supabase-js[^"']*)["']/g)].map((m) => m[1]);
+  for (const u of imps) assert.equal(u, 'npm:@supabase/supabase-js@2', f + ' must pin npm:@supabase/supabase-js@2');
+}
 
 console.log('staff-permissions-ui: all checks passed');

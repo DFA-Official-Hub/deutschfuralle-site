@@ -189,9 +189,18 @@ export function shapeStudentInfoSave<T extends { effective?: any }>(payload: T, 
   return { ...payload, effective: shaped.effective, contacts_shown: shaped.contacts_shown };
 }
 export const STUDENT_INFO_CONFLICT = "Record changed, reload";
+export const STUDENT_INFO_LOCK_RPC = "student_info_lock_update";
+/** Call the lock RPC. 0 rows means a concurrent change. */
+export function studentInfoLockUpdate(db: { rpc: (name: string, args: Record<string, unknown>) => any }, id: number, expect: unknown, patch: Record<string, unknown>) {
+  return db.rpc(STUDENT_INFO_LOCK_RPC, { p_id: id, p_expect: expect ?? null, p_patch: patch });
+}
 /** True when the optimistic lock matched no row (someone else changed student_info). */
 export function studentInfoWriteConflict(up: { data?: unknown; error?: unknown } | null | undefined): boolean {
-  return !!up && !up.error && !up.data;
+  if (!up || up.error) return false;
+  const d = up.data;
+  if (d == null) return true;
+  if (Array.isArray(d) && d.length === 0) return true;
+  return false;
 }
 function normInfoCompare(k: Field, v: string): string {
   const s = v.replace(/\s+/g, " ").trim();

@@ -357,3 +357,60 @@ reset role;
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000a'); set role authenticated;
 select pg_temp.check(private.staff_can('view_students') and private.staff_can('record_payments') and private.staff_can('export'), 'admin staff_can is true for every known permission');
 reset role;
+
+-- B20-5: student_info_lock_update is service-role only; match, mismatch, null, and quoted addresses
+select pg_temp.check(
+  has_function_privilege('service_role', 'public.student_info_lock_update(bigint,jsonb,jsonb)', 'execute')
+  and not has_function_privilege('authenticated', 'public.student_info_lock_update(bigint,jsonb,jsonb)', 'execute')
+  and not has_function_privilege('anon', 'public.student_info_lock_update(bigint,jsonb,jsonb)', 'execute'),
+  'student_info_lock_update is service-role only');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a'); set role authenticated;
+do $$ begin
+  perform * from public.student_info_lock_update(1, null, '{}'::jsonb);
+  raise exception 'authenticated called lock update';
+exception when insufficient_privilege then null; when others then if sqlerrm like 'authenticated called%' then raise; end if; end $$;
+reset role;
+
+insert into public.enrollments (email, full_name, course_code, status, student_info)
+values ('test-lock-b20@test.local', 'TEST Lock', 'a1-normal', 'pending',
+        '{"full_name":"TEST Lock","address":"12, \"Quoted\" Road, Lahore"}'::jsonb);
+insert into public.enrollments (email, full_name, course_code, status, student_info)
+values ('test-lock-null@test.local', 'TEST Lock Null', 'a1-normal', 'pending', null);
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-b20@test.local'),
+    '{"full_name":"TEST Lock","address":"12, \"Quoted\" Road, Lahore"}'::jsonb,
+    jsonb_build_object(
+      'student_info', '{"full_name":"TEST Lock 2","address":"12, \"Quoted\" Road, Lahore"}'::jsonb,
+      'full_name', 'TEST Lock 2'))) = 1,
+  'lock update match returns 1 row');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-b20@test.local') = 'TEST Lock 2'
+  and (select student_info->>'address' from public.enrollments where email = 'test-lock-b20@test.local') = '12, "Quoted" Road, Lahore',
+  'lock update keeps an address with commas and quotes');
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-b20@test.local'),
+    '{"full_name":"TEST Lock","address":"12, \"Quoted\" Road, Lahore"}'::jsonb,
+    jsonb_build_object('student_info', '{"full_name":"Hacked"}'::jsonb, 'full_name', 'Hacked'))) = 0,
+  'lock update mismatch returns 0 rows');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-b20@test.local') = 'TEST Lock 2',
+  'lock update mismatch does not write');
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-null@test.local'),
+    null,
+    jsonb_build_object('student_info', '{"full_name":"From null"}'::jsonb, 'full_name', 'From null'))) = 1,
+  'lock update matches when both sides are null');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-null@test.local') = 'From null'
+  and (select student_info->>'full_name' from public.enrollments where email = 'test-lock-null@test.local') = 'From null',
+  'lock update from a null student_info writes the new value');
+
+select pg_temp.check((select count(*) from public.student_info_lock_update(
+    (select id from public.enrollments where email = 'test-lock-null@test.local'),
+    null,
+    jsonb_build_object('student_info', '{"full_name":"Again"}'::jsonb))) = 0,
+  'lock update does not match a null expect after student_info is set');
+select pg_temp.check((select full_name from public.enrollments where email = 'test-lock-null@test.local') = 'From null',
+  'a stale null expect does not write');
+
+delete from public.enrollments where email in ('test-lock-b20@test.local', 'test-lock-null@test.local');

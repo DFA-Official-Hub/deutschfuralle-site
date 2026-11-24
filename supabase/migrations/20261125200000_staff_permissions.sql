@@ -172,3 +172,40 @@ create policy att_staff_upd on public.attendance for update to authenticated
 drop policy if exists adj_staff_select on public.fee_adjustments;
 create policy adj_staff_select on public.fee_adjustments for select to authenticated
   using ((select private.is_admin()) or (select private.staff_can('discounts_refunds')) or (select private.staff_can('view_students')));
+
+-- Optimistic lock for student_info_save (B20-5). PostgREST .eq() on a jsonb object
+-- serialises as eq.[object Object], so the admission function (service_role) calls this instead.
+-- 0 rows means someone else changed student_info (the function returns 409). Audit rows are
+-- still written by the function, not here, so trigger behaviour is unchanged.
+create or replace function public.student_info_lock_update(p_id bigint, p_expect jsonb, p_patch jsonb)
+returns setof public.enrollments
+language plpgsql
+security definer
+set search_path to ''
+as $$
+begin
+  return query
+  update public.enrollments e
+     set student_info = case
+           when p_patch ? 'student_info' then case when p_patch->'student_info' = 'null'::jsonb then null else p_patch->'student_info' end
+           else e.student_info
+         end,
+         full_name = case
+           when p_patch ? 'full_name' then case when p_patch->'full_name' = 'null'::jsonb then null else p_patch->>'full_name' end
+           else e.full_name
+         end,
+         phone = case
+           when p_patch ? 'phone' then case when p_patch->'phone' = 'null'::jsonb then null else p_patch->>'phone' end
+           else e.phone
+         end,
+         certificate_file = case
+           when p_patch ? 'certificate_file' then case when p_patch->'certificate_file' = 'null'::jsonb then null else p_patch->>'certificate_file' end
+           else e.certificate_file
+         end
+   where e.id = p_id
+     and e.student_info is not distinct from p_expect
+  returning e.*;
+end $$;
+
+revoke all on function public.student_info_lock_update(bigint, jsonb, jsonb) from public, anon, authenticated;
+grant execute on function public.student_info_lock_update(bigint, jsonb, jsonb) to service_role;

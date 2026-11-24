@@ -1,5 +1,5 @@
 // Public WhatsApp redirect: 302 to wa.me/<DFA number>. Number from secret only — never in HTML/JS.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",

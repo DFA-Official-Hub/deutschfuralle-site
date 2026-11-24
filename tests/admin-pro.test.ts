@@ -1,6 +1,6 @@
 // deno test tests/admin-pro.test.ts — admin portal upgrade (WD-3): roles, reminders, discounts, proof paths, webhook signature, dashboard, activity summaries.
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
-import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, shapeStudentInfoSave, staffInfoSaveError, mergeStaffStudentInfo, redactInfoRecord, studentInfoWriteConflict, STUDENT_INFO_CONFLICT, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
+import { allowed, denyMessage, emptyPerms, parsePerms, applyPreset, PERM_KEYS, parseOffsets, offsetsError, stageFor, nextReminder, isPaused, applyDiscount, undoDiscount, planDue, proofPath, proofPathOk, cleanRef, verifySvix, deliveryFrom, dashboard, shapeStudentInfoGet, shapeStudentInfoSave, staffInfoSaveError, mergeStaffStudentInfo, redactInfoRecord, studentInfoLockUpdate, studentInfoWriteConflict, STUDENT_INFO_CONFLICT, STUDENT_INFO_LOCK_RPC, maskEmail, maskPhone, type PermKey } from "../supabase/functions/admission/prologic.ts";
 import { summarize } from "../supabase/functions/admission/audit.ts";
 
 const on = (...ks: PermKey[]) => { const p = emptyPerms(); for (const k of ks) p[k] = true; return p; };
@@ -154,6 +154,25 @@ Deno.test("B20-4: a staff name-only save's effective has no CNIC/DOB/address or 
   assertEquals(studentInfoWriteConflict({ data: undefined, error: undefined }), true);
   assertEquals(studentInfoWriteConflict({ data: { id: 1 }, error: null }), false);
   assertEquals(studentInfoWriteConflict({ data: null, error: { message: "fail" } }), false);
+});
+Deno.test("B20-5: student_info_save calls the lock RPC and maps 0 rows to 409", async () => {
+  const calls: { name: string; args: Record<string, unknown> }[] = [];
+  const db = { rpc: (name: string, args: Record<string, unknown>) => { calls.push({ name, args }); return Promise.resolve({ data: [], error: null }); } };
+  const expect = { full_name: "Ayesha Khan", address: '12, "Quoted" Road, Lahore' };
+  const patch = { student_info: { ...expect, full_name: "Ayesha Khan 2" }, full_name: "Ayesha Khan 2" };
+  const up = await studentInfoLockUpdate(db, 42, expect, patch);
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].name, STUDENT_INFO_LOCK_RPC);
+  assertEquals(calls[0].args, { p_id: 42, p_expect: expect, p_patch: patch });
+  assertEquals(studentInfoWriteConflict(up), true, "empty set is a conflict");
+  assertEquals(studentInfoWriteConflict({ data: null, error: null }), true);
+  assertEquals(studentInfoWriteConflict({ data: [{ id: 42, full_name: "Ayesha Khan 2" }], error: null }), false);
+  assertEquals(studentInfoWriteConflict({ data: [], error: { message: "fail" } }), false, "an RPC error is not a silent conflict");
+  const src = await Deno.readTextFile(new URL("../supabase/functions/admission/index.ts", import.meta.url));
+  const save = src.slice(src.indexOf('body.action === "student_info_save"'), src.indexOf('body.action === "regen_docs"'));
+  assert(save.includes("studentInfoLockUpdate(db, e.id, e.student_info, patch)"));
+  assertFalse(save.includes('.eq("student_info"') || save.includes('.is("student_info"'), "no PostgREST eq/is on the jsonb object");
+  assert(save.includes("STUDENT_INFO_CONFLICT") && save.includes("409"));
 });
 Deno.test("reminder schedule parsing and stages", () => {
   assertEquals(parseOffsets("-3,0,3"), [-3, 0, 3]); assertEquals(parseOffsets(" -5, -1 ,2"), [-5, -1, 2]);
