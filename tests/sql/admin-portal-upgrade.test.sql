@@ -222,3 +222,23 @@ begin
   end loop;
   perform pg_temp.check(missing = '', 'R4-1: every authenticated RLS policy has a matching grant' || case when missing = '' then '' else ': ' || missing end);
 end $$;
+
+-- 16) R4-1: deleting a TEST enrollment that has notes and attendance succeeds (cascade must not write admin_activity against the deleted row)
+insert into public.enrollments (email, full_name, course_code, status, fee_total) values ('deltest@test.local', 'TEST DeleteCascade', 'a1-normal', 'active', 25000);
+insert into public.student_meta (enrollment_id, is_test) select id, true from public.enrollments where full_name = 'TEST DeleteCascade';
+insert into public.student_notes (enrollment_id, body) select id, 'TEST note to cascade' from public.enrollments where full_name = 'TEST DeleteCascade';
+insert into public.student_notes (enrollment_id, body) values (1, 'Live note that must still be logged when deleted');
+delete from public.student_notes where enrollment_id = 1 and body = 'Live note that must still be logged when deleted';
+select pg_temp.check((select count(*) from public.admin_activity where action = 'note_deleted' and enrollment_id = 1 and summary like 'Note deleted: Live note%') = 1, 'R4-1: deleting a note on a live enrollment is still logged');
+insert into public.batches (code, course_code, start_date, status) values ('TEST-DEL', 'a1-normal', '2026-11-25', 'planned');
+insert into public.class_sessions (batch_id, session_date, topic, status) select id, '2026-11-25', 'TEST cascade class', 'held' from public.batches where code = 'TEST-DEL';
+insert into public.attendance (session_id, enrollment_id, status)
+  select s.id, e.id, 'present' from public.class_sessions s, public.enrollments e
+  where s.topic = 'TEST cascade class' and e.full_name = 'TEST DeleteCascade';
+delete from public.enrollments where full_name = 'TEST DeleteCascade';
+select pg_temp.check(not exists (select 1 from public.enrollments where full_name = 'TEST DeleteCascade'), 'R4-1: deleting a TEST enrollment with notes and attendance succeeds');
+select pg_temp.check(not exists (select 1 from public.student_notes where body = 'TEST note to cascade')
+  and not exists (select 1 from public.attendance a join public.class_sessions s on s.id = a.session_id where s.topic = 'TEST cascade class'), 'R4-1: notes and attendance cascaded away');
+select pg_temp.check(not exists (select 1 from public.admin_activity where action in ('note_deleted', 'attendance_deleted') and summary like '%TEST note to cascade%')
+  and not exists (select 1 from public.admin_activity where action = 'attendance_deleted' and details->>'status' = 'present' and summary like '%25 Nov 2026%'), 'R4-1: cascade does not write per-row note/attendance audit (the enrollment deletion is the summary)');
+delete from public.batches where code = 'TEST-DEL';
