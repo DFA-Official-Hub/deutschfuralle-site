@@ -274,3 +274,13 @@ select pg_temp.check(not exists (select 1 from public.student_notes where body =
 select pg_temp.check(not exists (select 1 from public.admin_activity where action in ('note_deleted', 'attendance_deleted') and summary like '%TEST note to cascade%')
   and not exists (select 1 from public.admin_activity where action = 'attendance_deleted' and details->>'status' = 'present' and summary like '%25 Nov 2026%'), 'R4-1: cascade does not write per-row note/attendance audit (the enrollment deletion is the summary)');
 delete from public.batches where code = 'TEST-DEL';
+
+-- 17) no public table grants TRUNCATE/MAINTAIN/TRIGGER/REFERENCES to anon or authenticated (leftover Dxtm)
+select pg_temp.check(not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+       and exists (
+         select 1 from unnest(array['TRUNCATE', 'MAINTAIN', 'TRIGGER', 'REFERENCES']) p
+          where has_table_privilege('authenticated', c.oid, p) or has_table_privilege('anon', c.oid, p)
+       )
+  ), 'R5: no public table grants TRUNCATE/MAINTAIN/TRIGGER/REFERENCES to anon or authenticated');
