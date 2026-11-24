@@ -195,3 +195,6 @@ assert.ok(auth.includes('function receiptPills(id,pays,cls,inv,planN)') && auth.
 for (const f of ['admin.html', 'portal.html']) assert.match(read(f), /<script src="assets\/dfa-plan\.js\?v=3" defer><\/script>/);
 assert.ok(auth.includes('paid_on,method,installment_label') && auth.includes("p.installment_label?'Receipt · '+p.installment_label"));
 console.log('installment-plan: all checks passed');
+
+// hidden (inactive) courses are left out of the admin course picker unless already selected
+assert.ok(read('assets/dfa-admin.js').includes("COURSES.filter(function(c){return c.active!==false||c.code===sel})"));
