@@ -35,6 +35,8 @@ export function payStatus(fee: number, paid: number): "Fully paid" | "Partially 
   if (paid >= fee) return "Fully paid";
   return paid > 0 ? "Partially paid" : "Not paid";
 }
+/** Calendar day in Pakistan (UTC+5, no DST) of a timestamp: a registration at 02:00 PKT is still that day, not the previous UTC day. */
+export const pkDay = (ts: unknown) => { const t = Date.parse(String(ts || "")); return isNaN(t) ? "" : new Date(t + 5 * 3600e3).toISOString().slice(0, 10); };
 /** One student's fee summary for Google Sheets (Finance tracker + registration sheet). */
 export function feeRow(e: any, pays: Pay[]) {
   const fee = Number(e.fee_total) || 0, paid = Number(e.amount_paid) || 0, plan = Array.isArray(e.installment_plan) && e.installment_plan.length ? e.installment_plan : null;
@@ -42,7 +44,7 @@ export function feeRow(e: any, pays: Pay[]) {
   const L = live(pays);
   return {
     student_id: e.student_id || "", name: e.full_name || "", email: e.email || "", course: e.courses?.name || e.course_label || "", batch: e.batch_code || "",
-    registered: String(e.created_at || "").slice(0, 10), status: e.status || "", invoice_no: e.invoice_no || "",
+    registered: pkDay(e.created_at), status: e.status || "", invoice_no: e.invoice_no || "",
     fee_total: fee || null, amount_paid: paid, balance_due: fee ? bal : null,
     installments: planCount(e), installments_paid: plan ? (n ? n.no - 1 : plan.length) : L.length,
     next_due_date: bal > 0 ? (n ? n.due : e.due_date ? String(e.due_date).slice(0, 10) : "") : "",

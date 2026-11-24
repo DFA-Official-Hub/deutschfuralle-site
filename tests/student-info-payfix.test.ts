@@ -1,7 +1,7 @@
 // deno test tests/student-info-payfix.test.ts — student details on documents (DOB never shifts) and payment corrections.
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import { isoDob, longDate, fromRegistration, pickDetails, effective, cleanOverrides, diff, addressLine } from "../supabase/functions/admission/student.ts";
-import { recompute, checkCorrection, receiptPath, payStatus, feeRow, live } from "../supabase/functions/admission/payfix.ts";
+import { recompute, checkCorrection, receiptPath, payStatus, feeRow, live, pkDay } from "../supabase/functions/admission/payfix.ts";
 
 const reg = { "First Name": "Aamir ", "Last Name": "Qasmi", "Date of Birth": "11 February 1995", "Email": "Aamir@Example.com", "Mobile Number": "0300 1234567", "CNIC": "12345-1234567-1", "Address": "Street 1", "City": "Karachi", "Country": "Pakistan" };
 
@@ -73,4 +73,10 @@ Deno.test("next due amount comes from the plan", () => {
   const plan = [{ no: 1, amount: 15000, due: "2026-11-20" }, { no: 2, amount: 10000, due: "2026-11-29" }];
   const f = feeRow({ student_id: "DFA-2026-0009", fee_total: 25000, amount_paid: 15000, installment_plan: plan }, [{ id: 1, amount: 15000, installment_no: 1 }]);
   assertEquals([f.installments, f.installments_paid, f.next_due_date, f.next_due_amount, f.payment_status], [2, 1, "2026-11-29", 10000, "Partially paid"]);
+});
+Deno.test("registration day is the Pakistan calendar day", () => {
+  assertEquals(pkDay("2026-11-19T20:30:00Z"), "2026-11-20"); // 01:30 PKT on 20 Nov
+  assertEquals(pkDay("2026-11-19T18:59:00+00:00"), "2026-11-19");
+  assertEquals(pkDay(null), "");
+  assertEquals(feeRow({ student_id: "X", created_at: "2026-11-19T20:30:00Z" }, []).registered, "2026-11-20");
 });

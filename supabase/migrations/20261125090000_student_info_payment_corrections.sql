@@ -36,3 +36,27 @@ create policy audit_admin_select on public.enrollment_audit for select to authen
 -- No insert/update/delete policies: only the admission function (service role) writes, so entries can't be edited from the browser.
 revoke insert, update, delete on public.enrollment_audit from anon, authenticated;
 comment on table public.enrollment_audit is 'Who changed a student''s details or corrected a payment, when, why, and the old -> new values.';
+
+-- 4) The student's paid total always equals the sum of their counted (non-voided) payments.
+--    Kept by the database on every payment insert / update / delete, so two saves at the same moment
+--    (two corrections, or a correction next to a new payment) can't leave amount_paid out of step.
+--    balance_due is a generated column (fee_total - amount_paid), so it follows automatically.
+--    The enrollment row is locked first, then the sum is read in a fresh statement, so concurrent
+--    changes for the same student are applied one after the other.
+create or replace function private.sync_amount_paid() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare eid bigint; s bigint;
+begin
+  foreach eid in array (case when tg_op = 'UPDATE' and old.enrollment_id is distinct from new.enrollment_id then array[old.enrollment_id, new.enrollment_id]
+                             when tg_op = 'DELETE' then array[old.enrollment_id] else array[new.enrollment_id] end) loop
+    continue when eid is null;
+    perform 1 from public.enrollments where id = eid for update;
+    select coalesce(sum(amount), 0) into s from public.payments where enrollment_id = eid and voided_at is null;
+    update public.enrollments set amount_paid = s where id = eid and amount_paid is distinct from s;
+  end loop;
+  return null;
+end $$;
+revoke all on function private.sync_amount_paid() from public, anon, authenticated;
+drop trigger if exists payments_sync_amount_paid on public.payments;
+create trigger payments_sync_amount_paid after insert or delete or update of amount, voided_at, enrollment_id on public.payments
+  for each row execute function private.sync_amount_paid();

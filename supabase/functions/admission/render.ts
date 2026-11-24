@@ -88,7 +88,8 @@ ${sample}
 export async function certificatePdfUrls(db: any, e: any) {
   const nm = `${e.certificate_no}_${String(e.full_name || "Student").normalize("NFKD").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "")}.pdf`;
   const path = `${e.certificate_no}.pdf`;
-  let v = await db.storage.from("certificates").createSignedUrl(path, 3600);
+  // No cached image means the certificate must be drawn again (first time, or the name was edited): the PDF is then stale too.
+  let v: any = e.certificate_file ? await db.storage.from("certificates").createSignedUrl(path, 3600) : { error: "rebuild" };
   if (v.error || !v.data?.signedUrl) {
     const png = await certificateUrls(db, e); const r = await fetch(png.url); if (!r.ok) throw new Error("certificate image missing");
     const { PDFDocument } = await import("npm:pdf-lib@1.17.1");
