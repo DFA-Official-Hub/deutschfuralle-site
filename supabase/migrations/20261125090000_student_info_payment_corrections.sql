@@ -50,7 +50,7 @@ begin
   foreach eid in array (case when tg_op = 'UPDATE' and old.enrollment_id is distinct from new.enrollment_id then array[old.enrollment_id, new.enrollment_id]
                              when tg_op = 'DELETE' then array[old.enrollment_id] else array[new.enrollment_id] end) loop
     continue when eid is null;
-    perform 1 from public.enrollments where id = eid for update;
+    perform 1 from public.enrollments where id = eid for no key update;  -- no key: payments' FK share locks don't conflict, so no lock-upgrade deadlock
     select coalesce(sum(amount), 0) into s from public.payments where enrollment_id = eid and voided_at is null;
     update public.enrollments set amount_paid = s where id = eid and amount_paid is distinct from s;
   end loop;
@@ -60,3 +60,5 @@ revoke all on function private.sync_amount_paid() from public, anon, authenticat
 drop trigger if exists payments_sync_amount_paid on public.payments;
 create trigger payments_sync_amount_paid after insert or delete or update of amount, voided_at, enrollment_id on public.payments
   for each row execute function private.sync_amount_paid();
+-- One-time consistency pass (safe to re-run): students with payments get amount_paid = sum of their live payments.
+update public.enrollments e set amount_paid = t.s from (select enrollment_id, coalesce(sum(amount) filter (where voided_at is null), 0) s from public.payments group by enrollment_id) t where t.enrollment_id = e.id and e.amount_paid is distinct from t.s;

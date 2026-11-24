@@ -730,13 +730,13 @@ Deno.serve(async (req) => {
       // with a plan the receipt label says which installment(s) the money covers.
       const ins = await db.from("payments").insert({ enrollment_id: id, amount, paid_on: paidOn, proof_url: proof, installment_no: n, installments: Math.max(planCount(e), n), is_final: fin, installment_label: plan ? payLabel(plan, before, after) : null, method: payMethod(body.method), created_by: u.user.id }).select("*").single();
       if (ins.error) return json({ error: /duplicate|unique/i.test(ins.error.message || "") ? "Another payment was just saved for this student. Reload the page and check before adding it again." : ins.error.message }, ins.error && /duplicate|unique/i.test(ins.error.message || "") ? 409 : 400);
-      // The insert and the enrollment update are separate requests, so recompute everything from the sum of all payments now stored.
-      const rr = await db.from("payments").select("amount,voided_at").eq("enrollment_id", id);
-      const st = settle({ plan, feeTotal: e.fee_total, amount, readOk: !rr.error && Array.isArray(rr.data), sumAfter: (rr.data || []).filter((p: any) => !p.voided_at).reduce((t: number, p: { amount: number }) => t + (Number(p.amount) || 0), 0) });
-      // Re-read failed or can't include this payment: don't write amount_paid or send a receipt from a wrong total.
+      // The database keeps amount_paid = sum of live payments (trigger payments_sync_amount_paid), so read the total it just set.
+      const rr = await db.from("enrollments").select("amount_paid").eq("id", id).maybeSingle();
+      const st = settle({ plan, feeTotal: e.fee_total, amount, readOk: !rr.error && !!rr.data, sumAfter: Number(rr.data?.amount_paid) });
+      // Re-read failed or can't include this payment: don't send a receipt from a wrong total.
       if (st.bad) return json({ ok: true, payment: ins.data, email: "not sent", warning: "Payment saved; reload and check" + (rr.error ? " (" + rr.error.message + ")" : "") + "." });
       if (st.over) {
-        // Another payment landed meanwhile and this one would take the total above the fee: undo it.
+        // Another payment landed meanwhile and this one would take the total above the fee: undo it (the trigger re-totals on delete).
         const del = await db.from("payments").delete().eq("id", ins.data.id);
         if (del.error) return json({ error: "This payment would take the total above the fee, but it could not be removed: the payment row " + (ins.data.invoice_no || ins.data.id) + " still exists. Reload, check the payments and delete the extra one before doing anything else. (" + del.error.message + ")" }, 500);
         return json({ error: "Another payment was just saved for this student, and this one would take the total above the fee. Reload the page and check the balance." }, 409);
@@ -748,12 +748,12 @@ Deno.serve(async (req) => {
       }
       // Custom plan: the next unpaid installment's date becomes the due date, so reminders follow the schedule.
       // Reminders restart only when the due date moves; a part payment towards the same installment keeps the reminder stage.
-      const upd: Record<string, unknown> = { amount_paid: after, reminder_stage: st.fin ? 3 : 0 };
+      // amount_paid is owned by the database; only the due date and reminder stage are set here, and only while the
+      // total is still the one this request saw. If it changed, a newer request (or a correction) already set them.
+      const upd: Record<string, unknown> = { reminder_stage: st.fin ? 3 : 0 };
       if (plan) { const nd = planDue(plan, after); upd.due_date = nd; if (!st.fin && nd === (e.due_date ? String(e.due_date).slice(0, 10) : null)) upd.reminder_stage = e.reminder_stage || 0; e.due_date = nd; }
-      // Conditional: a stale request (smaller total) must never overwrite a newer, higher amount_paid; then no row changes and the warning below fires.
-      const w = await db.from("enrollments").update(upd).eq("id", id).lte("amount_paid", after).select("id").maybeSingle();
+      await db.from("enrollments").update(upd).eq("id", id).eq("amount_paid", after);
       const warnings: string[] = [];
-      if (w.error || !w.data) warnings.push("Payment saved, but the student's paid total could not be updated: " + (w.error?.message || "no row updated") + ". Reload and check before adding anything else.");
       e.amount_paid = after; e.balance_due = Math.max((e.fee_total || 0) - after, 0);
       let rc: any = null; try { rc = await buildPaymentReceipt(db, e, ins.data, before); } catch (x) { return json({ ok: true, payment: ins.data, warning: [...warnings, "Payment saved, but the receipt could not be created: " + String((x as Error).message || x)].join(" ") }); }
       let mail = "not sent";

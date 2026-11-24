@@ -5,7 +5,7 @@ const idx = read('supabase/functions/admission/index.ts'), admin = read('assets/
 const mig = read('supabase/migrations/20261125090000_student_info_payment_corrections.sql'), dob = read('tools/registration-dob-fix.gs');
 // 1) paid total kept by the database; correction uses an optimistic revision lock and no unconditional rollback
 assert.match(mig, /create trigger payments_sync_amount_paid after insert or delete or update of amount, voided_at, enrollment_id on public\.payments/);
-assert.match(mig, /for update;[\s\S]*voided_at is null/);
+assert.match(mig, /for no key update;[\s\S]*voided_at is null/);
 const pc = idx.slice(idx.indexOf('body.action === "payment_correct"'), idx.indexOf('body.action === "wa_links"'));
 assert.ok(pc.includes('.eq("revision", rev).is("voided_at", null)'), 'revision lock on the corrected payment');
 assert.ok(/c\.void \? \{ voided_at: nowIso, void_reason: c\.reason, revision: rev \+ 1, receipt_file: null \}/.test(pc), 'void bumps the revision and drops the old receipt file');
@@ -31,4 +31,12 @@ assert.ok(idx.includes('let f = p.receipt_file || (p.invoice_no === e.invoice_no
 assert.ok(!auth.includes('void_reason'));
 // 11) DOB fix reads the time zone once
 assert.ok(dob.includes('var DFA_SHEET_TZ_ = null;') && !/forEach[\s\S]*openById/.test(dob.slice(dob.indexOf('function detailRow_'))));
+// re-review: record_payment leaves amount_paid to the trigger
+const rp = idx.slice(idx.indexOf('body.action === "record_payment"'), idx.indexOf('body.action === "set_plan"'));
+assert.ok(!/amount_paid:\s*after/.test(rp) && !rp.includes('.lte("amount_paid"'), 'record_payment does not write amount_paid');
+assert.ok(rp.includes('select("amount_paid").eq("id", id)') && rp.includes('.eq("id", id).eq("amount_paid", after)'), 're-reads the total and updates due date only while it is unchanged');
+assert.ok(rp.includes('payments").delete().eq("id", ins.data.id)'), 'over-fee rollback kept');
+assert.match(mig, /for no key update/);
+assert.match(mig, /update public\.enrollments e set amount_paid = t\.s from/);
+assert.ok(render.includes('remove([`${e.certificate_no}.pdf`])'), 'redrawn certificate image drops the old PDF');
 console.log('review-fixes.test.mjs: OK');

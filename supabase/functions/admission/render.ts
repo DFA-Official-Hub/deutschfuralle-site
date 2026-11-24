@@ -37,6 +37,8 @@ export async function certificateUrls(db: any, e: any) {
     const png = await renderCertificate(e);
     const up = await db.storage.from("certificates").upload(path, png, { contentType: "image/png", upsert: true });
     if (up.error) throw new Error(up.error.message);
+    // The image changed, so any PDF made from the old image must never be served again.
+    await db.storage.from("certificates").remove([`${e.certificate_no}.pdf`]);
     await db.from("enrollments").update({ certificate_file: path }).eq("id", e.id);
   }
   const v = await db.storage.from("certificates").createSignedUrl(path, 3600);
