@@ -162,3 +162,17 @@ select pg_temp.check((select count(*) from public.profiles where role = 'admin')
 select pg_temp.check(not has_function_privilege('anon', 'private.actor_name(uuid)', 'execute') and not has_function_privilege('authenticated', 'private.actor_name(uuid)', 'execute')
   and not has_function_privilege('authenticated', 'private.log_activity(bigint,text,text,jsonb)', 'execute'), 'actor_name/log_activity not executable by anon/authenticated');
 select pg_temp.check((select value from public.site_settings where key = 'staff_payments') = 'off', 'staff payment recording defaults to off');
+
+-- 13) R2-1: a payment can't be voided or lowered below live refunds (fresh student: 10,000 paid, 4,000 refunded)
+insert into public.enrollments (email, full_name, course_code, status, fee_total) values ('guard@test.local', 'TEST Guard', 'a1-normal', 'active', 25000);
+insert into public.payments (enrollment_id, amount, installment_no) select id, 10000, 1 from public.enrollments where full_name = 'TEST Guard';
+insert into public.fee_adjustments (enrollment_id, kind, amount, reason, approved_by) select id, 'refund', 4000, 'Left early', 'Ali' from public.enrollments where full_name = 'TEST Guard';
+do $$ begin update public.payments set voided_at = now() where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard'); raise exception 'void passed'; exception when check_violation then if sqlerrm <> 'This payment has refunds against it. Void the refund first.' then raise; end if; end $$;
+select pg_temp.check((select voided_at is null from public.payments where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard')), 'R2-1: voiding a payment with live refunds is blocked');
+do $$ begin update public.payments set amount = 3000 where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard'); raise exception 'lower passed'; exception when check_violation then null; end $$;
+select pg_temp.check((select amount from public.payments where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard')) = 10000, 'R2-1: lowering the payment to 3,000 (below 4,000 refunded) is blocked');
+update public.payments set amount = 5000 where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard');
+select pg_temp.check((select amount_paid from public.enrollments where full_name = 'TEST Guard') = 5000, 'R2-1: lowering the payment to 5,000 (still above refunds) is allowed');
+update public.fee_adjustments set voided_at = now(), void_reason = 'entered by mistake' where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard');
+update public.payments set voided_at = now() where enrollment_id = (select id from public.enrollments where full_name = 'TEST Guard');
+select pg_temp.check((select amount_paid from public.enrollments where full_name = 'TEST Guard') = 0, 'R2-1: after voiding the refund, the payment can be voided');

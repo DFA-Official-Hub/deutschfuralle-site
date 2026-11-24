@@ -11,7 +11,7 @@ export const STAFF_ACTIONS = new Set([
   "pro_students", "pro_reveal", "pro_add_student",
 ]);
 /** Money writes staff may only do when an admin switches site_settings.staff_payments to "on" (default off). */
-export const STAFF_PAYMENT_ACTIONS = new Set(["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref"]);
+export const STAFF_PAYMENT_ACTIONS = new Set(["record_payment", "pro_proof_upload", "pro_proof_attach", "pro_payment_ref", "pro_proof_url"]);
 export function allowed(role: string | null | undefined, action: string, staffPayments = false): boolean {
   if (role === "admin") return true;
   if (role === "staff") return STAFF_ACTIONS.has(action) && (staffPayments || !STAFF_PAYMENT_ACTIONS.has(action));
@@ -37,6 +37,22 @@ export function staffPay(p: any) {
   const o: any = {}; for (const k of STAFF_PAY_COLS.split(",")) o[k] = p[k] ?? null;
   if (o.proof_url && !/^https:\/\/drive\.google\.com\//.test(String(o.proof_url))) o.proof_url = null;
   return o;
+}
+/** PostgREST or-filter for the student search. Partial match on name, student ID, batch, invoice and certificate no.
+ *  Staff: email/phone only on an exact full email or a full phone number (10+ digits), so masked contacts can't be
+ *  rebuilt character by character through the search. Admins keep partial matching (they can read the table anyway). */
+export function searchOr(v: string, role: string): string {
+  const parts = ["full_name", "student_id", "batch_code", "invoice_no", "certificate_no"].map((k) => `${k}.ilike.*${v}*`);
+  if (role === "admin") return [...parts, `email.ilike.*${v}*`, `phone.ilike.*${v}*`].join(",");
+  const em = v.trim().toLowerCase();
+  if (/^[^@\s"]+@[^@\s"]+\.[a-z]{2,}$/.test(em)) parts.push(`email.eq.${em}`);
+  const d = v.replace(/\D/g, "");
+  if (d.length >= 10 && d.length <= 15 && !/[a-z@]/i.test(v)) {
+    const local = d.startsWith("92") ? "0" + d.slice(2) : d.startsWith("0") ? d : null, intl = d.startsWith("0") ? "92" + d.slice(1) : d;
+    const vs = [...new Set([d, "+" + d, intl, "+" + intl, ...(local ? [local] : [])])];
+    parts.push(`phone.in.(${vs.map((x) => `"${x}"`).join(",")})`);
+  }
+  return parts.join(",");
 }
 /** Whitelist for pro_add_student: email, name, course, phone, source. Returns the row or an error. */
 export function addStudentRow(b: any): { row?: Record<string, unknown>; error?: string } {

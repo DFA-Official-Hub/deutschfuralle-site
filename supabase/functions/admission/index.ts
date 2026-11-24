@@ -511,6 +511,8 @@ const serveReq = withAudit(async (req) => {
       if (body.action === "settings_get") { const se = (await db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle()).data; return json({ certificates: await imagesOn(db), emails: se?.value === "on", resend: !!env("RESEND_API_KEY"), smtp: !!env("ADMISSION_SMTP_PASS"), smtp_fallback: smtpFallbackOn(), forced: env("SEND_EMAILS") || null }); }
       if (body.action === "cleanup_doc_jobs") return json(await cleanupDocJobs(db, Number(body.days) > 0 ? Number(body.days) : 30));
       if (body.action === "put_internal_file") {
+        // NOTE: content_type must be one of the documents bucket's allowed MIME types (application/pdf, image/jpeg,
+        // image/png, image/webp; migration 20261125130000). Anything else (incl. the octet-stream default) is refused by storage.
         const path = String(body.path || "");
         if (!path.startsWith("internal/") || path.includes("..")) return json({ error: "path must be under internal/" }, 400);
         const bytes = decodeBase64(String(body.content_base64 || ""));
@@ -620,7 +622,7 @@ const serveReq = withAudit(async (req) => {
     const role = p?.role === "admin" || p?.role === "staff" ? p.role : null;
     if (!role) return json({ error: "forbidden" }, 403);
     const staffPay = role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? (await db.from("site_settings").select("value").eq("key", "staff_payments").maybeSingle()).data?.value === "on" : false;
-    if (!allowed(role, String(body.action || ""), staffPay)) return json({ error: role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? "Recording payments is switched off for staff. Ask an admin." : "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
+    if (!allowed(role, String(body.action || ""), staffPay)) return json({ error: role === "staff" && STAFF_PAYMENT_ACTIONS.has(String(body.action || "")) ? (body.action === "pro_proof_url" ? "Opening payment slips is switched off for staff. Ask an admin." : "Recording payments is switched off for staff. Ask an admin.") : "Only an admin can do this. Ask an admin, or ask for admin access." }, 403);
     if (!confirmOk(String(body.action || ""), body)) return json({ error: `Type ${CONFIRM_WORDS[String(body.action)]} to confirm.`, code: "confirm" }, 400);
     {
       // Security: admin actions need a confirmed sign-in (device/email check) and the 2FA code when an authenticator app is set up.
@@ -914,7 +916,11 @@ const serveReq = withAudit(async (req) => {
       const rev = Number(p.revision) || 0;
       const pp: Record<string, unknown> = c.void ? { voided_at: nowIso, void_reason: c.reason, revision: rev + 1, receipt_file: null } : { amount: c.amount, paid_on: c.paid_on, method: meth, revision: rev + 1, receipt_file: null };
       const u1 = await db.from("payments").update(pp).eq("id", pid).eq("revision", rev).is("voided_at", null).select("id").maybeSingle();
-      if (u1.error) return json({ error: "Could not update the payment: " + u1.error.message }, 500);
+      if (u1.error) {
+        // payments_refund_guard (migration 20261125140000): the payment can't drop below the live refunds
+        if (/refunds against it/i.test(u1.error.message || "")) return json({ error: "This payment has refunds against it. Void the refund first.", code: "refund_guard" }, 409);
+        return json({ error: "Could not update the payment: " + u1.error.message }, 500);
+      }
       if (!u1.data) return json({ error: "This payment was changed by someone else just now. Reload the page and check it before correcting again." }, 409);
       // 2) re-read what the database now holds (another payment may have landed at the same moment)
       const now = (await db.from("enrollments").select("amount_paid,due_date,reminder_stage").eq("id", id).maybeSingle()).data;

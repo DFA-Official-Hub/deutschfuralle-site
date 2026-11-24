@@ -1,6 +1,6 @@
 // deno test tests/admin-hardening.test.ts — fixes from the Head of Tech review of PR #12 (B1, B2 and the money/security list).
 import { assert, assertEquals, assertFalse, assertMatch } from "jsr:@std/assert@1";
-import { verifySvix, safeEqual, maskEmail, maskPhone, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, allowed } from "../supabase/functions/admission/prologic.ts";
+import { searchOr, verifySvix, safeEqual, maskEmail, maskPhone, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, allowed } from "../supabase/functions/admission/prologic.ts";
 import { handlePro } from "../supabase/functions/admission/pro.ts";
 
 const src = (p: string) => Deno.readTextFileSync(new URL("../" + p, import.meta.url));
@@ -176,4 +176,34 @@ Deno.test("bounce tracking: Resend id is kept per request (no shared LAST_ID)", 
   const als = new AsyncLocalStorage<{ lastId: string | null }>();
   const req = (id: string, wait: number) => als.run({ lastId: null }, async () => { als.getStore()!.lastId = id; await new Promise((r) => setTimeout(r, wait)); return als.getStore()!.lastId; });
   assertEquals(await Promise.all([req("A", 30), req("B", 5)]), ["A", "B"]);
+});
+
+Deno.test("R2-2: staff search matches contacts only on the exact full email or a full phone number", () => {
+  const st = searchOr("ali", "staff");
+  assert(st.includes("full_name.ilike.*ali*") && st.includes("student_id.ilike.*ali*") && st.includes("certificate_no.ilike.*ali*"));
+  assertFalse(/email|phone/.test(st), "no partial contact match");
+  assertFalse(/email|phone/.test(searchOr("0300123", "staff")), "7 digits: no phone match");
+  assertFalse(/email|phone/.test(searchOr("ali@gm", "staff")), "partial email: no email match");
+  assertMatch(searchOr("Ali.Khan@Gmail.com", "staff"), /email\.eq\.ali\.khan@gmail\.com/);
+  const ph = searchOr("0300 1234567", "staff");
+  assertMatch(ph, /phone\.in\.\("03001234567","\+03001234567","923001234567","\+923001234567"\)/);
+  assertFalse(/ilike\.\*0300/.test(ph.replace(/^.*phone/, "")), "phone is exact only");
+  assert(searchOr("ali", "admin").includes("email.ilike.*ali*"), "admins keep partial matching");
+});
+
+Deno.test("staff payment slips behind the flag and logged; staff email log hides raw errors; payment void guard mapped to 409", async () => {
+  assertFalse(allowed("staff", "pro_proof_url")); assert(allowed("staff", "pro_proof_url", true));
+  const db = fakeDb((c) => c.table === "payments" ? { data: { id: 9, enrollment_id: 1, invoice_no: "INV-1", proof_url: "https://drive.google.com/file/d/abcdefghijklmnopqrstu/view" } } : c.table === "profiles" ? { data: { full_name: "Staff One" } } : { data: null });
+  const r = await handlePro(db, { action: "pro_proof_url", payment_id: 9 }, staff, "staff", ctx);
+  assertEquals(r!.status, 200);
+  const log = db.calls.find((c) => c.table === "admin_activity" && c.op === "insert")!; assertEquals((log.args[0] as any).action, "payment_proof_opened");
+  const db2 = fakeDb((c) => c.table === "email_log" ? { data: [{ id: 1, enrollment_id: 1, kind: "docs", status: "error", error: "550 mailbox ali.khan@gmail.com unknown" }] } : { data: [] });
+  const st = await (await handlePro(db2, { action: "pro_email_log" }, staff, "staff", ctx))!.json();
+  assertFalse(JSON.stringify(st).includes("ali.khan")); assertEquals(st.rows[0].error, "Not delivered (an admin can see the details)");
+  const ad = await (await handlePro(db2, { action: "pro_email_log" }, { id: "a" }, "admin", ctx))!.json();
+  assert(JSON.stringify(ad).includes("550 mailbox"));
+  assertMatch(IDX, /if \(\/refunds against it\/i\.test\(u1\.error\.message \|\| ""\)\) return json\(\{ error: "This payment has refunds against it\. Void the refund first\.", code: "refund_guard" \}, 409\);/);
+  assertMatch(IDX, /content_type must be one of the documents bucket's allowed MIME types/);
+  const M3 = src("supabase/migrations/20261125140000_payment_refund_guard.sql");
+  assertMatch(M3, /security definer set search_path to ''/); assertMatch(M3, /for no key update;/); assertMatch(M3, /before update of voided_at, amount on public\.payments/);
 });
