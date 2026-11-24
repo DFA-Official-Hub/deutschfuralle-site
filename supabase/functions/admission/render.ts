@@ -42,7 +42,7 @@ export async function certificateUrls(db: any, e: any) {
     await db.from("enrollments").update({ certificate_file: path }).eq("id", e.id);
   }
   const v = await db.storage.from("certificates").createSignedUrl(path, 3600);
-  const d = await db.storage.from("certificates").createSignedUrl(path, 3600, { download: `${e.certificate_no}_${String(e.full_name || "Student").normalize("NFKD").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "")}.png` });
+  const d = await db.storage.from("certificates").createSignedUrl(path, 3600, { download: `${e.certificate_no}_Certificate.png` });
   return { url: v.data?.signedUrl || null, download: d.data?.signedUrl || null };
 }
 // Shared certificate layout (SVG, 1024 x 724 units, drawn over the owner's Canva background).
@@ -88,7 +88,7 @@ ${sample}
 
 /** PDF copy of the certificate (A4 landscape page with the PNG), cached next to the PNG. */
 export async function certificatePdfUrls(db: any, e: any) {
-  const nm = `${e.certificate_no}_${String(e.full_name || "Student").normalize("NFKD").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "")}.pdf`;
+  const nm = `${e.certificate_no}_Certificate.pdf`; // document number only, like the WhatsApp links (no student name if forwarded)
   const path = `${e.certificate_no}.pdf`;
   // No cached image means the certificate must be drawn again (first time, or the name was edited): the PDF is then stale too.
   let v: any = e.certificate_file ? await db.storage.from("certificates").createSignedUrl(path, 3600) : { error: "rebuild" };

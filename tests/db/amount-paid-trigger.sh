@@ -33,4 +33,7 @@ chk "select amount_paid||'/'||balance_due from enrollments where id=2" "10000/30
 # the backfill pass fixes a total that drifted before the trigger existed
 $Q -c "alter table payments disable trigger payments_sync_amount_paid; update enrollments set amount_paid=99 where id=2; alter table payments enable trigger payments_sync_amount_paid;"
 $Q -f "$M" >/dev/null; chk "select amount_paid from enrollments where id=2" "10000" "backfill restores amount_paid = sum of live payments"
+# activate (no amount_paid in its patch any more): the first payment row alone sets the paid total
+$Q -c "insert into enrollments(email,fee_total,amount_paid) values('a@x',25000,0); update enrollments set fee_total=25000 where email='a@x'; insert into payments(enrollment_id,amount,installment_no) select id,12500,1 from enrollments where email='a@x';"
+chk "select amount_paid||'/'||balance_due from enrollments where email='a@x'" "12500/12500" "activate: payment 1 sets the total"
 echo "amount-paid-trigger: OK"

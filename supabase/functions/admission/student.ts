@@ -62,6 +62,10 @@ export function effective(reg: Info, over: Info | null | undefined, e: { full_na
   if (!out.phone) out.phone = String(e.phone || "").trim();
   return out;
 }
+/** The enrollment's name and mobile as they will be after saving (an edit, or the old value put back when an override is cleared). */
+export function savedRow<T extends { full_name?: string | null; phone?: string | null }>(e: T, info: Info | null | undefined, patch: Record<string, unknown>): T {
+  return { ...e, full_name: "full_name" in patch ? patch.full_name as string : info?.full_name || e.full_name, phone: "phone" in patch ? patch.phone as string | null : info?.phone || e.phone };
+}
 export const LIMITS: Record<Field, number> = { full_name: 120, dob: 40, gender: 30, cnic: 30, email: 200, phone: 30, address: 300, city: 80, state: 80, country: 80, qualification: 120 };
 /** Validates what staff typed. Values equal to the registration form are not stored (so later sheet fixes still flow through);
  *  an empty value means "use the registration form". Returns the overrides to save, or an error. */
