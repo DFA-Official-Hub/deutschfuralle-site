@@ -136,7 +136,7 @@ assert.ok(admin.includes("bt('inst','Add installment payment'") && admin.include
 assert.ok(admin.includes('<option value="custom">Custom plan (2 to 5 installments)</option>'));
 assert.ok(admin.includes("action:'set_plan'") && admin.includes('installments:inst'));
 const buttons = admin.match(/<button\b[\s\S]*?<\/button>/g) || [];
-assert.ok(buttons.length > 15, 'found admin buttons');
+assert.ok(buttons.length > 10, 'found admin buttons'); // tab buttons are generated from TABS since WD-3
 // student-card buttons come from bt(action, label, hint, …), which always adds the hint
 assert.ok(/function bt\(a,txt,hint,cls,attrs\)\{return '<button[^}]*T\(hint\)/.test(admin), 'bt() adds a hint to every card button');
 assert.ok((admin.match(/bt\('/g) || []).length >= 12, 'card buttons use bt()');
