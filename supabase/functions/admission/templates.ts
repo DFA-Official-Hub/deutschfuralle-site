@@ -28,10 +28,10 @@ export function confirmation(name: string, code: string | null, label: string | 
     course,
   };
 }
-export function welcome(name: string, label: string, start: string, end: string, x?: { fee: string; studentId: string; invoiceNo: string; batch?: string; courseEnd: string; paid?: string; balance?: string; due?: string } | null) {
+export function welcome(name: string, label: string, start: string, end: string, x?: { fee: string; studentId: string; invoiceNo: string; batch?: string; courseEnd: string; paid?: string; balance?: string; due?: string; next?: string } | null) {
   const first = (name || "").split(" ")[0] || "there";
   const head = x
-    ? (x.balance ? `Thank you, we've received your first installment of ${x.paid} for the ${label}. Your place is confirmed, and your Student ID is ${x.studentId}. The remaining ${x.balance} is due by ${x.due}; we'll send you a reminder a few days before.` : `Thank you, we've received your fee of ${x.fee} for the ${label}. Your place is confirmed, and your Student ID is ${x.studentId}.`) + `\n\nYour course runs from ${start} to ${x.courseEnd}${x.batch ? ` (batch ${x.batch})` : ""}. You'll keep access to the portal and books until ${end}, so there's time to revise after the last class.\n\nWe've attached two documents for your records: your Confirmation of Registration and your fee receipt (${x.invoiceNo}).`
+    ? (x.balance ? `Thank you, we've received your first installment of ${x.paid} for the ${label}. Your place is confirmed, and your Student ID is ${x.studentId}. ${x.next ? `Your next installment of ${x.next} is due by ${x.due}, and the total still open is ${x.balance}` : `The remaining ${x.balance} is due by ${x.due}`}; we'll send you a reminder a few days before.` : `Thank you, we've received your fee of ${x.fee} for the ${label}. Your place is confirmed, and your Student ID is ${x.studentId}.`) + `\n\nYour course runs from ${start} to ${x.courseEnd}${x.batch ? ` (batch ${x.batch})` : ""}. You'll keep access to the portal and books until ${end}, so there's time to revise after the last class.\n\nWe've attached two documents for your records: your Confirmation of Registration and your fee receipt (${x.invoiceNo}).`
     : `Your payment has been received, thank you. You're now officially enrolled in ${label}.\n\nYour access runs from ${start} to ${end}. That's the length of the course plus 15 extra days so you have time to revise after the last class.`;
   const sid = x?.studentId ? ` – ${x.studentId}` : "";
   return {
@@ -41,9 +41,9 @@ export function welcome(name: string, label: string, start: string, end: string,
 }
 
 export const BANK_TEXT = "Bank: Al Baraka\nAccount title: DEUTSCH FUR ALLE\nAccount number: 0102724973012\nIBAN: PK95AIIN0000102724973012";
-export type FeeInfo = { name: string; studentId: string; course: string; batch: string; total: string; paid: string; balance: string; due: string };
+export type FeeInfo = { name: string; studentId: string; course: string; batch: string; total: string; paid: string; balance: string; due: string; next?: string };
 function feeBlock(f: FeeInfo) {
-  return `Name: ${f.name}\nStudent ID: ${f.studentId}\nCourse: ${f.course}\nBatch: ${f.batch || "–"}\nTotal fee: ${f.total}\nPaid so far: ${f.paid}\nBalance due: ${f.balance}\nDue date: ${f.due}`;
+  return `Name: ${f.name}\nStudent ID: ${f.studentId}\nCourse: ${f.course}\nBatch: ${f.batch || "–"}\nTotal fee: ${f.total}\nPaid so far: ${f.paid}\nBalance due: ${f.balance}${f.next ? `\nNext installment: ${f.next}` : ""}\nDue date: ${f.due}`;
 }
 function payBlock() {
   return `How to pay:\n${BANK_TEXT}\n\nYou can also scan the Raast QR code attached to this email with any banking app.\n\nOnce you've paid, please reply to this email with a screenshot or photo of the transfer and we'll send you your receipt. If paying on time is difficult this month, just reply and tell us, and we'll work something out together.`;
@@ -69,11 +69,11 @@ export function docsMail(name: string, course: string, items: string[], fee?: Fe
     text: `Hi ${first},\n\n${items.length ? `As requested, here are your documents for the ${course}. You'll find them attached:\n${list}` : `Here's a short summary of the fee still outstanding for your ${course}.`}${rem}\n\nIf anything looks wrong, just reply to this email and we'll fix it.${SIGN}`,
   };
 }
-export function receiptMail(name: string, course: string, amount: string, inv: string, balance: string, due: string) {
+export function receiptMail(name: string, course: string, amount: string, inv: string, balance: string, due: string, next = "") {
   const first = (name || "").split(" ")[0] || "there";
   return {
     subject: `Payment received – Deutsch Für Alle (${inv})`,
-    text: `Hi ${first},\n\nThank you, we've received your payment of ${amount} for the ${course}. Your receipt (${inv}) is attached.\n\n${balance ? `The remaining balance is ${balance}, due by ${due}.` : `Your course fee is now paid in full. Nothing more is due.`}${SIGN}`,
+    text: `Hi ${first},\n\nThank you, we've received your payment of ${amount} for the ${course}. Your receipt (${inv}) is attached.\n\n${balance ? (next ? `The remaining balance is ${balance}. Your next installment of ${next} is due by ${due}.` : `The remaining balance is ${balance}, due by ${due}.`) : `Your course fee is now paid in full. Nothing more is due.`}${SIGN}`,
   };
 }
 // BANK_QR moved to private Storage documents/internal/dfa-raast-qr.jpg (not in git).
