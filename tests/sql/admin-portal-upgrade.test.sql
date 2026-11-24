@@ -192,3 +192,95 @@ select pg_temp.check(has_table_privilege('authenticated', 'public.batches', 'SEL
 select pg_temp.check(not has_table_privilege('authenticated', 'public.fee_adjustments', 'INSERT') and not has_table_privilege('authenticated', 'public.admin_activity', 'INSERT')
   and not has_table_privilege('authenticated', 'public.account_meta', 'UPDATE') and not has_table_privilege('authenticated', 'public.student_meta', 'DELETE'), 'grants: function-only tables stay read-only for the browser');
 select pg_temp.check(not has_table_privilege('anon', 'public.batches', 'SELECT') and not has_table_privilege('anon', 'public.student_notes', 'SELECT') and not has_table_privilege('anon', 'public.fee_adjustments', 'SELECT'), 'grants: anon gets nothing');
+
+-- 15) R4-1: MAINTAIN revoked; new tables get DML grants; every authenticated RLS policy has a matching grant
+select pg_temp.check(not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+       and (has_table_privilege('authenticated', c.oid, 'MAINTAIN') or has_table_privilege('anon', c.oid, 'MAINTAIN'))
+  ), 'R4-1: MAINTAIN is revoked on every public table for authenticated and anon');
+select pg_temp.check(has_table_privilege('authenticated', 'public.enrollment_audit', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.enrollment_audit', 'INSERT')
+  and not has_table_privilege('anon', 'public.enrollment_audit', 'SELECT'), 'R4-1: enrollment_audit SELECT matches its admin policy; anon gets nothing');
+create table public._grant_probe (id int primary key);
+select pg_temp.check(has_table_privilege('authenticated', 'public._grant_probe', 'SELECT,INSERT,UPDATE,DELETE')
+  and not has_table_privilege('anon', 'public._grant_probe', 'SELECT')
+  and not has_table_privilege('authenticated', 'public._grant_probe', 'TRUNCATE')
+  and not has_table_privilege('authenticated', 'public._grant_probe', 'MAINTAIN')
+  and not has_table_privilege('authenticated', 'public._grant_probe', 'REFERENCES')
+  and not has_table_privilege('authenticated', 'public._grant_probe', 'TRIGGER'), 'R4-1: a new public table gets DML grants for authenticated, not TRUNCATE/MAINTAIN/REFERENCES/TRIGGER, and nothing for anon');
+drop table public._grant_probe;
+do $$
+declare privs text;
+begin
+  select string_agg(e.privilege_type, ',' order by e.privilege_type) into privs
+    from pg_default_acl d
+    join pg_roles r on r.oid = d.defaclrole
+    join pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral aclexplode(d.defaclacl) e
+    join pg_roles g on g.oid = e.grantee
+   where r.rolname = 'postgres' and n.nspname = 'public' and d.defaclobjtype = 'r' and g.rolname = 'authenticated';
+  perform pg_temp.check(privs = 'DELETE,INSERT,SELECT,UPDATE', 'R4-1: postgres default table ACL for authenticated is exactly DELETE,INSERT,SELECT,UPDATE (was ' || coalesce(privs, 'none') || ')');
+  select string_agg(e.privilege_type, ',' order by e.privilege_type) into privs
+    from pg_default_acl d
+    join pg_roles r on r.oid = d.defaclrole
+    join pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral aclexplode(d.defaclacl) e
+    join pg_roles g on g.oid = e.grantee
+   where r.rolname = 'postgres' and n.nspname = 'public' and d.defaclobjtype = 'r' and g.rolname = 'anon';
+  perform pg_temp.check(privs is null, 'R4-1: postgres default table ACL for anon is empty');
+end $$;
+do $$
+declare r record; missing text := '';
+begin
+  for r in
+    select p.tablename, p.cmd
+      from pg_policies p
+     where p.schemaname = 'public'
+       and ('authenticated' = any (p.roles) or 'public' = any (p.roles))
+     group by 1, 2
+  loop
+    if not has_table_privilege('authenticated', format('public.%I', r.tablename), r.cmd) then
+      missing := missing || r.tablename || '.' || r.cmd || ' ';
+    end if;
+  end loop;
+  perform pg_temp.check(missing = '', 'R4-1: every authenticated RLS policy has a matching grant' || case when missing = '' then '' else ': ' || missing end);
+end $$;
+do $$
+declare off text := '';
+begin
+  select string_agg(c.relname, ', ' order by c.relname) into off
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
+  perform pg_temp.check(coalesce(off, '') = '', 'R5: every public table has RLS on' || case when coalesce(off, '') = '' then '' else ': ' || off end);
+end $$;
+
+-- 16) R4-1: deleting a TEST enrollment that has notes and attendance succeeds (cascade must not write admin_activity against the deleted row)
+insert into public.enrollments (email, full_name, course_code, status, fee_total) values ('deltest@test.local', 'TEST DeleteCascade', 'a1-normal', 'active', 25000);
+insert into public.student_meta (enrollment_id, is_test) select id, true from public.enrollments where full_name = 'TEST DeleteCascade';
+insert into public.student_notes (enrollment_id, body) select id, 'TEST note to cascade' from public.enrollments where full_name = 'TEST DeleteCascade';
+insert into public.student_notes (enrollment_id, body) values (1, 'Live note that must still be logged when deleted');
+delete from public.student_notes where enrollment_id = 1 and body = 'Live note that must still be logged when deleted';
+select pg_temp.check((select count(*) from public.admin_activity where action = 'note_deleted' and enrollment_id = 1 and summary like 'Note deleted: Live note%') = 1, 'R4-1: deleting a note on a live enrollment is still logged');
+insert into public.batches (code, course_code, start_date, status) values ('TEST-DEL', 'a1-normal', '2026-11-25', 'planned');
+insert into public.class_sessions (batch_id, session_date, topic, status) select id, '2026-11-25', 'TEST cascade class', 'held' from public.batches where code = 'TEST-DEL';
+insert into public.attendance (session_id, enrollment_id, status)
+  select s.id, e.id, 'present' from public.class_sessions s, public.enrollments e
+  where s.topic = 'TEST cascade class' and e.full_name = 'TEST DeleteCascade';
+delete from public.enrollments where full_name = 'TEST DeleteCascade';
+select pg_temp.check(not exists (select 1 from public.enrollments where full_name = 'TEST DeleteCascade'), 'R4-1: deleting a TEST enrollment with notes and attendance succeeds');
+select pg_temp.check(not exists (select 1 from public.student_notes where body = 'TEST note to cascade')
+  and not exists (select 1 from public.attendance a join public.class_sessions s on s.id = a.session_id where s.topic = 'TEST cascade class'), 'R4-1: notes and attendance cascaded away');
+select pg_temp.check(not exists (select 1 from public.admin_activity where action in ('note_deleted', 'attendance_deleted') and summary like '%TEST note to cascade%')
+  and not exists (select 1 from public.admin_activity where action = 'attendance_deleted' and details->>'status' = 'present' and summary like '%25 Nov 2026%'), 'R4-1: cascade does not write per-row note/attendance audit (the enrollment deletion is the summary)');
+delete from public.batches where code = 'TEST-DEL';
+
+-- 17) no public table grants TRUNCATE/MAINTAIN/TRIGGER/REFERENCES to anon or authenticated (leftover Dxtm)
+select pg_temp.check(not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+       and exists (
+         select 1 from unnest(array['TRUNCATE', 'MAINTAIN', 'TRIGGER', 'REFERENCES']) p
+          where has_table_privilege('authenticated', c.oid, p) or has_table_privilege('anon', c.oid, p)
+       )
+  ), 'R5: no public table grants TRUNCATE/MAINTAIN/TRIGGER/REFERENCES to anon or authenticated');
