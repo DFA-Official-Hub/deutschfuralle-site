@@ -1,0 +1,1105 @@
+{
+ "book": "DFA Sprachsteg A1.1 Kursbuch",
+ "source": "audio-scripts.md",
+ "_note": "Generated from the \"### [Track ...]\" headers of audio-scripts.md. A printed id/slug is never reused. PLACEHOLDER urls: every track plays the same generated test tone.",
+ "tracks": [
+  {
+   "id": "A1.1-L01-01",
+   "slug": "L01-01",
+   "title": "Auftakt: Der erste Tag",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-01"
+  },
+  {
+   "id": "A1.1-L01-02",
+   "slug": "L01-02",
+   "title": "A: An der Rezeption",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-02"
+  },
+  {
+   "id": "A1.1-L01-03",
+   "slug": "L01-03",
+   "title": "B: Im Kursraum",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-03"
+  },
+  {
+   "id": "A1.1-L01-04",
+   "slug": "L01-04",
+   "title": "C: In der Kaffeepause",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-04"
+  },
+  {
+   "id": "A1.1-L01-05",
+   "slug": "L01-05",
+   "title": "D: Das Alphabet",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-05"
+  },
+  {
+   "id": "A1.1-L01-06",
+   "slug": "L01-06",
+   "title": "D: Wie schreibt man das?",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-06"
+  },
+  {
+   "id": "A1.1-L01-07",
+   "slug": "L01-07",
+   "title": "D: Wörter buchstabieren",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-07"
+  },
+  {
+   "id": "A1.1-L01-08",
+   "slug": "L01-08",
+   "title": "Fertigkeiten: Drei Sprachnachrichten",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-08"
+  },
+  {
+   "id": "A1.1-L01-09",
+   "slug": "L01-09",
+   "title": "Aussprache: lang und kurz",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-09"
+  },
+  {
+   "id": "A1.1-L01-10",
+   "slug": "L01-10",
+   "title": "Aussprache: lang oder kurz?",
+   "section": "Lektion 1 · Hallo! Woher kommst du?",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L01-10"
+  },
+  {
+   "id": "A1.1-L02-01",
+   "slug": "L02-01",
+   "title": "Auftakt: Im Büro",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-01"
+  },
+  {
+   "id": "A1.1-L02-02",
+   "slug": "L02-02",
+   "title": "A: Zahlen von 0 bis 20",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-02"
+  },
+  {
+   "id": "A1.1-L02-03",
+   "slug": "L02-03",
+   "title": "A: Nummern tauschen",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-03"
+  },
+  {
+   "id": "A1.1-L02-04",
+   "slug": "L02-04",
+   "title": "A: Welche Nummer ist richtig?",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-04"
+  },
+  {
+   "id": "A1.1-L02-05",
+   "slug": "L02-05",
+   "title": "B: Zahlen von 21 bis 100",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-05"
+  },
+  {
+   "id": "A1.1-L02-06",
+   "slug": "L02-06",
+   "title": "B: Im Sprachcafé",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-06"
+  },
+  {
+   "id": "A1.1-L02-07",
+   "slug": "L02-07",
+   "title": "C: Wir lernen Deutsch",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-07"
+  },
+  {
+   "id": "A1.1-L02-08",
+   "slug": "L02-08",
+   "title": "D: Die Anmeldung",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-08"
+  },
+  {
+   "id": "A1.1-L02-09",
+   "slug": "L02-09",
+   "title": "Fertigkeiten: Was ist richtig?",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-09"
+  },
+  {
+   "id": "A1.1-L02-10",
+   "slug": "L02-10",
+   "title": "Aussprache: z",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-10"
+  },
+  {
+   "id": "A1.1-L02-11",
+   "slug": "L02-11",
+   "title": "Aussprache: ei oder ie?",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-11"
+  },
+  {
+   "id": "A1.1-L02-12",
+   "slug": "L02-12",
+   "title": "Aussprache: Zahlen betonen",
+   "section": "Lektion 2 · Zahlen, Nummern, Adressen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L02-12"
+  },
+  {
+   "id": "A1.1-L03-01",
+   "slug": "L03-01",
+   "title": "Auftakt: Der Videoanruf",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-01"
+  },
+  {
+   "id": "A1.1-L03-02",
+   "slug": "L03-02",
+   "title": "A: Das ist meine Familie",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-02"
+  },
+  {
+   "id": "A1.1-L03-03",
+   "slug": "L03-03",
+   "title": "B: Hast du Geschwister?",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-03"
+  },
+  {
+   "id": "A1.1-L03-04",
+   "slug": "L03-04",
+   "title": "B: Wie viele Geschwister?",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-04"
+  },
+  {
+   "id": "A1.1-L03-05",
+   "slug": "L03-05",
+   "title": "C: Ist das Ihre Frau?",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-05"
+  },
+  {
+   "id": "A1.1-L03-06",
+   "slug": "L03-06",
+   "title": "D: In der Botschaft",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-06"
+  },
+  {
+   "id": "A1.1-L03-07",
+   "slug": "L03-07",
+   "title": "Fertigkeiten: Hamzas Sprachnachricht",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-07"
+  },
+  {
+   "id": "A1.1-L03-08",
+   "slug": "L03-08",
+   "title": "Aussprache: h",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-08"
+  },
+  {
+   "id": "A1.1-L03-09",
+   "slug": "L03-09",
+   "title": "Aussprache: mit oder ohne h?",
+   "section": "Lektion 3 · Meine Familie",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L03-09"
+  },
+  {
+   "id": "A1.1-L04-01",
+   "slug": "L04-01",
+   "title": "Auftakt: Das neue Zimmer",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-01"
+  },
+  {
+   "id": "A1.1-L04-02",
+   "slug": "L04-02",
+   "title": "A: Was ist das?",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-02"
+  },
+  {
+   "id": "A1.1-L04-03",
+   "slug": "L04-03",
+   "title": "B: Eine Überraschung",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-03"
+  },
+  {
+   "id": "A1.1-L04-04",
+   "slug": "L04-04",
+   "title": "C: Auf dem Flohmarkt",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-04"
+  },
+  {
+   "id": "A1.1-L04-05",
+   "slug": "L04-05",
+   "title": "D: Das Zimmer ist fertig",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-05"
+  },
+  {
+   "id": "A1.1-L04-06",
+   "slug": "L04-06",
+   "title": "Fertigkeiten: Was suchen sie?",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-06"
+  },
+  {
+   "id": "A1.1-L04-07",
+   "slug": "L04-07",
+   "title": "Aussprache: -e und -er",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-07"
+  },
+  {
+   "id": "A1.1-L04-08",
+   "slug": "L04-08",
+   "title": "Aussprache: -e oder -er?",
+   "section": "Lektion 4 · Dinge um mich herum",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L04-08"
+  },
+  {
+   "id": "A1.1-L05-01",
+   "slug": "L05-01",
+   "title": "Auftakt: Das internationale Frühstück",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-01"
+  },
+  {
+   "id": "A1.1-L05-02",
+   "slug": "L05-02",
+   "title": "A: Magst du Käse?",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-02"
+  },
+  {
+   "id": "A1.1-L05-03",
+   "slug": "L05-03",
+   "title": "B: Im Café Eckstein",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-03"
+  },
+  {
+   "id": "A1.1-L05-04",
+   "slug": "L05-04",
+   "title": "C: Im Supermarkt",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-04"
+  },
+  {
+   "id": "A1.1-L05-05",
+   "slug": "L05-05",
+   "title": "D: Biryani in der WG",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-05"
+  },
+  {
+   "id": "A1.1-L05-06",
+   "slug": "L05-06",
+   "title": "Fertigkeiten: Wer bestellt was?",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-06"
+  },
+  {
+   "id": "A1.1-L05-07",
+   "slug": "L05-07",
+   "title": "Aussprache: ü",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-07"
+  },
+  {
+   "id": "A1.1-L05-08",
+   "slug": "L05-08",
+   "title": "Aussprache: u oder ü?",
+   "section": "Lektion 5 · Essen, Trinken und Chai",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L05-08"
+  },
+  {
+   "id": "A1.1-L06-01",
+   "slug": "L06-01",
+   "title": "Auftakt: Ein Tag – zwei Städte",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-01"
+  },
+  {
+   "id": "A1.1-L06-02",
+   "slug": "L06-02",
+   "title": "A: Wie spät ist es?",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-02"
+  },
+  {
+   "id": "A1.1-L06-03",
+   "slug": "L06-03",
+   "title": "A: Welche Uhrzeit?",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-03"
+  },
+  {
+   "id": "A1.1-L06-04",
+   "slug": "L06-04",
+   "title": "B: Ayeshas Sprachnachricht",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-04"
+  },
+  {
+   "id": "A1.1-L06-05",
+   "slug": "L06-05",
+   "title": "C: Unser Wochenplan",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-05"
+  },
+  {
+   "id": "A1.1-L06-06",
+   "slug": "L06-06",
+   "title": "D: Bei dir ist es schon Mittag!",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-06"
+  },
+  {
+   "id": "A1.1-L06-07",
+   "slug": "L06-07",
+   "title": "Fertigkeiten: Wann?",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-07"
+  },
+  {
+   "id": "A1.1-L06-08",
+   "slug": "L06-08",
+   "title": "Aussprache: Akzent bei trennbaren Verben",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-08"
+  },
+  {
+   "id": "A1.1-L06-09",
+   "slug": "L06-09",
+   "title": "Aussprache: Wo ist der Akzent?",
+   "section": "Lektion 6 · Mein Tagesablauf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L06-09"
+  },
+  {
+   "id": "A1.1-L07-01",
+   "slug": "L07-01",
+   "title": "Auftakt: Samstag im Park",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-01"
+  },
+  {
+   "id": "A1.1-L07-02",
+   "slug": "L07-02",
+   "title": "A: Spielst du gern Kricket?",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-02"
+  },
+  {
+   "id": "A1.1-L07-03",
+   "slug": "L07-03",
+   "title": "B: Unsere Kurszeitung",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-03"
+  },
+  {
+   "id": "A1.1-L07-04",
+   "slug": "L07-04",
+   "title": "C: Wie oft spielst du Fußball?",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-04"
+  },
+  {
+   "id": "A1.1-L07-05",
+   "slug": "L07-05",
+   "title": "D: Ich habe kein Fahrrad.",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-05"
+  },
+  {
+   "id": "A1.1-L07-06",
+   "slug": "L07-06",
+   "title": "Fertigkeiten: Was ist richtig?",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-06"
+  },
+  {
+   "id": "A1.1-L07-07",
+   "slug": "L07-07",
+   "title": "Aussprache: ä und e",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-07"
+  },
+  {
+   "id": "A1.1-L07-08",
+   "slug": "L07-08",
+   "title": "Aussprache: ä oder e?",
+   "section": "Lektion 7 · Freizeit und Hobbys",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L07-08"
+  },
+  {
+   "id": "A1.1-L08-01",
+   "slug": "L08-01",
+   "title": "Auftakt: Unser Geburtstagskalender",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-01"
+  },
+  {
+   "id": "A1.1-L08-02",
+   "slug": "L08-02",
+   "title": "A: Hast du am Freitag Zeit?",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-02"
+  },
+  {
+   "id": "A1.1-L08-03",
+   "slug": "L08-03",
+   "title": "B: Was willst du am Wochenende machen?",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-03"
+  },
+  {
+   "id": "A1.1-L08-04",
+   "slug": "L08-04",
+   "title": "C: Im Dezember fliege ich nach Karachi!",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-04"
+  },
+  {
+   "id": "A1.1-L08-05",
+   "slug": "L08-05",
+   "title": "C: Wann ist das?",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-05"
+  },
+  {
+   "id": "A1.1-L08-06",
+   "slug": "L08-06",
+   "title": "D: Ab acht oder um acht?",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-06"
+  },
+  {
+   "id": "A1.1-L08-07",
+   "slug": "L08-07",
+   "title": "Fertigkeiten: Wann ist der Termin?",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-07"
+  },
+  {
+   "id": "A1.1-L08-08",
+   "slug": "L08-08",
+   "title": "Aussprache: Satzmelodie",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-08"
+  },
+  {
+   "id": "A1.1-L08-09",
+   "slug": "L08-09",
+   "title": "Aussprache: Frage oder Aussage?",
+   "section": "Lektion 8 · Verabredungen",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L08-09"
+  },
+  {
+   "id": "A1.1-L09-01",
+   "slug": "L09-01",
+   "title": "Auftakt: Samstag auf dem Wochenmarkt",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-01"
+  },
+  {
+   "id": "A1.1-L09-02",
+   "slug": "L09-02",
+   "title": "A: Was kosten die Tomaten?",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-02"
+  },
+  {
+   "id": "A1.1-L09-03",
+   "slug": "L09-03",
+   "title": "B: Neunhundert Rupien für eine Mango?",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-03"
+  },
+  {
+   "id": "A1.1-L09-04",
+   "slug": "L09-04",
+   "title": "B: Welche Zahl hören Sie?",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-04"
+  },
+  {
+   "id": "A1.1-L09-05",
+   "slug": "L09-05",
+   "title": "C: Ich nehme ihn!",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-05"
+  },
+  {
+   "id": "A1.1-L09-06",
+   "slug": "L09-06",
+   "title": "D: Welcher Reis ist gut für Biryani?",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-06"
+  },
+  {
+   "id": "A1.1-L09-07",
+   "slug": "L09-07",
+   "title": "Fertigkeiten: Durchsagen",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-07"
+  },
+  {
+   "id": "A1.1-L09-08",
+   "slug": "L09-08",
+   "title": "Aussprache: ich-Laut und ach-Laut",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-08"
+  },
+  {
+   "id": "A1.1-L09-09",
+   "slug": "L09-09",
+   "title": "Aussprache: ich oder ach?",
+   "section": "Lektion 9 · Auf dem Markt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L09-09"
+  },
+  {
+   "id": "A1.1-L10-01",
+   "slug": "L10-01",
+   "title": "Auftakt: Zwei Zuhause",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-01"
+  },
+  {
+   "id": "A1.1-L10-02",
+   "slug": "L10-02",
+   "title": "A: Das ist unser Haus.",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-02"
+  },
+  {
+   "id": "A1.1-L10-03",
+   "slug": "L10-03",
+   "title": "B: Mein Zimmer ist klein, aber hell.",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-03"
+  },
+  {
+   "id": "A1.1-L10-04",
+   "slug": "L10-04",
+   "title": "C: Wohnungssuche in Hamburg",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-04"
+  },
+  {
+   "id": "A1.1-L10-05",
+   "slug": "L10-05",
+   "title": "D: Gibt es einen Aufzug?",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-05"
+  },
+  {
+   "id": "A1.1-L10-06",
+   "slug": "L10-06",
+   "title": "Fertigkeiten: Drei Wohnungen",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-06"
+  },
+  {
+   "id": "A1.1-L10-07",
+   "slug": "L10-07",
+   "title": "Aussprache: Das vokalische r",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-07"
+  },
+  {
+   "id": "A1.1-L10-08",
+   "slug": "L10-08",
+   "title": "Aussprache: Konsonant oder Vokal?",
+   "section": "Lektion 10 · Mein Zuhause",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L10-08"
+  },
+  {
+   "id": "A1.1-L11-01",
+   "slug": "L11-01",
+   "title": "Auftakt: Unterwegs in Berlin",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-01"
+  },
+  {
+   "id": "A1.1-L11-02",
+   "slug": "L11-02",
+   "title": "A: Wie komme ich zum Bürgeramt?",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-02"
+  },
+  {
+   "id": "A1.1-L11-03",
+   "slug": "L11-03",
+   "title": "A: Wohin geht die Person?",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-03"
+  },
+  {
+   "id": "A1.1-L11-04",
+   "slug": "L11-04",
+   "title": "B: Mit der U-Bahn oder mit der Rikscha?",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-04"
+  },
+  {
+   "id": "A1.1-L11-05",
+   "slug": "L11-05",
+   "title": "C: Drück hier!",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-05"
+  },
+  {
+   "id": "A1.1-L11-06",
+   "slug": "L11-06",
+   "title": "D: Steigt am Hermannplatz um!",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-06"
+  },
+  {
+   "id": "A1.1-L11-07",
+   "slug": "L11-07",
+   "title": "Fertigkeiten: Nachrichten am Telefon",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-07"
+  },
+  {
+   "id": "A1.1-L11-08",
+   "slug": "L11-08",
+   "title": "Aussprache: w und v",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-08"
+  },
+  {
+   "id": "A1.1-L11-09",
+   "slug": "L11-09",
+   "title": "Aussprache: [v] oder [f]?",
+   "section": "Lektion 11 · Wege in der Stadt",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L11-09"
+  },
+  {
+   "id": "A1.1-L12-01",
+   "slug": "L12-01",
+   "title": "Auftakt: Was sind Sie von Beruf?",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-01"
+  },
+  {
+   "id": "A1.1-L12-02",
+   "slug": "L12-02",
+   "title": "A: Ich bin Softwareentwickler.",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-02"
+  },
+  {
+   "id": "A1.1-L12-03",
+   "slug": "L12-03",
+   "title": "B: Frühdienst, Spätdienst, Nachtdienst",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-03"
+  },
+  {
+   "id": "A1.1-L12-04",
+   "slug": "L12-04",
+   "title": "C: Ich möchte eine Ausbildung machen.",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-04"
+  },
+  {
+   "id": "A1.1-L12-05",
+   "slug": "L12-05",
+   "title": "D: Der letzte Kurstag",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-05"
+  },
+  {
+   "id": "A1.1-L12-06",
+   "slug": "L12-06",
+   "title": "Fertigkeiten: Berufe",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-06"
+  },
+  {
+   "id": "A1.1-L12-07",
+   "slug": "L12-07",
+   "title": "Aussprache: Wortakzent in Komposita",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-07"
+  },
+  {
+   "id": "A1.1-L12-08",
+   "slug": "L12-08",
+   "title": "Aussprache: Komposita mit Artikel",
+   "section": "Lektion 12 · Arbeit und Beruf",
+   "group": "course",
+   "isExtra": false,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=L12-08"
+  },
+  {
+   "id": "A1.1-ZS1-01",
+   "slug": "ZS1-01",
+   "title": "Lied: Ich bin ich – und du bist du!",
+   "section": "Zwischenspiel 1 · Lektionen 1–4",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS1-01"
+  },
+  {
+   "id": "A1.1-ZS1-02",
+   "slug": "ZS1-02",
+   "title": "Rückblick: Zahlen",
+   "section": "Zwischenspiel 1 · Lektionen 1–4",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS1-02"
+  },
+  {
+   "id": "A1.1-ZS1-03",
+   "slug": "ZS1-03",
+   "title": "Prüfungstraining: Hören wie Teil 1",
+   "section": "Zwischenspiel 1 · Lektionen 1–4",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS1-03"
+  },
+  {
+   "id": "A1.1-ZS2-01",
+   "slug": "ZS2-01",
+   "title": "Lied: Keine Zeit!",
+   "section": "Zwischenspiel 2 · Lektionen 5–8",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS2-01"
+  },
+  {
+   "id": "A1.1-ZS2-02",
+   "slug": "ZS2-02",
+   "title": "Rückblick: Uhrzeiten",
+   "section": "Zwischenspiel 2 · Lektionen 5–8",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS2-02"
+  },
+  {
+   "id": "A1.1-ZS2-03",
+   "slug": "ZS2-03",
+   "title": "Prüfungstraining: Hören wie Teil 2",
+   "section": "Zwischenspiel 2 · Lektionen 5–8",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS2-03"
+  },
+  {
+   "id": "A1.1-ZS3-01",
+   "slug": "ZS3-01",
+   "title": "Lied: Ich finde meinen Weg!",
+   "section": "Zwischenspiel 3 · Lektionen 9–12",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS3-01"
+  },
+  {
+   "id": "A1.1-ZS3-02",
+   "slug": "ZS3-02",
+   "title": "Rückblick: Zahlen und Preise",
+   "section": "Zwischenspiel 3 · Lektionen 9–12",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS3-02"
+  },
+  {
+   "id": "A1.1-ZS3-03",
+   "slug": "ZS3-03",
+   "title": "Prüfungstraining: Hören wie Teil 3",
+   "section": "Zwischenspiel 3 · Lektionen 9–12",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=ZS3-03"
+  },
+  {
+   "id": "A1.1-AT-01",
+   "slug": "AT-01",
+   "title": "Abschlusstest: Hören 1",
+   "section": "A1.1-Abschlusstest",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=AT-01"
+  },
+  {
+   "id": "A1.1-AT-02",
+   "slug": "AT-02",
+   "title": "Abschlusstest: Hören 2",
+   "section": "A1.1-Abschlusstest",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=AT-02"
+  },
+  {
+   "id": "A1.1-AT-03",
+   "slug": "AT-03",
+   "title": "Abschlusstest: Hören 3",
+   "section": "A1.1-Abschlusstest",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=AT-03"
+  },
+  {
+   "id": "A1.1-PT-01",
+   "slug": "PT-01",
+   "title": "Prüfungstraining: Hören, Teil 1",
+   "section": "Prüfungstraining Start Deutsch 1",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=PT-01"
+  },
+  {
+   "id": "A1.1-PT-02",
+   "slug": "PT-02",
+   "title": "Prüfungstraining: Hören, Teil 2",
+   "section": "Prüfungstraining Start Deutsch 1",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=PT-02"
+  },
+  {
+   "id": "A1.1-PT-03",
+   "slug": "PT-03",
+   "title": "Prüfungstraining: Hören, Teil 3",
+   "section": "Prüfungstraining Start Deutsch 1",
+   "group": "extras",
+   "isExtra": true,
+   "url": "https://github.com/DFA-Official-Hub/audio-hosting-test/releases/download/v0-test/dfa-test-tone.mp3?track=PT-03"
+  }
+ ]
+}
