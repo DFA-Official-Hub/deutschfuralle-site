@@ -15,7 +15,7 @@ export function summarize(action: string, body: any, res: any): string | null {
     case "set_due": return res.ok ? `Due date set to ${body.due_date}` : null;
     case "certify": return res.certificate_no ? `Certificate ${res.certificate_no} issued` : null;
     case "cert_hold": return res.ok ? (body.hold ? "Certificate put on hold" : "Certificate hold released") : null;
-    case "cert_revoke": return res.ok ? (body.undo ? "Certificate restored" : "Certificate revoked") : null;
+    case "cert_revoke": return res.ok ? (body.undo ? "Certificate restored" : "Certificate revoked") + (body.reason ? ": " + String(body.reason).slice(0, 300) : "") : null;
     case "resend": return res.ok ? `Documents emailed (${(res.items || body.items || []).join(", ")}): ${res.email || ""}` : null;
     case "welcome": return res.ok ? `Welcome email: ${res.email || "sent"}` : null;
     case "wa_links": return res.ok ? `WhatsApp document links prepared (${(body.items || []).join(", ")})` : null;
