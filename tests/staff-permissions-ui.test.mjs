@@ -76,7 +76,7 @@ assert.equal(save.includes('.eq("student_info"') || save.includes('.is("student_
 // 10. B20-4: a 409 conflict shows the message and a Reload button that reopens the details
 assert.ok(/s\.data\.code==='conflict'\|\|err==='Record changed, reload'/.test(adm) && adm.includes("rb.textContent='Reload'") && /g\.close\(\);infoDlg\(id\)/.test(adm),
   '409 Record changed, reload is shown in the dialog with a Reload button that reopens the details');
-assert.ok(read('admin.html').includes('dfa-admin.js?v=54'), 'admin.js cache-bust bumped after the 409 UI');
+assert.ok(read('admin.html').includes('dfa-admin.js?v=55'), 'admin.js cache-bust bumped after the 409 UI');
 
 
 // Edge functions pin supabase-js to the npm specifier (jsonb values must not go through an unpinned client).

@@ -153,3 +153,19 @@ Deno.test("QA2-2: security check reads in parallel, alert mail in the background
   assertMatch(SEC, /bg\(\(async \(\) => \{\n\s+await send\(/);
   assertMatch(SEC, /x-region/); assertMatch(IDX, /x-region/);
 });
+Deno.test("QA2-1: the Student ID cross-check also guards non-pro actions (certify, activate, cert_*)", async () => {
+  const db = fakeDb((c) => c.table === "enrollments" ? { data: { student_id: "DFA-2026-0012" } } : { data: null });
+  const r = await handlePro(db, { action: "certify", id: 12, expect_sid: "DFA-2026-0099" }, { id: "a" }, "admin", ctx);
+  assertEquals(r!.status, 409);
+  const ok = await handlePro(db, { action: "certify", id: 12, expect_sid: "DFA-2026-0012" }, { id: "a" }, "admin", ctx);
+  assertEquals(ok, null, "matching ID: index.ts carries on with the action");
+});
+Deno.test("QA2-8: a TEST tick on Add student is honoured for admins only, with one audit row via set_test_mark", async () => {
+  const db = fakeDb((c) => c.table === "courses" ? { data: { code: "a1-normal", name: "A1" } } : c.table === "enrollments" && c.op === "insert" ? { data: { id: 50, student_id: null, full_name: "TEST Ali" } } : c.op === "rpc" ? { data: { ok: true } } : { data: [] });
+  const body = { action: "pro_add_student", email: "t@test.local", full_name: "TEST Ali", course_code: "a1-normal", is_test: true };
+  const r = await (await handlePro(db, body, { id: "a" }, "admin", ctx))!.json();
+  assert(r.ok && r.is_test); assertEquals(db.calls.filter((c) => c.table === "rpc:set_test_mark").length, 1);
+  const db2 = fakeDb((c) => c.table === "courses" ? { data: { code: "a1-normal", name: "A1" } } : c.table === "enrollments" && c.op === "insert" ? { data: { id: 51, student_id: null, full_name: "TEST Ali" } } : { data: [] });
+  const r2 = await (await handlePro(db2, body, { id: "s" }, "staff", ctx))!.json();
+  assertFalse(r2.is_test); assertFalse(db2.calls.some((c) => c.op === "rpc"));
+});

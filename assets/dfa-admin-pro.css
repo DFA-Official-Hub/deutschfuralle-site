@@ -100,6 +100,15 @@ button.dash-tile:hover,button.dash-tile:focus-visible{border-color:var(--g);box-
 .adm-stars{color:#e0a800;letter-spacing:1px;white-space:nowrap}
 .adm-stars span{color:#d6dcd8}
 tr.is-hidden td{opacity:.65}
+/* QA2: hidden dialog buttons really hide (.btn sets display, which beat the hidden attribute: a stray "Send" in Roster/Activity) */
+.adm-dlg [hidden],.adm-dlg .btn[hidden]{display:none!important}
+/* QA2: Attendance dialog: each label sits above its field, so "Class date" and "Class status" never overlap */
+.adm-dlg .adm-bar label.adm-stk{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;white-space:nowrap;min-width:0}
+.adm-dlg .adm-bar label.adm-stk input,.adm-dlg .adm-bar label.adm-stk select{min-width:150px;max-width:100%}
+@media (max-width:480px){.adm-dlg .adm-bar label.adm-stk{flex:1 1 100%}.adm-dlg .adm-bar label.adm-stk input,.adm-dlg .adm-bar label.adm-stk select{width:100%}}
+.adm-fresh{margin:-4px 0 10px;font-size:.8rem}.adm-fresh .adm-lnk{min-height:24px}
+.adm-dmsg.adm-err{color:#a32020;font-weight:600}
+.adm-card.adm-busy1{opacity:.6;pointer-events:none}
 /* dialogs */
 .adm-dlg.adm-wide{width:min(760px,96vw)}
 .adm-dlg .adm-acts .danger{background:#b42318;color:#fff;border-color:#b42318}

@@ -170,9 +170,12 @@ function qf(B,inp,sel,noun){var i=B.querySelector(inp),c=B.querySelector('[data-
  i.oninput=function(){var q=i.value.trim().toLowerCase(),n=0;all.forEach(function(el){var h=!!q&&el.dataset.q.indexOf(q)<0;el.hidden=h;if(!h)n++});if(c)c.textContent=q?n+' of '+all.length+' '+c.dataset.cnt:c.dataset.t;em.hidden=!(q&&all.length&&!n)}}
 /* Hidden courses (courses.active = false, e.g. legacy a2/c1) stay out of the picker unless a record already uses one. */
 function copts(sel){return '<option value="">Pick course…</option>'+COURSES.filter(function(c){return c.active!==false||c.code===sel}).map(function(c){return '<option value="'+c.code+'"'+(c.code===sel?' selected':'')+'>'+E(c.name)+' ('+c.duration_days+' days)</option>'}).join('')}
-function dlg(html){var g=document.createElement('dialog');g.className='adm-dlg';g.innerHTML='<form method="dialog">'+html+'<p class="adm-dmsg adm-mut" role="status"></p><div class="adm-acts"><button class="btn sm" value="ok">Send</button><button class="btn outline sm" value="cancel" formnovalidate>Cancel</button></div></form>';document.body.appendChild(g);g.addEventListener('close',function(){g.remove()});g.dataset.at=Date.now();g.showModal();return g}
+function dlg(html){
+ /* QA2: a second click on the same button replaces the dialog instead of stacking another copy on top */
+ var t0=(/<h3>([\s\S]*?)<\/h3>/.exec(html)||[])[1]||'';document.querySelectorAll('dialog.adm-dlg').forEach(function(o){if(o.dataset.t===t0){try{o.close()}catch(e){}o.remove()}});
+ var g=document.createElement('dialog');g.className='adm-dlg';g.dataset.t=t0;g.innerHTML='<form method="dialog">'+html+'<p class="adm-dmsg adm-mut" role="status"></p><div class="adm-acts"><button class="btn sm" value="ok">Save</button><button class="btn outline sm" value="cancel" formnovalidate>Cancel</button></div></form>';document.body.appendChild(g);g.addEventListener('close',function(){g.remove()});g.dataset.at=Date.now();g.showModal();return g}
 function resendDlg(id,cert,bal){var g=dlg('<h3>Resend documents</h3><p class="adm-mut">Choose what to email to the student from admission@.</p><label class="adm-ck" title="Attach the Confirmation of Registration PDF."><input type="checkbox" name="i" value="admission" checked> Admission form</label><label class="adm-ck" title="Attach every fee receipt this student has."><input type="checkbox" name="i" value="receipt" checked> Fee receipt(s)</label><label class="adm-ck'+(cert?'':' adm-dis')+'" title="Attach the participation certificate (only once it is issued)."><input type="checkbox" name="i" value="certificate"'+(cert?'':' disabled')+'> Certificate'+(cert?'':' (not issued)')+'</label><label class="adm-ck'+(bal?'':' adm-dis')+'" title="Add a fee reminder with the open balance, due date and bank details."><input type="checkbox" name="i" value="reminder"'+(bal?'':' disabled')+'> Payment reminder'+(bal?'':' (no balance due)')+'</label>');
- var f=g.querySelector('form'),m=g.querySelector('.adm-dmsg');f.onsubmit=async function(ev){if(ev.submitter&&ev.submitter.value==='cancel')return;ev.preventDefault();var it=[].map.call(f.querySelectorAll('input[name=i]:checked'),function(x){return x.value});if(!it.length){m.textContent='Pick at least one item.';return}
+ var f=g.querySelector('form'),m=g.querySelector('.adm-dmsg');f.querySelector('[value=ok]').textContent='Email to student';f.onsubmit=async function(ev){if(ev.submitter&&ev.submitter.value==='cancel')return;ev.preventDefault();var it=[].map.call(f.querySelectorAll('input[name=i]:checked'),function(x){return x.value});if(!it.length){m.textContent='Pick at least one item.';return}
   if(!confirm('Email '+it.join(', ')+' to this student now?'))return;var sb2=f.querySelector('[value=ok]');sb2.disabled=true;m.textContent='Sending…';var r,tries=0;do{r=await DFA.invoke('admission',{action:'resend',id:id,items:it});if(r.data&&r.data.retry)m.textContent='Preparing documents… ('+(++tries)+')'}while(r.data&&r.data.retry&&tries<5);sb2.disabled=false;
   if(r.data&&r.data.ok&&r.data.email==='sent'){g.close();alert('Sent: '+r.data.items.join(', '));enr(document.getElementById('enf').value)}else m.textContent=(r.data&&r.data.error)||(r.data&&r.data.email==='off'?'Email sending is switched off.':'Could not send.')}}
 function regenRun(id,m,onlyReceipts){var done=[],n=0;return (async function loop(){while(n<12){n++;var r=await DFA.invoke('admission',{action:'regen_docs',id:id,done:done,receipts_only:!!onlyReceipts});if(!r.data||r.data.error){if(m)m.textContent=(r.data&&r.data.error)||'Could not rebuild the documents.';return false}if(!r.data.remaining&&!r.data.built){if(m)m.textContent='Documents rebuilt.';return true}done.push(r.data.built);if(m)m.textContent='Rebuilding documents… '+done.length+' done'+(r.data.remaining?', '+r.data.remaining+' to go':'')}return false})()}
@@ -232,18 +235,8 @@ function planDlg(x,pays){var fee=Number(x.fee_total)||0,cur=Array.isArray(x.inst
   ok.disabled=true;m.textContent='Saving…';var r=await DFA.invoke('admission',{action:'set_plan',id:x.id,installments:np.plan.map(function(y){return {amount:y.amount,due:y.due}})});ok.disabled=false;
   if(r.data&&r.data.ok){g.close();toast('Plan saved'+(r.data.due_date?'. Next due '+d(r.data.due_date):''));enr(document.getElementById('enf').value)}else m.textContent=(r.data&&r.data.error)||'Could not save the plan.'}}
 var ENRSEQ=0;
-async function enr(filter,keepFocus){if(typeof filter==='string'&&filter)ST.filter=filter;filter=ST.filter;var seq=++ENRSEQ;var B=document.getElementById('adm-body');
- if(!B.querySelector('.adm-cards,.adm-empty0'))B.innerHTML='<div class="adm-skel" aria-busy="true" aria-label="Loading"><div></div><div></div><div></div></div>';else B.classList.add('adm-busy');
- var r;if(PRO){r=await PRO.studentQuery(ST);if(!r.error&&r.data&&!r.data.length&&ST.page>0&&r.count){ST.page=Math.max(0,Math.ceil(r.count/ST.size)-1);r=await PRO.studentQuery(ST)}}
- else{var q=sb.from('enrollments').select('*').order('created_at',{ascending:false}).limit(300);if(filter==='fee pending')q=q.gt('balance_due',0).in('status',['active','expired']);else if(filter!=='all')q=q.eq('status',filter);r=await q}
- if(seq!==ENRSEQ)return;B.classList.remove('adm-busy');if(r.error){B.textContent=r.error.message;return}r.data=r.data||[];var total=PRO?(r.count||0):r.data.length;
- var PAYS={},pids=r.data.filter(function(x){return x.invoice_no}).map(function(x){return x.id});if(r.pays){r.pays.forEach(function(p){(PAYS[p.enrollment_id]=PAYS[p.enrollment_id]||[]).push(p)})}else if(pids.length){var pr=await sb.from('payments').select('*').in('enrollment_id',pids);(pr.data||[]).forEach(function(p){(PAYS[p.enrollment_id]=PAYS[p.enrollment_id]||[]).push(p)})}
- if(seq!==ENRSEQ)return;
- var FILTERS=['all','pending','active','fee pending','overdue','expired','revoked','test'];if(FILTERS.indexOf(filter)<0)FILTERS.push(filter);
- var h=PRO?(await PRO.barHtml(ST,total))+'<select id="enf" hidden aria-hidden="true" tabindex="-1" title="Current filter (internal)">'+FILTERS.map(function(s){return '<option'+(s===filter?' selected':'')+'>'+s+'</option>'}).join('')+'</select>'
-  :'<div class="adm-bar"><label>'+lab('show','Show')+' <select id="enf"'+T('show')+'>'+['all','pending','active','fee pending','expired','revoked'].map(function(s){return '<option'+(s===filter?' selected':'')+'>'+s+'</option>'}).join('')+'</select></label><input type="search" id="enq" class="adm-q" placeholder="Search name, email, ID, batch, invoice" aria-label="Search students"'+T('search')+'><span data-cnt="found" data-t="'+r.data.length+' found">'+r.data.length+' found</span><button type="button" class="btn outline sm" id="enadd"'+T('add')+'>Add student</button></div><div id="enform"></div>';
- if(seq!==ENRSEQ)return;
- h+=r.data.length?'<div class="adm-cards">'+r.data.map(function(x){var pend=x.status==='pending';
+/* QA2: one card = one function, so a single card can be redrawn in place (refreshOne) after tags, batch, certificate or TEST changes. */
+function cardHtml(x,PAYS){var pend=x.status==='pending';
   var crs=pend?'<select data-c'+T('coursePend')+' aria-label="Course">'+copts(x.course_code)+'</select>'+(x.course_label&&!x.course_code?'<span class="adm-mut adm-blk">Form: '+E(x.course_label)+'</span>':''):'<span class="adm-nw">'+E((COURSES.find(function(c){return c.code===x.course_code})||{}).name||x.course_label||'–')+'</span>';
   var L=[];if(x.invoice_no&&!pend){L.push('<a class="adm-pill" target="_blank" rel="noopener" href="doc.html?id='+x.id+'&type=admission"'+T('formPill')+'>Admission form</a>');L.push(DFA.receiptPills(x.id,PAYS[x.id],'adm-pill',x.invoice_no,x.installment_plan&&x.installment_plan.length))}
   if(x.receipt_url&&/^https:\/\/drive\.google\.com\/(open\?id=|file\/d\/|uc\?(export=\w+&)?id=)[\w-]{15,}/.test(x.receipt_url))L.push('<a class="adm-pill" href="'+E(x.receipt_url)+'" target="_blank" rel="noopener"'+T('proof')+'>Payment proof</a>');
@@ -270,44 +263,41 @@ async function enr(filter,keepFocus){if(typeof filter==='string'&&filter)ST.filt
   var certBtns=act&&!x.certificate_no?bt('cert','Issue participation certificate','certify','outline',' data-end="'+E(x.end_date||'')+'"')+bt('hold',x.certificate_hold?'Release certificate hold':'Hold certificate',x.certificate_hold?'release':'hold','outline',' data-h="'+(x.certificate_hold?0:1)+'"'):'';
   if(x.certificate_no)certBtns+=bt('crev',x.certificate_revoked_at?'Restore certificate':'Revoke certificate',x.certificate_revoked_at?'crestore':'crev','outline'+(x.certificate_revoked_at?'':' danger'),' data-u="'+(x.certificate_revoked_at?1:0)+'"');
   var foot=x.status==='active'?'<footer class="adm-cf">'+bt('rev','Revoke','revoke','outline danger')+'</footer>':'';
-  return '<article class="adm-card" data-id="'+x.id+'" data-q="'+E([x.full_name,x.email,x.phone,x.student_id,x.batch_code,x.invoice_no,x.certificate_no].join(' ').toLowerCase())+'">'+head+'<div class="adm-secs">'+
+  return '<article class="adm-card" data-id="'+x.id+'" data-stid="'+E(x.student_id||'')+'" data-seq="'+ENRSEQ+'" data-q=""'+E([x.full_name,x.email,x.phone,x.student_id,x.batch_code,x.invoice_no,x.certificate_no].join(' ').toLowerCase())+'">'+head+'<div class="adm-secs">'+
    sec('Student','secStudent',who,bt('info','Edit student details','info','outline'))+
    sec(pend?'Payment':'Fees and payments',pend?'plan':'fee',feeBody,feeBtns,'adm-sec-fee')+
    (pend&&!L.length?'':sec('Documents','docs',docBody,docBtns))+
-   (pend?'':sec('Certificate','cert',row('Number',cert,'cert'),certBtns))+'</div>'+foot+'</article>'}).join('')+'</div>':'<p class="adm-mut adm-empty0">'+(ST.q?'No student matches “'+E(ST.q)+'”. Check the spelling or clear the search.':'Nothing here.')+'</p>';
-  if(PRO&&total>ST.size)h+=PRO.pager(ST,total,Math.max(1,Math.ceil(total/ST.size)),'bottom');
-  B.innerHTML=h;
- if(PRO){PRO.wireBar(B,ST,function(patch,kf){Object.assign(ST,patch);enr(null,kf)});if(keepFocus){var qi=B.querySelector('#enq');if(qi){qi.focus();var L0=qi.value.length;try{qi.setSelectionRange(L0,L0)}catch(e){}}}}else B.querySelector('#enf').onchange=function(){enr(this.value)};B.querySelectorAll('[data-plan]').forEach(function(p){var card=p.closest('.adm-card'),dd=p.closest('dd'),pw=dd.querySelector('[data-pw]'),cs=card.querySelector('[data-c]'),ss=card.querySelector('[data-s]'),ed=null;
+   (pend?'':sec('Certificate','cert',row('Number',cert,'cert'),certBtns))+'</div>'+foot+'</article>'}
+function wireCards(B,rows,PAYS,filter){B.querySelectorAll('[data-plan]').forEach(function(p){var card=p.closest('.adm-card'),dd=p.closest('dd'),pw=dd.querySelector('[data-pw]'),cs=card.querySelector('[data-c]'),ss=card.querySelector('[data-s]'),ed=null;
   p.onchange=function(){dd.querySelector('[data-faw]').hidden=p.value!=='two';pw.hidden=p.value!=='custom';if(p.value==='custom'&&!ed)ed=pw._ed=wirePlan(pw,function(){return {fee:cfee(cs.value),start:ss.value}},{first:true,n:3})};
-  cs.addEventListener('change',function(){if(ed)ed.rebuild()});ss.addEventListener('change',function(){if(ed)ed.setStart(ss.value)})});if(!PRO)qf(B,'#enq','.adm-card','students');
-
+  cs.addEventListener('change',function(){if(ed)ed.rebuild()});ss.addEventListener('change',function(){if(ed)ed.setStart(ss.value)})});
  B.querySelectorAll('[data-doc]').forEach(function(a){a.onclick=async function(ev){ev.preventDefault();var w=window.open('','_blank'),t=a.textContent;a.textContent='Opening…';var r5=await DFA.invoke('admission',{action:'doc_file_admin',id:+a.dataset.di,kind:a.dataset.doc});a.textContent=t;
   if(r5.data&&r5.data.url){if(w)w.location=r5.data.url;else location.href=r5.data.url}else{if(w)w.close();alert((r5.data&&r5.data.error)||'Could not open the document.')}}});
  B.querySelectorAll('[data-ci]').forEach(function(a){a.onclick=async function(ev){ev.preventDefault();var w=window.open('','_blank');a.textContent='Creating…';var r4=await DFA.invoke('admission',{action:'cert_file_admin',id:+a.dataset.ci});a.textContent='View image';
   if(r4.data&&r4.data.url){if(w)w.location=r4.data.url;else location.href=r4.data.url}else{if(w)w.close();alert((r4.data&&r4.data.error)||'Could not create the certificate image.')}}});
- B.querySelector('#enadd').onclick=function(){var f=B.querySelector('#enform');f.innerHTML='<form class="adm-add"><input name="email" type="email" placeholder="Student email" required title="The student\'s email. They must use it to log in to the portal."><input name="name" placeholder="Full name" title="Name as it should appear on documents and certificates."><select name="course" required title="Course the student wants to join.">'+copts('')+'</select><input name="phone" type="tel" placeholder="Mobile (optional)" maxlength="20" title="Mobile number with country code, for example 03001234567 or +49 151 2345678."><button class="btn sm" title="Save as a pending student. Then use Payment received when the fee is in the bank.">Add as pending</button></form>';
-  f.querySelector('form').onsubmit=async function(e){e.preventDefault();var fm=this,sbm=fm.querySelector('button');sbm.disabled=true;var res=await DFA.invoke('admission',{action:'pro_add_student',email:fm.email.value,full_name:fm.name.value,course_code:fm.course.value,phone:fm.phone.value,source:'manual'});
-   if(res.data&&res.data.code==='duplicate'&&confirm(res.data.error+'\n\nAdd another registration anyway?'))res=await DFA.invoke('admission',{action:'pro_add_student',email:fm.email.value,full_name:fm.name.value,course_code:fm.course.value,phone:fm.phone.value,source:'manual',force:true});
-   sbm.disabled=false;if(!(res.data&&res.data.ok))return alert((res.data&&res.data.error)||'Could not add the student.');PRO&&PRO.invalidate();ST.q='';enr('pending')}};
- if(PRO)PRO.decorate(B,r.data,PAYS,function(){PRO.invalidate();enr()}).catch(function(e){console.warn('decorate',e)});
  B.querySelectorAll('[data-a]').forEach(function(b){b.onclick=async function(){var tr=b.closest('[data-id]'),id=+tr.dataset.id,res;
+  /* QA2: the action is bound to this card's enrollment id + Student ID; a card that re-rendered under the click does nothing */
+  var x0=rows.find(function(y){return y.id===id});if(!x0||!tr.isConnected||(tr.dataset.stid||'')!==String(x0.student_id||'')){toast('The list changed under your click. Nothing was done. Try again.');return}
+  var WHO=(x0.full_name||x0.email||'this student')+(x0.student_id?' · '+x0.student_id:''),SID=x0.student_id||undefined;function cfm(t){return confirm('Student: '+WHO+'\n\n'+t)}
   if(b.dataset.a==='hold'||b.dataset.a==='crev'){var hold=b.dataset.a==='hold',on=hold?b.dataset.h==='1':b.dataset.u!=='1';
-   if(!confirm(hold?(on?'Hold this certificate? It will NOT be issued automatically when the course ends (e.g. the student did not attend).':'Release the hold? The certificate will be issued automatically after the course ends.'):(on?'Revoke this certificate? The verify page will stop showing it as valid.':'Restore this certificate as valid?')))return;
-   b.disabled=true;res=await DFA.invoke('admission',hold?{action:'cert_hold',id:id,hold:on}:{action:'cert_revoke',id:id,undo:!on});b.disabled=false;
-   if(res.error||(res.data&&res.data.error)){alert((res.data&&res.data.error)||'Something went wrong.');return}enr();return}
+   if(!cfm(hold?(on?'Hold this certificate? It will NOT be issued automatically when the course ends (e.g. the student did not attend).':'Release the hold? The certificate will be issued automatically after the course ends.'):(on?'Revoke this certificate? The verify page will stop showing it as valid.':'Restore this certificate as valid?')))return;
+   var cr='';if(!hold&&on){cr=(prompt('Student: '+WHO+'\n\nWhy is this certificate revoked? (kept in the activity log)')||'').trim();if(cr.length<3)return alert('Write a short reason to revoke the certificate.')}
+   b.disabled=true;res=await DFA.invoke('admission',hold?{action:'cert_hold',id:id,hold:on,expect_sid:SID}:{action:'cert_revoke',id:id,undo:!on,expect_sid:SID,confirm:on?'REVOKE':undefined,reason:on?cr:undefined});b.disabled=false;
+   if(res.error||(res.data&&res.data.error)){alert((res.data&&res.data.error)||'Something went wrong.');return}refreshOne(id);return}
   if(b.dataset.a==='cert'){var end=b.dataset.end?new Date(Date.parse(b.dataset.end)-15*864e5).toISOString().slice(0,10):'',today=new Date().toISOString().slice(0,10);
-   if(end&&end>today){if(!confirm('This course ends on '+end+'. Issue the participation certificate early anyway?'))return}else if(!confirm('Issue a Course Participation Certificate for this student?'))return;
-   b.disabled=true;res=await DFA.invoke('admission',{action:'certify',id:id});b.disabled=false;
+   if(end&&end>today){if(!cfm('This course ends on '+end+'. Issue the participation certificate early anyway?'))return}else if(!cfm('Issue a Course Participation Certificate for this student?'))return;
+   var mail=cfm('Also email the certificate to the student now?\n\nOK = email it, Cancel = issue only. (Emailing works only when certificates are switched on in Settings; the email log shows the result.)');
+   var bt0=b.textContent;b.disabled=true;b.textContent='Issuing…';res=await DFA.invoke('admission',{action:'certify',id:id,email:mail,expect_sid:SID});b.disabled=false;b.textContent=bt0;
    if(res.error||(res.data&&res.data.error)){alert((res.data&&res.data.error)||'Could not issue the certificate.');return}
-   alert('Certificate '+res.data.certificate_no+' issued.\nVerify link: '+DFA.SITE+'/verify.html?code='+res.data.certificate_code);enr();return}
+   var em=res.data.email;alert('Certificate '+res.data.certificate_no+' issued for '+WHO+'.\nVerify link: '+DFA.SITE+'/verify.html?code='+res.data.certificate_code+(em?'\nEmail: '+(em.status==='sent'?'sent':em.status==='skipped'?'not sent ('+(em.error||'skipped')+')':em.status==='off'?'not sent (student emails are off)':'failed'+(em.error?' ('+em.error+')':'')):''));refreshOne(id);return}
   if(b.dataset.a==='pay'){var c=tr.querySelector('[data-c]').value,s=tr.querySelector('[data-s]').value,pl=tr.querySelector('[data-plan]').value,fa=tr.querySelector('[data-fa]').value,inst;if(!c)return alert('Pick the course first.');
    if(pl==='custom'){var pw=tr.querySelector('[data-pw]'),ed=pw&&pw._ed;if(!ed)return alert('Set up the installments first.');var np=P.normalize(ed.read());if(np.error)return alert(np.error);
-    var cf=cfee(c);if(cf&&np.total!==cf&&!confirm('The installments add up to '+pk(np.total)+', but the course fee is '+pk(cf)+'.\n\n'+pk(np.total)+' will be this student\'s total fee. Continue?'))return;
+    var cf=cfee(c);if(cf&&np.total!==cf&&!cfm('The installments add up to '+pk(np.total)+', but the course fee is '+pk(cf)+'.\n\n'+pk(np.total)+' will be this student\'s total fee. Continue?'))return;
     inst=np.plan.map(function(x){return {amount:x.amount,due:x.due}})}
-   if(!confirm('Have you checked that this fee is really in the bank account?\n\n'+(inst?'Mark installment 1 of '+inst.length+' ('+pk(inst[0].amount)+') as received':'Mark payment received')+' and open access from '+s+'? This creates the invoice, admission form and fee receipt (and emails them to the student when emails are switched on).'))return;
+   if(!cfm('Have you checked that this fee is really in the bank account?\n\n'+(inst?'Mark installment 1 of '+inst.length+' ('+pk(inst[0].amount)+') as received':'Mark payment received')+' and open access from '+s+'? This creates the invoice, admission form and fee receipt (and emails them to the student when emails are switched on).'))return;
    var label0=b.textContent;b.disabled=true;b.textContent='Activating…';
    try{
-    res=await DFA.invoke('admission',{action:'activate',id:id,course_code:c,start_date:s,plan:pl,first_amount:pl==='two'&&fa?+fa:undefined,installments:inst,method:tr.querySelector('[data-pm]').value||undefined,reference:(tr.querySelector('[data-ref]')||{}).value||undefined});PRO&&PRO.invalidate();
+    res=await DFA.invoke('admission',{action:'activate',id:id,expect_sid:SID,course_code:c,start_date:s,plan:pl,first_amount:pl==='two'&&fa?+fa:undefined,installments:inst,method:tr.querySelector('[data-pm]').value||undefined,reference:(tr.querySelector('[data-ref]')||{}).value||undefined});PRO&&PRO.invalidate();
     if(res.data&&res.data.error){alert('Could not activate: '+res.data.error);return}
     var en=res.data&&res.data.enrollment;if(!en){alert((res.data&&res.data.error)||'Could not activate (no enrollment returned).');return}
     var warn=[],wm='not sent',labels={admission:'Creating admission form…',receipt:'Creating fee receipt…',welcome:'Sending welcome email…'};
@@ -332,16 +322,57 @@ async function enr(filter,keepFocus){if(typeof filter==='string'&&filter)ST.filt
    }catch(err){alert('Activation interrupted: '+(err&&err.message?err.message:err)+'. Check the student list — they may already be active. Use Resend documents if needed.');try{enr(filter)}catch(_e){}}
    finally{b.disabled=false;b.textContent=label0}
    return}
-  if(b.dataset.a==='wa'){waDlg(r.data.find(function(y){return y.id===id}));return}
+  if(b.dataset.a==='wa'){waDlg(rows.find(function(y){return y.id===id}));return}
   if(b.dataset.a==='info'){infoDlg(id);return}
-  if(b.dataset.a==='fix'){var xx=r.data.find(function(y){return y.id===id});fixDlg(xx,(PAYS[id]||[]).find(function(p){return p.id===+b.dataset.pid}),PAYS[id]);return}
-  if(b.dataset.a==='regen'){if(!confirm('Create the admission form and all fee receipts again with the current details? Nothing is emailed.'))return;var t0=b.textContent;b.disabled=true;var mm={set textContent(v){b.textContent=v.length>40?'Rebuilding…':v}};var okk=await regenRun(id,mm);b.disabled=false;b.textContent=t0;toast(okk?'Documents rebuilt.':'Could not rebuild all documents. Try again.');return}
-  if(b.dataset.a==='wacopy'){waDlg(r.data.find(function(y){return y.id===id}));return}
+  if(b.dataset.a==='fix'){var xx=rows.find(function(y){return y.id===id});fixDlg(xx,(PAYS[id]||[]).find(function(p){return p.id===+b.dataset.pid}),PAYS[id]);return}
+  if(b.dataset.a==='regen'){if(!cfm('Create the admission form and all fee receipts again with the current details? Nothing is emailed.'))return;var t0=b.textContent;b.disabled=true;var mm={set textContent(v){b.textContent=v.length>40?'Rebuilding…':v}};var okk=await regenRun(id,mm);b.disabled=false;b.textContent=t0;toast(okk?'Documents rebuilt.':'Could not rebuild all documents. Try again.');return}
+  if(b.dataset.a==='wacopy'){waDlg(rows.find(function(y){return y.id===id}));return}
   if(b.dataset.a==='resend'){resendDlg(id,b.dataset.cert==='1',b.dataset.bal==='1');return}
-  if(b.dataset.a==='inst'){payDlg(id,+b.dataset.bal,r.data.find(function(y){return y.id===id}));return}
-  if(b.dataset.a==='plan'){planDlg(r.data.find(function(y){return y.id===id}),PAYS[id]);return}
-  if(!confirm(b.textContent+' this enrollment?'))return;
+  if(b.dataset.a==='inst'){payDlg(id,+b.dataset.bal,rows.find(function(y){return y.id===id}));return}
+  if(b.dataset.a==='plan'){planDlg(rows.find(function(y){return y.id===id}),PAYS[id]);return}
+  if(!cfm(b.textContent+' this enrollment?'))return;
   res=b.textContent==='Remove'?await sb.from('enrollments').delete().eq('id',id):await sb.from('enrollments').update({status:'revoked'}).eq('id',id);if(res.error)alert(res.error.message);enr(filter)}})}
+/* Redraws one student's card from fresh data (admins); staff lists come masked from the server, so they reload the list. */
+async function refreshOne(id){var B=document.getElementById('adm-body'),old=B&&B.querySelector('.adm-card[data-id="'+id+'"]');PRO&&PRO.invalidate();
+ if(!old||ROLE!=='admin')return enr();old.classList.add('adm-busy1');
+ var R=await Promise.all([sb.from('enrollments').select('*').eq('id',id).maybeSingle(),sb.from('payments').select('*').eq('enrollment_id',id)]);
+ var x=R[0].data;if(!x||!old.isConnected)return enr();var PAYS={};PAYS[id]=R[1].data||[];
+ var tmp=document.createElement('div');tmp.innerHTML=cardHtml(x,PAYS);var nc=tmp.firstElementChild;old.replaceWith(nc);
+ var all=Object.assign(B._pays||{},PAYS);wireCards(nc,[x],PAYS,ST.filter);
+ if(PRO)await PRO.decorate(B,[x],all,B._refresh||function(){enr()}).catch(function(e){console.warn('decorate',e)});return nc}
+/* QA2 (wrong student after a re-render): clicks on a student card are ignored while the list is loading, for 400 ms after it
+   was drawn, when the card is no longer on the page or belongs to an older draw, and when the same button is clicked twice in a row. */
+document.addEventListener('click',function(ev){var t=ev.target&&ev.target.closest&&ev.target.closest('.adm-card button,.adm-card summary,.adm-card select,.adm-card a[data-doc],.adm-card a[data-ci]');if(!t)return;
+ var B=document.getElementById('adm-body'),card=t.closest('.adm-card');if(!B||!card||!B.contains(card))return;
+ var now=Date.now(),dbl=t.tagName!=='SELECT'&&t._at&&now-t._at<700;if(t.tagName!=='SELECT')t._at=now;
+ if(B.classList.contains('adm-busy')||now<(B._settle||0)||!card.isConnected||(card.dataset.seq&&+card.dataset.seq!==ENRSEQ)||dbl){ev.preventDefault();ev.stopImmediatePropagation()}},true);
+async function enr(filter,keepFocus){if(typeof filter==='string'&&filter)ST.filter=filter;filter=ST.filter;var seq=++ENRSEQ;var B=document.getElementById('adm-body');
+ if(!B.querySelector('.adm-cards,.adm-empty0'))B.innerHTML='<div class="adm-skel" aria-busy="true" aria-label="Loading"><div></div><div></div><div></div></div>';else B.classList.add('adm-busy');
+ var r;if(PRO){if(PRO.warm)PRO.warm();r=await PRO.studentQuery(ST);if(!r.error&&r.data&&!r.data.length&&ST.page>0&&r.count){ST.page=Math.max(0,Math.ceil(r.count/ST.size)-1);r=await PRO.studentQuery(ST)}}
+ else{var q=sb.from('enrollments').select('*').order('created_at',{ascending:false}).limit(300);if(filter==='fee pending')q=q.gt('balance_due',0).in('status',['active','expired']);else if(filter!=='all')q=q.eq('status',filter);r=await q}
+ if(seq!==ENRSEQ)return;if(r.error){B.classList.remove('adm-busy');B.textContent=r.error.message;return}r.data=r.data||[];var total=PRO?(r.count||0):r.data.length;
+ /* QA2 speed: the filter bar (counts, batches, tags) loads while the payments load */
+ var barP=PRO?PRO.barHtml(ST,total):null;
+ var PAYS={},pids=r.data.filter(function(x){return x.invoice_no}).map(function(x){return x.id});if(r.pays){r.pays.forEach(function(p){(PAYS[p.enrollment_id]=PAYS[p.enrollment_id]||[]).push(p)})}else if(pids.length){var pr=await sb.from('payments').select('*').in('enrollment_id',pids);(pr.data||[]).forEach(function(p){(PAYS[p.enrollment_id]=PAYS[p.enrollment_id]||[]).push(p)})}
+ if(seq!==ENRSEQ)return;
+ var FILTERS=['all','pending','active','fee pending','overdue','expired','revoked','test'];if(FILTERS.indexOf(filter)<0)FILTERS.push(filter);
+ var h=PRO?(await barP)+'<select id="enf" hidden aria-hidden="true" tabindex="-1" title="Current filter (internal)">'+FILTERS.map(function(s){return '<option'+(s===filter?' selected':'')+'>'+s+'</option>'}).join('')+'</select>'
+  :'<div class="adm-bar"><label>'+lab('show','Show')+' <select id="enf"'+T('show')+'>'+['all','pending','active','fee pending','expired','revoked'].map(function(s){return '<option'+(s===filter?' selected':'')+'>'+s+'</option>'}).join('')+'</select></label><input type="search" id="enq" class="adm-q" placeholder="Search name, email, ID, batch, invoice" aria-label="Search students"'+T('search')+'><span data-cnt="found" data-t="'+r.data.length+' found">'+r.data.length+' found</span><button type="button" class="btn outline sm" id="enadd"'+T('add')+'>Add student</button></div><div id="enform"></div>';
+ if(seq!==ENRSEQ)return;
+ h+=r.data.length?'<div class="adm-cards">'+r.data.map(function(x){return cardHtml(x,PAYS)}).join('')+'</div>':'<p class="adm-mut adm-empty0">'+(ST.q?'No student matches “'+E(ST.q)+'”. Check the spelling or clear the search.':'Nothing here.')+'</p>';
+  if(PRO&&total>ST.size)h+=PRO.pager(ST,total,Math.max(1,Math.ceil(total/ST.size)),'bottom');
+  B.innerHTML=h;
+ /* QA2: cards stay locked while loading and for a moment after drawing, so a click can't land on a card that just moved */
+ B.classList.remove('adm-busy');B._seq=seq;B._settle=Date.now()+400;B._refreshOne=refreshOne;
+ if(PRO){PRO.wireBar(B,ST,function(patch,kf){Object.assign(ST,patch);enr(null,kf)});if(keepFocus){var qi=B.querySelector('#enq');if(qi){qi.focus();var L0=qi.value.length;try{qi.setSelectionRange(L0,L0)}catch(e){}}}}else B.querySelector('#enf').onchange=function(){enr(this.value)};wireCards(B,r.data,PAYS,filter);if(!PRO)qf(B,'#enq','.adm-card','students');
+
+ B.querySelector('#enadd').onclick=function(){var f=B.querySelector('#enform');f.innerHTML='<form class="adm-add"><input name="email" type="email" placeholder="Student email" required title="The student\'s email. They must use it to log in to the portal."><input name="name" placeholder="Full name" title="Name as it should appear on documents and certificates."><select name="course" required title="Course the student wants to join.">'+copts('')+'</select><input name="phone" type="tel" placeholder="Mobile (optional)" maxlength="20" title="Mobile number with country code, for example 03001234567 or +49 151 2345678.">'+(ROLE==='admin'?'<label class="adm-ck adm-nw" title="Practice records are left out of the dashboard, exports and reminders. Ticked for you when the name contains TEST."><input type="checkbox" name="istest" title="Mark this new record as TEST (practice). Ticked for you when the name contains TEST."> TEST record</label>':'')+'<button class="btn sm" title="Save as a pending student. Then use Payment received when the fee is in the bank.">Add as pending</button></form>';
+  /* QA2: a name with the word TEST suggests the TEST mark (the admin can untick it) */
+  var fm0=f.querySelector('form'),tk=fm0.istest,touched=false;if(tk){tk.onchange=function(){touched=true};fm0.name.oninput=function(){if(!touched)tk.checked=/\btest\b/i.test(fm0.name.value)}}
+  f.querySelector('form').onsubmit=async function(e){e.preventDefault();var fm=this,sbm=fm.querySelector('button');sbm.disabled=true;var ist=!!(fm.istest&&fm.istest.checked);var res=await DFA.invoke('admission',{action:'pro_add_student',email:fm.email.value,full_name:fm.name.value,course_code:fm.course.value,phone:fm.phone.value,source:'manual',is_test:ist});
+   if(res.data&&res.data.code==='duplicate'&&confirm(res.data.error+'\n\nAdd another registration anyway?'))res=await DFA.invoke('admission',{action:'pro_add_student',email:fm.email.value,full_name:fm.name.value,course_code:fm.course.value,phone:fm.phone.value,source:'manual',is_test:ist,force:true});
+   sbm.disabled=false;if(!(res.data&&res.data.ok))return alert((res.data&&res.data.error)||'Could not add the student.');if(ist)toast(res.data.is_test?'Added and marked as TEST':'Added, but the TEST mark was not saved. Use More actions to mark it.');PRO&&PRO.invalidate();ST.q='';enr('pending')}};
+ if(PRO)PRO.decorate(B,r.data,PAYS,function(){PRO.invalidate();enr()}).catch(function(e){console.warn('decorate',e)});}
 async function settings(){var B=document.getElementById('adm-body');B.innerHTML='<p>Loading…</p>';
  var r=await DFA.invoke('admission',{action:'settings_get'});if(!r.data||r.data.error){B.innerHTML='<p>'+E((r.data&&r.data.error)||'Could not load settings.')+'</p>'+(r.data&&r.data.relogin?'<a class="btn sm" href="account.html?next=%2Fadmin.html%23settings">Log in again</a>':'');return}var S=r.data;
  function card(k,t,desc,on){return '<div class="adm-card adm-set"><label class="adm-sw"><input type="checkbox" role="switch" data-k="'+k+'"'+(on?' checked':'')+'><span class="adm-sw-ui" aria-hidden="true"></span><span><b>'+t+'</b><span class="adm-mut adm-blk">'+desc+'</span></span></label><p class="adm-mut adm-blk" data-m="'+k+'">Currently '+(on?'<b>ON</b>':'<b>OFF</b>')+'</p></div>'}

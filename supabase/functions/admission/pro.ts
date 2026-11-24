@@ -41,13 +41,14 @@ async function testIds(db: any): Promise<Set<number>> {
 
 export async function handlePro(db: any, body: any, user: { id: string; email?: string }, role: Role, ctx: Ctx): Promise<Response | null> {
   const { json } = ctx, a = String(body.action || ""), uid = user.id;
-  if (!a.startsWith("pro_")) return null;
   const id = Number(body.id);
-  // QA2: the browser sends the Student ID shown on the card; a card that re-rendered under the cursor can't change someone else
+  // QA2: the browser sends the Student ID shown on the card; a card that re-rendered under the cursor can't change someone else.
+  // Checked here for every action (index.ts calls handlePro first), not only the pro_ ones.
   if (id > 0 && body.expect_sid) {
     const ck = (await db.from("enrollments").select("student_id").eq("id", id).maybeSingle()).data;
     if (!expectSidOk(ck, body.expect_sid)) return json({ error: "The list changed under your click. Nothing was changed. Reload and try again.", code: "stale" }, 409);
   }
+  if (!a.startsWith("pro_")) return null;
 
   // ---- dashboard -------------------------------------------------------------------------------
   if (a === "pro_dashboard") {
@@ -76,14 +77,18 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     if (body.to && ISO.test(body.to)) q = q.lte("created_at", body.to + "T23:59:59+05:00");
     const kf = activityKind(body.kind);
     if (kf?.in) q = q.in("action", kf.in); else if (kf?.like) q = q.like("action", kf.like);
-    const r = await q; if (r.error) return json({ error: r.error.message }, 500);
-    let rows = (r.data || []).map((x: any) => ({ ...x, source: "activity" }));
     // student-details edits and payment corrections (enrollment_audit, from PR #11) are part of the same story
-    if (!body.kind || /^(student_info|payment)/.test(String(body.kind))) {
-      let aq = db.from("enrollment_audit").select("id,enrollment_id,kind,reason,old_values,new_values,changed_by,changed_at").order("changed_at", { ascending: false }).limit(lim);
+    const withAudit = !body.kind || /^(student_info|payment)/.test(String(body.kind));
+    let aq: any = null;
+    if (withAudit) {
+      aq = db.from("enrollment_audit").select("id,enrollment_id,kind,reason,old_values,new_values,changed_by,changed_at").order("changed_at", { ascending: false }).limit(lim);
       if (id) aq = aq.eq("enrollment_id", id);
       if (body.before && !isNaN(Date.parse(body.before))) aq = aq.lt("changed_at", body.before);
-      const au = await aq;
+    }
+    // QA2 speed: both logs are read at the same time
+    const [r, au] = await Promise.all([q, aq ?? Promise.resolve(null)]); if (r.error) return json({ error: r.error.message }, 500);
+    let rows = (r.data || []).map((x: any) => ({ ...x, source: "activity" }));
+    if (withAudit && au) {
       if (!au.error) {
         const ids = [...new Set((au.data || []).map((h: any) => h.changed_by).filter(Boolean))];
         const names = new Map(((ids.length ? (await db.from("profiles").select("id,full_name,username").in("id", ids)).data : []) || []).map((p: any) => [p.id, actorLabel(p)]));
@@ -196,11 +201,12 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
   // ---- reminders ---------------------------------------------------------------------------------
   if (a === "pro_reminders") {
     const t = ctx.today();
-    const offs = parseOffsets((await db.from("site_settings").select("value").eq("key", "reminder_offsets").maybeSingle()).data?.value);
-    const emails = (await db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle()).data?.value === "on";
-    const rows = (await db.from("enrollments").select("id,full_name,student_id,email,status,balance_due,due_date,reminder_stage,installment_plan,amount_paid").in("status", ["active", "expired"]).gt("balance_due", 0).order("due_date", { ascending: true, nullsFirst: false }).limit(1000)).data || [];
-    const ids = rows.map((e: any) => e.id), meta = await metaOf(db, ids);
-    const logs = ids.length ? ((await db.from("email_log").select("enrollment_id,kind,status,delivery,created_at").in("enrollment_id", ids).like("kind", "reminder%").order("created_at", { ascending: false }).limit(3000)).data || []) : [];
+    // QA2 speed: independent reads run together (2 round trips instead of 5)
+    const [offR, emR, rowsR] = await Promise.all([db.from("site_settings").select("value").eq("key", "reminder_offsets").maybeSingle(), db.from("site_settings").select("value").eq("key", "send_emails").maybeSingle(), db.from("enrollments").select("id,full_name,student_id,email,status,balance_due,due_date,reminder_stage,installment_plan,amount_paid").in("status", ["active", "expired"]).gt("balance_due", 0).order("due_date", { ascending: true, nullsFirst: false }).limit(1000)]);
+    const offs = parseOffsets(offR.data?.value), emails = emR.data?.value === "on", rows = rowsR.data || [];
+    const ids = rows.map((e: any) => e.id);
+    const [meta, logsR] = await Promise.all([metaOf(db, ids), ids.length ? db.from("email_log").select("enrollment_id,kind,status,delivery,created_at").in("enrollment_id", ids).like("kind", "reminder%").order("created_at", { ascending: false }).limit(3000) : Promise.resolve({ data: [] })]);
+    const logs = (logsR as any).data || [];
     const last = new Map<number, any>(); for (const l of logs) if (!last.has(l.enrollment_id)) last.set(l.enrollment_id, l);
     return json({ ok: true, today: t, offsets: offs, emails, rows: rows.map((e: any) => {
       const mt = meta.get(e.id), paused = isPaused(mt, t), nx = e.status === "active" ? nextReminder(e.due_date ? String(e.due_date).slice(0, 10) : null, e.reminder_stage || 0, t, offs) : null;
