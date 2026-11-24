@@ -1,6 +1,6 @@
 // Admin portal upgrade (WD-3): actions behind the "pro_" prefix, plus the activity log writer used by index.ts.
 // Every caller is already signed in, confirmed and admin/staff (index.ts checks that and allowed() before calling).
-import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, confirmOk, sameJson, STAFF_ENR_COLS, STAFF_PAY_COLS, type Role } from "./prologic.ts";
+import { cleanRef, applyDiscount, undoDiscount, planDue, parseOffsets, offsetsError, nextReminder, isPaused, proofPath, proofPathOk, PROOF_TYPES, PROOF_MAX, dashboard, staffRow, staffPay, addStudentRow, searchOr, confirmOk, sameJson, STAFF_ENR_COLS, STAFF_PAY_COLS, type Role } from "./prologic.ts";
 import { method as payMethod, type Inst } from "./plan.ts";
 
 type Ctx = { json: (b: unknown, s?: number) => Response; today: () => string; pingSheets?: () => void };
@@ -112,7 +112,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     let q = db.from("enrollments").select(STAFF_ENR_COLS, { count: "exact" }); q = flt(q, String(body.filter || "all")); if (ids) q = q.in("id", ids);
     if (Array.isArray(body.ids)) q = q.in("id", body.ids.map(Number).filter((x: number) => x > 0).slice(0, 500));
     const v = String(body.q || "").replace(/[,()*%\\]/g, " ").trim().slice(0, 60);
-    if (v) q = q.or(["full_name", "email", "phone", "student_id", "batch_code", "invoice_no", "certificate_no"].map((k) => `${k}.ilike.*${v}*`).join(","));
+    if (v) q = q.or(searchOr(v, role));
     if (body.batch === "none") q = q.is("batch_id", null); else if (Number(body.batch) > 0) q = q.eq("batch_id", Number(body.batch));
     if (Array.isArray(body.status) && body.status.length) q = q.in("status", body.status.map(String).slice(0, 5));
     const SORT = ["created_at.desc", "created_at.asc", "full_name.asc", "due_date.asc", "balance_due.desc"];
@@ -198,7 +198,7 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
     const r = await q; if (r.error) return json({ error: r.error.message }, 500);
     const eids = [...new Set((r.data || []).map((x: any) => x.enrollment_id).filter(Boolean))];
     const en = new Map(((eids.length ? (await db.from("enrollments").select("id,full_name,student_id").in("id", eids)).data : []) || []).map((e: any) => [e.id, e]));
-    return json({ ok: true, rows: (r.data || []).map((x: any) => ({ id: x.id, enrollment_id: x.enrollment_id, kind: x.kind, items: x.items, status: x.status, delivery: x.delivery, delivery_at: x.delivery_at, error: x.error, created_at: x.created_at, student: en.get(x.enrollment_id) || null })) });
+    return json({ ok: true, rows: (r.data || []).map((x: any) => ({ id: x.id, enrollment_id: x.enrollment_id, kind: x.kind, items: x.items, status: x.status, delivery: x.delivery, delivery_at: x.delivery_at, error: role === "admin" ? x.error : (x.error ? "Not delivered (an admin can see the details)" : null), created_at: x.created_at, student: en.get(x.enrollment_id) || null })) });
   }
 
   // ---- payment reference + proof file -----------------------------------------------------------
@@ -240,7 +240,8 @@ export async function handlePro(db: any, body: any, user: { id: string; email?: 
       await logActivity(db, uid, p.enrollment_id, "payment_proof", `Payment ${p.invoice_no}: proof ${p.proof_file ? "replaced" : "uploaded"}${ref ? ", reference " + ref : ""}`);
       return json({ ok: true });
     }
-    // pro_proof_url
+    // pro_proof_url (staff only while staff_payments is on, checked in index.ts); every open is logged
+    await logActivity(db, uid, p.enrollment_id, "payment_proof_opened", `Payment ${p.invoice_no}: slip opened`, { payment_id: pid });
     if (p.proof_file) { const s = await db.storage.from("documents").createSignedUrl(p.proof_file, 300); if (s.error) return json({ error: s.error.message }, 500); return json({ ok: true, url: s.data.signedUrl }); }
     if (/^https:\/\/drive\.google\.com\/(open\?id=|file\/d\/)[\w-]{15,}/.test(String(p.proof_url || ""))) return json({ ok: true, url: p.proof_url });
     return json({ error: "No proof file for this payment." }, 404);
