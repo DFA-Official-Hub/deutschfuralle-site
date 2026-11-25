@@ -12,7 +12,21 @@ setItem:function(k,v){try{(remember()?localStorage:sessionStorage).setItem(k,v)}
 removeItem:function(k){try{localStorage.removeItem(k);sessionStorage.removeItem(k)}catch(e){}}};
 /* /verify?code= is a certificate code, not an auth code: never treat it as a PKCE callback there. */
 var urlSession=!/^\/verify(\.html)?\/?$/.test(location.pathname);
-var sb=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:urlSession,storage:store,flowType:'pkce'}});
+/* QA2 speed: an in-tab lock instead of the cross-tab browser lock. With several portal tabs open, the browser lock made
+   every request wait up to 5 s (supabase-js lockAcquireTimeout) for another tab; Supabase's refresh-token reuse window
+   covers two tabs refreshing at the same moment. */
+var LOCK=window.supabase.processLock;
+var sb=window.supabase.createClient(URL,KEY,{auth:Object.assign({persistSession:true,autoRefreshToken:true,detectSessionInUrl:urlSession,storage:store,flowType:'pkce'},LOCK?{lock:LOCK}:{})});
+/* QA2 speed: Edge Functions run next to the database (Tokyo, ap-northeast-1) instead of the nearest US region,
+   which saves ~0.6 s per database call inside a function. A query parameter (not the x-region header) keeps CORS simple.
+   If the pinned region can't be reached, the pin is dropped for this page and read-only calls are retried once. */
+var FN_REGION='ap-northeast-1',pinOn=true;
+var SAFE_RETRY=/^(precheck|check|verify|status|docs_status|email_log|settings_get|cert_images_status|my_[a-z_]+|pro_(dashboard|students|activity|email_log|reminders|reviews|batches|counts|accounts|roster|attendance_list))$/;
+function regionName(n){return pinOn&&n.indexOf('?')<0?n+'?forceFunctionRegion='+FN_REGION:n}
+try{(function(){var fc=sb.functions,orig=fc.invoke.bind(fc);Object.defineProperty(sb,'functions',{value:fc,configurable:true,writable:true});
+ fc.invoke=async function(name,opts){var pinned=regionName(name),r=await orig(pinned,opts);
+  if(pinned!==name&&r&&r.error&&r.error.name==='FunctionsFetchError'){pinOn=false;var a=opts&&opts.body&&opts.body.action;if(SAFE_RETRY.test(String(a||'')))r=await orig(name,opts)}
+  return r}})()}catch(e){}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function setRemember(on){try{localStorage.setItem('dfa-remember',on?'1':'0')}catch(e){}}
 async function profile(){var s=(await sb.auth.getSession()).data.session;if(!s)return null;
@@ -89,5 +103,5 @@ function eyes(root){(root||document).querySelectorAll('input[type=password]:not(
 var tsP=null;function turnstile(el){if(!FEATURES.turnstile||!el)return Promise.resolve(null);if(!tsP)tsP=new Promise(function(ok){var sc=document.createElement('script');sc.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';sc.async=true;sc.onload=function(){ok(window.turnstile)};document.head.appendChild(sc)});
  return tsP.then(function(t){var box={token:null};box.id=t.render(el,{sitekey:FEATURES.turnstile,appearance:'always',callback:function(k){box.token=k},'expired-callback':function(){box.token=null}});box.reset=function(){box.token=null;try{t.reset(box.id)}catch(e){}};return box})}
 
-window.DFA={gate:gate,devId:devId,pwCheck:pwCheck,eyes:eyes,turnstile:turnstile,jwt:jwt,receiptPills:receiptPills,paysFor:paysFor,certPill:certPill,invoke:invoke,sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,SITE:'https://www.deutschfuralle.com'};
+window.DFA={gate:gate,devId:devId,pwCheck:pwCheck,eyes:eyes,turnstile:turnstile,jwt:jwt,receiptPills:receiptPills,paysFor:paysFor,certPill:certPill,invoke:invoke,sb:sb,esc:esc,profile:profile,setRemember:setRemember,remember:remember,FEATURES:FEATURES,FN_REGION:FN_REGION,regionName:regionName,SITE:'https://www.deutschfuralle.com'};
 })();

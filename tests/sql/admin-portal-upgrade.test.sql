@@ -85,8 +85,11 @@ select pg_temp.check((select tags from public.student_meta) = array['urdu','vip'
 select pg_temp.check((select count(*) from public.admin_activity where action in ('note_added','tags','reminders_paused')) = 3, 'note, tags and pause are logged');
 select pg_temp.check(not (select is_test from public.student_meta), 'staff cannot mark a record as test');
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000a'); set role authenticated;
-update public.student_meta set is_test = true;
-reset role; select pg_temp.check((select is_test from public.student_meta), 'admin can mark a record as test');
+do $$ begin update public.student_meta set is_test = true; raise exception 'admin marked test directly'; exception when others then if sqlerrm like 'admin marked%' then raise; end if; end $$;
+reset role; select pg_temp.check(not (select is_test from public.student_meta), 'QA2: even an admin cannot flip is_test from the browser (typed Student ID confirm is server-side)');
+select pg_temp.as_user(''); set role service_role;
+select public.set_test_mark(1, true, '00000000-0000-0000-0000-00000000000a', 'QA');
+reset role; select pg_temp.check((select is_test from public.student_meta), 'admin can mark a record as test (through set_test_mark)');
 
 -- 5) batches: admin creates; staff cannot; picking a batch sets batch_code; course/start change keeps the batch code; unassign restores auto code
 select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authenticated;
@@ -279,7 +282,7 @@ end $$;
 
 -- 16) R4-1: deleting a TEST enrollment that has notes and attendance succeeds (cascade must not write admin_activity against the deleted row)
 insert into public.enrollments (email, full_name, course_code, status, fee_total) values ('deltest@test.local', 'TEST DeleteCascade', 'a1-normal', 'active', 25000);
-insert into public.student_meta (enrollment_id, is_test) select id, true from public.enrollments where full_name = 'TEST DeleteCascade';
+select pg_temp.as_user(''); select public.set_test_mark(id, true, null, null) from public.enrollments where full_name = 'TEST DeleteCascade'; select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');
 insert into public.student_notes (enrollment_id, body) select id, 'TEST note to cascade' from public.enrollments where full_name = 'TEST DeleteCascade';
 insert into public.student_notes (enrollment_id, body) values (1, 'Live note that must still be logged when deleted');
 delete from public.student_notes where enrollment_id = 1 and body = 'Live note that must still be logged when deleted';
@@ -414,3 +417,53 @@ select pg_temp.check((select full_name from public.enrollments where email = 'te
   'a stale null expect does not write');
 
 delete from public.enrollments where email in ('test-lock-b20@test.local', 'test-lock-null@test.local');
+
+-- 19) QA round 2: TEST marks, attendance summary row, actor username
+reset role; select pg_temp.as_user('');
+insert into public.enrollments (email, full_name, course_code, status, fee_total) values ('qa2@test.local', 'QA2 Real Looking', 'a1-normal', 'active', 25000);
+do $$ declare eid bigint := (select id from public.enrollments where full_name = 'QA2 Real Looking'); n0 bigint := (select count(*) from public.admin_activity); begin
+  perform public.set_test_mark(eid, true, '00000000-0000-0000-0000-00000000000a', 'misclick check');
+  perform pg_temp.check((select is_test from public.student_meta where enrollment_id = eid), 'QA2: set_test_mark marks');
+  perform pg_temp.check((select count(*) from public.admin_activity where enrollment_id = eid and action = 'marked_test' and actor_name = 'admin1' and summary like 'Marked as TEST record: QA2 Real Looking%misclick check') = 1, 'QA2: every mark writes one audit row with the username and the reason');
+  begin perform public.set_test_mark(eid, true, '00000000-0000-0000-0000-00000000000a', null); raise exception 'double mark'; exception when others then if sqlerrm like 'double mark%' then raise; end if; end;
+  perform public.set_test_mark(eid, false, '00000000-0000-0000-0000-00000000000a', null);
+  perform pg_temp.check((select count(*) from public.admin_activity where enrollment_id = eid and action = 'unmarked_test') = 1 and not (select is_test from public.student_meta where enrollment_id = eid), 'QA2: unmark writes its own audit row');
+  perform pg_temp.check((select count(*) from public.admin_activity) = n0 + 2, 'QA2: no duplicate rows from the student_meta trigger');
+end $$;
+select pg_temp.check(not has_function_privilege('authenticated', 'public.set_test_mark(bigint,boolean,uuid,text)', 'execute') and not has_function_privilege('anon', 'public.set_test_mark(bigint,boolean,uuid,text)', 'execute'), 'QA2: set_test_mark is service-role only');
+select pg_temp.check(not has_function_privilege('anon', 'public.attendance_save(bigint,date,text,text,jsonb)', 'execute'), 'QA2: anon cannot save attendance');
+-- staff saves a class of 2 (1 present, 1 absent): one summary row, no per-row rows
+insert into public.batches (code, course_code, start_date, status) values ('QA2-B', 'a1-normal', '2026-11-20', 'running');
+update public.enrollments set batch_id = (select id from public.batches where code = 'QA2-B') where full_name in ('QA2 Real Looking', 'TEST Student');
+select (select jsonb_agg(jsonb_build_object('enrollment_id', id, 'status', case when full_name = 'TEST Student' then 'present' else 'absent' end)) from public.enrollments where full_name in ('QA2 Real Looking', 'TEST Student')) as m1,
+       (select jsonb_agg(jsonb_build_object('enrollment_id', id, 'status', 'late')) from public.enrollments where full_name = 'QA2 Real Looking') as m2,
+       (select jsonb_build_array(jsonb_build_object('enrollment_id', id, 'status', 'present')) from public.enrollments where full_name = 'TEST Other') as m3,
+       (select id from public.batches where code = 'QA2-B') as qb \gset
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authenticated;
+select public.attendance_save(:qb, '2026-11-24', 'Dativ', 'held', :'m1'::jsonb) is not null as saved;
+reset role;
+select pg_temp.check((select count(*) from public.admin_activity where action = 'attendance_saved' and actor_name = 'staff1' and summary = 'Attendance saved for QA2-B on 24 Nov 2026: 1 present, 0 late, 1 absent') = 1, 'QA2: one attendance save = one summary activity row (with the staff username)');
+select pg_temp.check((select count(*) from public.admin_activity where action = 'attendance' and summary like '% on 24 Nov 2026') = 0, 'QA2: no per-student rows inside a save');
+select pg_temp.check((select count(*) from public.attendance a join public.class_sessions s on s.id = a.session_id where s.topic = 'Dativ') = 2, 'QA2: marks saved');
+-- saving again (change absent -> late) logs "updated"
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000b'); set role authenticated;
+select public.attendance_save(:qb, '2026-11-24', 'Dativ', 'held', :'m2'::jsonb) is not null as saved;
+select set_config('qa2.m3', :'m3', false);
+-- a student outside the batch is refused; a future date is refused; a plain user is refused
+do $$ begin perform public.attendance_save((select id from public.batches where code = 'QA2-B'), '2026-11-24', null, 'held', current_setting('qa2.m3')::jsonb); raise exception 'outsider saved'; exception when others then if sqlerrm like 'outsider%' then raise; end if; end $$;
+do $$ begin perform public.attendance_save((select id from public.batches where code = 'QA2-B'), current_date + 5, null, 'held', '[]'); raise exception 'future saved'; exception when others then if sqlerrm like 'future%' then raise; end if; end $$;
+reset role; select pg_temp.as_user('00000000-0000-0000-0000-00000000000c'); set role authenticated;
+do $$ begin perform public.attendance_save((select id from public.batches where code = 'QA2-B'), '2026-11-23', null, 'held', '[]'); raise exception 'student saved'; exception when others then if sqlerrm like 'student saved%' then raise; end if; end $$;
+reset role;
+-- staff with notes_tags only (D, re-enabled) cannot use attendance_save
+update public.staff_permissions set disabled = false where user_id = '00000000-0000-0000-0000-00000000000d';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000d'); set role authenticated;
+do $$ begin perform public.attendance_save((select id from public.batches where code = 'QA2-B'), '2026-11-23', null, 'held', '[]'); raise exception 'notes staff saved attendance via rpc'; exception when others then if sqlerrm like 'notes staff saved%' then raise; end if; end $$;
+reset role; update public.staff_permissions set disabled = true where user_id = '00000000-0000-0000-0000-00000000000d';
+
+select pg_temp.check((select count(*) from public.admin_activity where action = 'attendance_saved' and summary like 'Attendance updated for QA2-B on 24 Nov 2026: 0 present, 1 late, 0 absent') = 1, 'QA2: a second save logs "updated"; outsiders, future dates, non-staff and staff without attendance are refused');
+select pg_temp.check((select count(*) from public.class_sessions where session_date in ('2026-11-23', current_date + 5)) = 0, 'QA2: refused saves leave no class behind');
+update public.enrollments set batch_id = null where full_name in ('QA2 Real Looking', 'TEST Student');
+select pg_temp.as_user('');
+delete from public.enrollments where full_name = 'QA2 Real Looking'; delete from public.batches where code = 'QA2-B';
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a');

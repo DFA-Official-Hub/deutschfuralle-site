@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 // Deutsch Für Alle – login security: lockout, device check, email codes, login history, alerts, reports, uptime.
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-token, x-region", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 const env = (k: string) => Deno.env.get(k) || "";
 const SITE = "https://www.deutschfuralle.com";
@@ -86,9 +86,15 @@ async function adminEmails(db: any): Promise<string[]> {
 }
 async function isLocked(db: any, email: string, ip: string) {
   const since = new Date(Date.now() - LOCK_MIN * 60e3).toISOString();
-  const ok = (await db.from("login_events").select("created_at").eq("email", email).eq("kind", "login_ok").gte("created_at", since).order("created_at", { ascending: false }).limit(1)).data?.[0]?.created_at || since;
-  const f = (await db.from("login_events").select("created_at").eq("email", email).eq("kind", "login_fail").gt("created_at", ok).order("created_at", { ascending: true })).data || [];
-  const ipf = ip ? (await db.from("login_events").select("id", { count: "exact", head: true }).eq("ip", ip).eq("kind", "login_fail").gte("created_at", since)).count || 0 : 0;
+  // QA2: the three reads run together (each one is a round trip to the database)
+  const [okR, fR, ipR] = await Promise.all([
+    db.from("login_events").select("created_at").eq("email", email).eq("kind", "login_ok").gte("created_at", since).order("created_at", { ascending: false }).limit(1),
+    db.from("login_events").select("created_at").eq("email", email).eq("kind", "login_fail").gte("created_at", since).order("created_at", { ascending: true }),
+    ip ? db.from("login_events").select("id", { count: "exact", head: true }).eq("ip", ip).eq("kind", "login_fail").gte("created_at", since) : Promise.resolve({ count: 0 }),
+  ]);
+  const ok = okR.data?.[0]?.created_at || since;
+  const f = (fR.data || []).filter((x: any) => String(x.created_at) > String(ok));
+  const ipf = (ipR as any).count || 0;
   if (f.length >= MAX_FAILS || ipf >= 20) {
     const first = f.length >= MAX_FAILS ? Date.parse(f[f.length - MAX_FAILS].created_at) : Date.now();
     return { locked: true, minutes: Math.max(1, Math.ceil((first + LOCK_MIN * 60e3 - Date.now()) / 60e3)), fails: f.length };
@@ -104,14 +110,19 @@ async function newCode(db: any, user: any, sid: string | null, why: string) {
     { idempotencyKey: `signin-code/${user.id}/${Date.now()}` });
   return r;
 }
+/** Work that may finish after the answer went out (the runtime keeps it alive). */
+function bg(p: PromiseLike<unknown>) { const q = Promise.resolve(p).catch(() => {}); try { (globalThis as any).EdgeRuntime?.waitUntil(q); } catch (_) { /* older runtimes */ } }
 async function trust(db: any, user: any, sid: string, dev: string, role: string, ev: any, wasKnown: boolean) {
-  if (sid) await db.from("verified_sessions").upsert({ session_id: sid, user_id: user.id, device_id: dev });
-  await db.from("auth_devices").update({ verified: true }).eq("user_id", user.id).eq("device_id", dev);
+  await Promise.all([
+    sid ? db.from("verified_sessions").upsert({ session_id: sid, user_id: user.id, device_id: dev }) : null,
+    db.from("auth_devices").update({ verified: true }).eq("user_id", user.id).eq("device_id", dev),
+  ]);
   if (role === "admin" && !wasKnown) {
-    try {
+    // the new-device alert is sent in the background so the sign-in isn't held up by the mail server
+    bg((async () => {
       await send(user.email, "New sign-in to your Deutsch Für Alle admin account",
         `Hello,\n\nYour admin account was just signed in from a new device.\n\nDevice: ${ev.dev}\nApprox. location: ${[ev.city, ev.country].filter(Boolean).join(", ") || "unknown"}\nIP address: ${ev.ip || "unknown"}\nTime: ${pkTime()}\n\nIf this was you, no action is needed. If not, change your password immediately at ${SITE}/account.html and turn on two-step verification.` + SIGN);
-    } catch (_) { /* alert is best effort */ }
+    })());
   }
 }
 Deno.serve(async (req) => {
@@ -221,34 +232,46 @@ Deno.serve(async (req) => {
     const { data: ud } = await db.auth.getUser(tok);
     const user = ud?.user; if (!user) return json({ error: "Please log in again." }, 401);
     const cl = claims(tok), sid: string = cl.session_id || "";
-    const role = (await db.from("profiles").select("role").eq("id", user.id).maybeSingle()).data?.role || "user";
+    const isCheck = body.action === "check";
+    // QA2 (login speed): everything "check" needs is read at the same time instead of one after another
+    // the location lookup starts now but is only waited for when the session still needs checking
+    const geoP: Promise<{ country?: string; city?: string }> | null = isCheck ? geo(ip).catch(() => ({})) : null;
+    const [roleR, vsR, devR, prefR] = await Promise.all([
+      db.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+      isCheck && sid ? db.from("verified_sessions").select("session_id").eq("session_id", sid).maybeSingle() : Promise.resolve({ data: null }),
+      isCheck ? db.from("auth_devices").select("device_id,country,verified").eq("user_id", user.id) : Promise.resolve({ data: [] }),
+      isCheck ? db.from("security_prefs").select("email_2fa").eq("user_id", user.id).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    const role = (roleR as any).data?.role || "user";
     const email = String(user.email || "").toLowerCase();
-    if (body.action === "check") {
+    if (isCheck) {
       const dev = String(body.device_id || "").slice(0, 64) || "unknown";
-      if (sid) { const v = (await db.from("verified_sessions").select("session_id").eq("session_id", sid).maybeSingle()).data; if (v) { await db.from("auth_devices").update({ last_seen: new Date().toISOString() }).eq("user_id", user.id).eq("device_id", dev); return json({ ok: true }); } }
-      const g = await geo(ip), dn = device(ua);
-      const devs = (await db.from("auth_devices").select("device_id,country,verified").eq("user_id", user.id)).data || [];
+      if ((vsR as any).data) { bg(db.from("auth_devices").update({ last_seen: new Date().toISOString() }).eq("user_id", user.id).eq("device_id", dev)); return json({ ok: true }); }
+      const gg = (await geoP) || {}, dn = device(ua);
+      const devs = (devR as any).data || [];
       const known = devs.find((d: any) => d.device_id === dev);
       if (!known && role !== "admin" && devs.length >= MAX_DEVICES) {
-        await log({ user_id: user.id, email, kind: "device_blocked", device_id: dev, country: g.country, city: g.city, detail: dn });
+        await log({ user_id: user.id, email, kind: "device_blocked", device_id: dev, country: gg.country, city: gg.city, detail: dn });
         return json({ ok: false, blocked: "devices", error: `This account is already used on ${MAX_DEVICES} devices, which is the limit for student accounts. Please sign in on one of your usual devices, or ask us to reset your devices (${SITE}/contact.html).` });
       }
-      await log({ user_id: user.id, email, kind: "login_ok", device_id: dev, country: g.country, city: g.city, detail: dn + (cl.aal === "aal2" ? " · 2FA" : "") });
-      if (known) await db.from("auth_devices").update({ last_seen: new Date().toISOString(), ua: dn, ip, country: g.country || known.country }).eq("user_id", user.id).eq("device_id", dev);
-      else await db.from("auth_devices").insert({ user_id: user.id, device_id: dev, ua: dn, ip, country: g.country || null, verified: false });
-      const pref = (await db.from("security_prefs").select("email_2fa").eq("user_id", user.id).maybeSingle()).data?.email_2fa || false;
-      const newCountry = !!(known?.country && g.country && known.country !== g.country);
+      await Promise.all([
+        log({ user_id: user.id, email, kind: "login_ok", device_id: dev, country: gg.country, city: gg.city, detail: dn + (cl.aal === "aal2" ? " · 2FA" : "") }),
+        known ? db.from("auth_devices").update({ last_seen: new Date().toISOString(), ua: dn, ip, country: gg.country || known.country }).eq("user_id", user.id).eq("device_id", dev)
+          : db.from("auth_devices").insert({ user_id: user.id, device_id: dev, ua: dn, ip, country: gg.country || null, verified: false }),
+      ]);
+      const pref = (prefR as any).data?.email_2fa || false;
+      const newCountry = !!(known?.country && gg.country && known.country !== gg.country);
       const suspicious = (!known && devs.length > 0) || newCountry || (known && !known.verified && devs.length > 1);
       const need = cl.aal !== "aal2" && (pref || suspicious);
       if (need) {
-        const why = pref ? "You asked us to send a code every time you sign in." : `We noticed a sign-in from a ${newCountry ? "new location" : "new device"} (${dn}${g.country ? ", " + g.country : ""}).`;
+        const why = pref ? "You asked us to send a code every time you sign in." : `We noticed a sign-in from a ${newCountry ? "new location" : "new device"} (${dn}${gg.country ? ", " + gg.country : ""}).`;
         const last = (await db.from("email_codes").select("created_at,session_id,used,expires_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1)).data?.[0];
         const fresh = last && !last.used && last.session_id === sid && Date.parse(last.expires_at) > Date.now() + 60e3;
         if (!fresh) await newCode(db, user, sid || null, why);
         await log({ user_id: user.id, email, kind: "code_sent", device_id: dev, detail: pref ? "email 2FA" : newCountry ? "new location" : "new device" });
         return json({ ok: false, challenge: "email", to: mask(email) });
       }
-      await trust(db, user, sid, dev, role, { dev: dn, ip, ...g }, !!known);
+      await trust(db, user, sid, dev, role, { dev: dn, ip, ...gg }, !!known);
       return json({ ok: true });
     }
     if (body.action === "verify_code") {
